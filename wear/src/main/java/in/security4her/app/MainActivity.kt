@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
             val perms = buildList {
                 add(Manifest.permission.ACCESS_FINE_LOCATION)
                 add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                add(Manifest.permission.RECORD_AUDIO) // audio evidence during an SOS
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
             }
             permissionLauncher.launch(perms.toTypedArray())

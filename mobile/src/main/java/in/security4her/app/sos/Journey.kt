@@ -412,8 +412,7 @@ class JourneyService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try {
-            if (Build.VERSION.SDK_INT >= 29) startForeground(ID, ongoing(this), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-            else startForeground(ID, ongoing(this))
+            Evidence.holdForeground(this, ID, ongoing(this))
         } catch (e: Exception) {
             AppLog.warn("Journey", "Couldn't keep watching in the background", e)
             stopSelf()

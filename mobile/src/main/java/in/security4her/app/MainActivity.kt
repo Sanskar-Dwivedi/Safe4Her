@@ -179,6 +179,33 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(SystemBarStyle.dark(android.graphics.Color.TRANSPARENT), SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         setContent { S4hTheme { Root() } }
+        handleEvidence(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleEvidence(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The app is on screen now, so Android allows the microphone and camera: start anything the SOS is missing.
+        if (SosEngine.current.value?.active != true) return
+        val c = `in`.security4her.app.sos.Evidence.active.value
+        val missing = (`in`.security4her.app.sos.Evidence.wantsAudio(this) && c?.audioOn != true) ||
+            (`in`.security4her.app.sos.Evidence.wantsVideo(this) && c?.videoOn != true)
+        if (missing) runCatching { ContextCompat.startForegroundService(this, Intent(this, `in`.security4her.app.sos.SosService::class.java)) }
+    }
+
+    private fun handleEvidence(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_START_EVIDENCE, false) != true) return
+        `in`.security4her.app.sos.Evidence.clearAsk(this)
+        AppLog.info("Evidence", "App opened from the SOS prompt; starting the microphone and camera")
+    }
+
+    companion object {
+        const val EXTRA_START_EVIDENCE = "in.security4her.app.START_EVIDENCE"
     }
 }
 
@@ -320,6 +347,28 @@ private fun VerifyScreen(profile: Profile, onDone: (Profile) -> Unit) {
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var digilocker by remember { mutableStateOf(false) }
+    if (digilocker) {
+        DigiLockerDemoScreen(onCancel = { digilocker = false }) { acct ->
+            busy = true
+            scope.launch {
+                try {
+                    // MOCK: demo DigiLocker said female; record it (real flow: digilocker-start → callback, CONTRACT.md §3)
+                    if (Backend.mockVerifyFemale("digilocker")) {
+                        AppLog.ok("Account", "Verified as a woman through demo DigiLocker (${acct.name})")
+                        onDone(Backend.profile())
+                    } else error = "Verification didn't go through. Try again."
+                } catch (e: Exception) {
+                    error = e.friendly()
+                    AppLog.warn("Account", error!!, e)
+                } finally {
+                    busy = false
+                    digilocker = false
+                }
+            }
+        }
+        return
+    }
     Column(Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 40.dp)) {
         Text("One check before you start", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(12.dp))
@@ -344,22 +393,9 @@ private fun VerifyScreen(profile: Profile, onDone: (Profile) -> Unit) {
         }
         error?.let { Spacer(Modifier.height(12.dp)); Text(it, color = SosRed) }
         Spacer(Modifier.weight(1f))
-        PrimaryButton("Verify with DigiLocker", busy = busy) {
-            busy = true
-            scope.launch {
-                try {
-                    // MOCK: DIGILOCKER_REAL = false — real flow opens digilocker-start in a Custom Tab (CONTRACT.md §3)
-                    if (Backend.mockVerifyFemale()) onDone(Backend.profile()) else error = "Verification didn't go through. Try again."
-                } catch (e: Exception) {
-                    error = e.friendly()
-                    AppLog.warn("Account", error!!, e)
-                } finally {
-                    busy = false
-                }
-            }
-        }
+        PrimaryButton("Verify with DigiLocker", busy = busy) { error = null; digilocker = true }
         Spacer(Modifier.height(10.dp))
-        Text("Demo verification. No documents are read.", color = Muted, style = MaterialTheme.typography.bodySmall,
+        Text("Demo DigiLocker: uses sample accounts, no real documents.", color = Muted, style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
 }
@@ -400,6 +436,12 @@ private fun PermissionsScreen(onDone: () -> Unit) {
         })
         add(Perm("call", "Phone calls", "Calls your chosen number when the countdown ends.", { has(Manifest.permission.CALL_PHONE) }) {
             request("call", Manifest.permission.CALL_PHONE)
+        })
+        add(Perm("mic", "Microphone", "Records audio evidence from the moment an SOS starts.", { has(Manifest.permission.RECORD_AUDIO) }) {
+            request("mic", Manifest.permission.RECORD_AUDIO)
+        })
+        add(Perm("cam", "Camera", "Records video evidence during an SOS.", { has(Manifest.permission.CAMERA) }) {
+            request("cam", Manifest.permission.CAMERA)
         })
         if (Build.VERSION.SDK_INT >= 33) add(
             Perm("notif", "Notifications", "Shows SOS progress and the Cancel call button.", { has(Manifest.permission.POST_NOTIFICATIONS) }) {
@@ -482,6 +524,11 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
         LogScreen { showLog = false }
         return
     }
+    var showLocker by rememberSaveable { mutableStateOf(false) }
+    if (showLocker) {
+        EvidenceLockerScreen(onClose = { showLocker = false })
+        return
+    }
     var showJourney by rememberSaveable { mutableStateOf(false) }
     if (showJourney) {
         BackHandler { showJourney = false }
@@ -496,7 +543,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
                 Tab.Home -> HomeScreen(profile, contacts, settings, onTab = { tab = it }, onJourney = { showJourney = true })
                 Tab.Contacts -> ContactsScreen(contacts, contactsError) { reload++ }
                 Tab.Map -> SafeMapScreen()
-                Tab.Settings -> SettingsScreen(profile, settings, onChange = { settings = it }, onSignedOut = onSignedOut, onOpenLog = { showLog = true })
+                Tab.Settings -> SettingsScreen(profile, settings, onChange = { settings = it }, onSignedOut = onSignedOut, onOpenLog = { showLog = true }, onOpenLocker = { showLocker = true })
             }
         }
         TabBar(tab) { tab = it }
@@ -929,7 +976,7 @@ private fun ContactDialog(c: Contact, onDismiss: () -> Unit, onSave: (Contact) -
 // ---------------------------------------------------------------- Settings
 
 @Composable
-private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit) {
+private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit, onOpenLocker: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var linkMsg by remember { mutableStateOf<String?>(null) }
@@ -970,6 +1017,7 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
                 style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp),
             )
         }
+        EvidenceSection(onOpenLocker)
         SafeJourneySection()
         Section("Location updates") {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1030,7 +1078,7 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
                 Column(Modifier.weight(1f)) {
                     Text(profile.displayName ?: "You", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        if (profile.verificationMethod == "digilocker") "Verified with DigiLocker" else "Verified (demo)",
+                                if (profile.verificationMethod == "digilocker") "Verified with DigiLocker (demo)" else "Verified (demo)",
                         color = Lilac, style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -1116,6 +1164,7 @@ private fun ActiveSosScreen(inc: Incident) {
                     colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Night),
                 ) { Text("Turn on location") }
             }
+            EvidenceCard()
             // Location
             Card {
                 Text("Your location", style = MaterialTheme.typography.titleMedium)

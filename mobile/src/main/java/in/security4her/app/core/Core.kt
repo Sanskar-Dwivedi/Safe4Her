@@ -111,6 +111,8 @@ data class Settings(
     val countdownSec: Int,
     val pin: String,
     val smsUpdates: Boolean,
+    val evidence: Boolean,
+    val evidenceVideo: Boolean,
 ) {
     companion object {
         fun load(ctx: Context): Settings = with(Store.prefs(ctx)) {
@@ -122,6 +124,8 @@ data class Settings(
                 countdownSec = getInt("countdown_sec", 10),
                 pin = getString("pin", "")!!,
                 smsUpdates = getBoolean("sms_updates", true),
+                evidence = getBoolean("evidence", true),
+                evidenceVideo = getBoolean("evidence_video", true),
             )
         }
     }
@@ -134,6 +138,8 @@ data class Settings(
         .putInt("countdown_sec", countdownSec.coerceIn(3, 60))
         .putString("pin", pin)
         .putBoolean("sms_updates", smsUpdates)
+        .putBoolean("evidence", evidence)
+        .putBoolean("evidence_video", evidenceVideo)
         .apply()
 }
 
@@ -200,10 +206,10 @@ object Backend {
         return client.from("profiles").select { filter { eq("id", uid) } }.decodeSingle()
     }
 
-    suspend fun mockVerifyFemale(): Boolean {
+    suspend fun mockVerifyFemale(method: String = "mock"): Boolean {
         if (mock) {
             val p = mockProfile() ?: return false
-            saveMockProfile(p.copy(verifiedFemale = true, verificationMethod = "mock"))
+            saveMockProfile(p.copy(verifiedFemale = true, verificationMethod = method))
             return true
         }
         return client.postgrest.rpc("mock_verify_female").decodeAs<Boolean>()

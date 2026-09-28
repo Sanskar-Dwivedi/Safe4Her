@@ -20,6 +20,7 @@ import `in`.security4her.app.data.WatchStore
 import `in`.security4her.app.sos.Locator
 import `in`.security4her.app.sos.ShakeDetector
 import `in`.security4her.app.sos.SosController
+import `in`.security4her.app.sos.WatchRecorder
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
@@ -48,6 +49,13 @@ class SafetyService : LifecycleService() {
             }.distinctUntilChanged().collect { (safety, incident, countdown) ->
                 setShake(safety)
                 setHeartbeat(incident != null)
+                // Evidence: record from the start of the SOS until "I'm safe".
+                if (incident != null && !WatchRecorder.recording) {
+                    promoteToForeground() // re-claim the microphone type if we were started before it was allowed
+                    WatchRecorder.start(this@SafetyService, incident.incidentId)
+                } else if (incident == null && WatchRecorder.recording) {
+                    WatchRecorder.stop(this@SafetyService)
+                }
                 if (!safety && incident == null && countdown == null) {
                     stopSelf()
                 } else {
@@ -70,6 +78,7 @@ class SafetyService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        WatchRecorder.stop(this)
         shake?.stop()
         shake = null
         running = false
@@ -77,10 +86,14 @@ class SafetyService : LifecycleService() {
     }
 
     private fun promoteToForeground(): Boolean = try {
-        ServiceCompat.startForeground(
-            this, NOTIFICATION_ID, buildNotification(false, null, null),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
-        )
+        val loc = ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        val withMic = if (WatchRecorder.hasPermission(this)) loc or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else loc
+        try {
+            // Holding the microphone type now (while the app is on screen) lets a later shake-triggered SOS record.
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(false, null, null), withMic)
+        } catch (e: Exception) {
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(false, null, null), loc)
+        }
         true
     } catch (e: Exception) {
         // Missing location permission or a background-start restriction.
@@ -106,6 +119,7 @@ class SafetyService : LifecycleService() {
                     delay(HEARTBEAT_MS)
                     runCatching { SosController.heartbeat(this@SafetyService) }
                         .onFailure { Log.w(TAG, "heartbeat failed", it) }
+                    runCatching { WatchRecorder.flush(this@SafetyService) }
                 }
             }
         } else if (!on) {

@@ -78,6 +78,11 @@ dependencies {
     implementation("com.google.maps.android:maps-compose:6.12.2")
     implementation("org.osmdroid:osmdroid-android:6.1.20") // real map without an API key
     implementation("androidx.compose.material:material-icons-core:1.7.8")
+    // Evidence video during SOS
+    implementation("androidx.camera:camera-core:1.4.2")
+    implementation("androidx.camera:camera-camera2:1.4.2")
+    implementation("androidx.camera:camera-lifecycle:1.4.2")
+    implementation("androidx.camera:camera-video:1.4.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
     implementation(platform("io.github.jan-tennert.supabase:bom:3.6.0"))

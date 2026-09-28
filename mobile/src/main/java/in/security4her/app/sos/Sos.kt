@@ -506,6 +506,22 @@ object WearBridge {
 
 /** Watch → phone messages. The ack goes out before any SMS or network work. */
 class PhoneWearListenerService : WearableListenerService() {
+    /** Watch audio evidence: /s4h/evidence/{incident}/{seq}/{startedAt}/{endedAt}/{sha256}. */
+    override fun onChannelOpened(channel: com.google.android.gms.wearable.ChannelClient.Channel) {
+        val parts = channel.path.removePrefix("/s4h/evidence/").split("/")
+        if (!channel.path.startsWith("/s4h/evidence/") || parts.size < 5) return
+        val (incident, seq, start, end, sha) = parts
+        runBlocking {
+            runCatching {
+                val client = Wearable.getChannelClient(this@PhoneWearListenerService)
+                val file = Evidence.watchFile(this@PhoneWearListenerService, incident, seq.toInt())
+                client.getInputStream(channel).await().use { input -> file.outputStream().use { input.copyTo(it) } }
+                runCatching { client.close(channel).await() }
+                Evidence.addWatchPiece(this@PhoneWearListenerService, incident, file, start.toLong(), end.toLong(), sha)
+            }.onFailure { AppLog.warn("Evidence", "Couldn't receive watch audio", it) }
+        }
+    }
+
     override fun onMessageReceived(event: MessageEvent) {
         val json = String(event.data, Charsets.UTF_8)
         runCatching {
@@ -566,20 +582,52 @@ class SosReceiver : BroadcastReceiver() {
 }
 
 /** Keeps the process alive during an SOS and shows the ongoing notification (type: location). */
-class SosService : Service() {
-    override fun onBind(intent: Intent?): IBinder? = null
+class SosService : androidx.lifecycle.LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
         val n = build(this)
-        try {
-            if (Build.VERSION.SDK_INT >= 29) startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-            else startForeground(ID, n)
-        } catch (e: Exception) {
-            Log.w(TAG, "startForeground failed", e) // e.g. no location permission on API 34+
+        val wantMic = Evidence.wantsAudio(this)
+        val wantCam = Evidence.wantsVideo(this)
+        // Microphone and camera count only if Android lets this service hold those types right now
+        // (it does when the app is on screen, or when Safe Journey / live sharing already holds them).
+        var mic = false
+        var cam = false
+        val ok = if (Build.VERSION.SDK_INT >= 30) {
+            val loc = ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            val full = loc or (if (wantMic) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0) or
+                (if (wantCam) ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA else 0)
+            try {
+                startForeground(ID, n, full)
+                mic = wantMic
+                cam = wantCam
+                true
+            } catch (e: Exception) {
+                if (full != loc) AppLog.warn("Evidence", "Android blocked the microphone/camera for a background start", e)
+                runCatching { startForeground(ID, n, loc) }.isSuccess
+            }
+        } else runCatching {
+            if (Build.VERSION.SDK_INT >= 29) startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION) else startForeground(ID, n)
+            mic = wantMic
+            cam = wantCam
+        }.isSuccess
+        if (!ok) {
+            Log.w(TAG, "startForeground failed") // e.g. no location permission on API 34+
             runCatching { getSystemService(NotificationManager::class.java).notify(ID, n) }
             stopSelf()
+            return START_NOT_STICKY
+        }
+        val inc = SosEngine.current.value
+        if (inc != null && inc.active) {
+            Evidence.start(this, this, inc.id, inc.trigger, mic, cam)
+            if ((wantMic && !mic) || (wantCam && !cam)) Evidence.askToOpen(this) else Evidence.clearAsk(this)
         }
         return START_NOT_STICKY
+    }
+
+    override fun onDestroy() {
+        Evidence.stop(this)
+        super.onDestroy()
     }
 
     companion object {
@@ -936,8 +984,7 @@ class LiveService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try {
-            if (Build.VERSION.SDK_INT >= 29) startForeground(ID, build(this), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-            else startForeground(ID, build(this))
+            Evidence.holdForeground(this, ID, build(this))
         } catch (e: Exception) {
             AppLog.warn("Live", "Couldn't keep sharing in the background", e)
             stopSelf()
