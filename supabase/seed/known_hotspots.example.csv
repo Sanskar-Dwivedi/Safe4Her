@@ -1,4 +1,4 @@
 # Curated "known information" hotspots (public news reports, police advisories, campus security notes).
 # Copy to known_hotspots.csv, replace these EXAMPLE rows with real, sourced entries, then pass --hotspots.
 lat,lng,source,note,weight
-28.6289,77.2065,EXAMPLE - replace with a real source,Poorly lit underpass after 9pm,2
+21.1458,79.0882,EXAMPLE - replace with a real source (news report / police advisory URL),Describe the spot and time of day,2

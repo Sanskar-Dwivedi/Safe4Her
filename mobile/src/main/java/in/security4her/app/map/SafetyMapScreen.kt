@@ -70,7 +70,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
-private val DEFAULT_CENTER = LatLng(20.5937, 78.9629) // India, until we know where she is
+private val DEFAULT_CENTER = LatLng(21.1458, 79.0882) // Nagpur (demo city), until we know where she is
 private val DANGER = Color(0xFFD32F2F)
 private val PURPLE = Color(0xFF5B2A86)
 
@@ -94,7 +94,7 @@ fun SafetyMapScreen(supabase: SupabaseClient, modifier: Modifier = Modifier) {
     var reportAt by remember { mutableStateOf<LatLng?>(null) }
     var cellsVersion by remember { mutableStateOf(0) }
 
-    val camera = rememberCameraPositionState { position = CameraPosition.fromLatLngZoom(DEFAULT_CENTER, 4.5f) }
+    val camera = rememberCameraPositionState { position = CameraPosition.fromLatLngZoom(DEFAULT_CENTER, 12f) }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         hasLocation = hasLocationPermission(context)

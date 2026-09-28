@@ -54,9 +54,10 @@ Family opens SMS link ─► web-track page ─► track(token) ─► live map 
    ```bash
    curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<ref>.supabase.co/functions/v1/telegram-webhook&secret_token=<TELEGRAM_WEBHOOK_SECRET>"
    ```
-5. Seed safe places for your city. Run this on your PC; it needs OpenStreetMap access.
+5. Seed safe places for **Nagpur** (the demo city). Run this on your PC; it needs OpenStreetMap access.
    ```bash
-   node scripts/seed_city.mjs "Pune, India" --radius-km 8        # writes supabase/seed/pune_india.sql
+   node scripts/seed_city.mjs --preset nagpur                    # writes supabase/seed/nagpur.sql (10 km around the centre)
+   # any other city: node scripts/seed_city.mjs "Pune, India" --radius-km 8
    # optional curated hotspots: copy supabase/seed/known_hotspots.example.csv → known_hotspots.csv, then add
    #   --hotspots supabase/seed/known_hotspots.csv
    ```

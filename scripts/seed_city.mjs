@@ -2,6 +2,8 @@
 // Builds a SQL seed of safe places (police, hospitals, clinics, pharmacies, fire stations) for a city
 // from OpenStreetMap, plus optional curated danger hotspots ("known information").
 //
+//   node scripts/seed_city.mjs --preset nagpur                  # demo city, no geocoding needed
+//   node scripts/seed_city.mjs --preset nagpur --print-bbox     # dry run: show the area only
 //   node scripts/seed_city.mjs "Pune, India"                   # geocode + 8 km radius
 //   node scripts/seed_city.mjs "Pune, India" --radius-km 5
 //   node scripts/seed_city.mjs --bbox 18.45,73.75,18.60,73.95  # south,west,north,east
@@ -17,8 +19,14 @@ const UA = "Security4Her-hackathon-seed/0.1 (contact: project maintainers)";
 const CATEGORIES = ["police", "hospital", "clinic", "pharmacy", "fire_station"];
 const OFFICIAL = new Set(["police", "hospital", "fire_station"]); // public services → shown as verified
 
+// Known demo cities: skip geocoding. Centre = city centre; radius covers the municipal area.
+export const PRESETS = {
+  nagpur: { label: "Nagpur", lat: 21.1458, lng: 79.0882, radiusKm: 10 },
+};
+
 function parseArgs(argv) {
-  const opts = { radiusKm: 8, out: null, bbox: null, overpassJson: null, hotspots: null, query: null };
+  const opts = { radiusKm: null, out: null, bbox: null, overpassJson: null, hotspots: null, query: null,
+    preset: null, printBbox: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -27,11 +35,18 @@ function parseArgs(argv) {
     else if (a === "--bbox") opts.bbox = next().split(",").map(Number);
     else if (a === "--overpass-json") opts.overpassJson = next();
     else if (a === "--hotspots") opts.hotspots = next();
+    else if (a === "--preset") opts.preset = next().toLowerCase();
+    else if (a === "--print-bbox") opts.printBbox = true;
     else if (a === "--help" || a === "-h") { console.log(fs.readFileSync(new URL(import.meta.url)).toString().split("\n").slice(1, 13).join("\n")); process.exit(0); }
     else if (!a.startsWith("--")) opts.query = a;
     else throw new Error(`unknown option ${a}`);
   }
-  if (!opts.query && !opts.bbox && !opts.overpassJson) throw new Error("give a city name, --bbox or --overpass-json");
+  if (opts.preset && !PRESETS[opts.preset]) {
+    throw new Error(`unknown preset ${opts.preset} (known: ${Object.keys(PRESETS).join(", ")})`);
+  }
+  if (!opts.query && !opts.bbox && !opts.overpassJson && !opts.preset) {
+    throw new Error("give a city name, --preset, --bbox or --overpass-json");
+  }
   if (opts.bbox && (opts.bbox.length !== 4 || opts.bbox.some(Number.isNaN))) throw new Error("--bbox needs south,west,north,east");
   return opts;
 }
@@ -138,13 +153,23 @@ async function main() {
     label = path.basename(opts.overpassJson, ".json");
   } else {
     let bbox = opts.bbox;
-    label = opts.query ?? bbox.join("_");
+    if (opts.preset) {
+      const p = PRESETS[opts.preset];
+      label = p.label;
+      bbox = bbox ?? bboxAround(p.lat, p.lng, opts.radiusKm ?? p.radiusKm);
+    } else {
+      label = opts.query ?? bbox.join("_");
+    }
     if (!bbox) {
       const g = await geocode(opts.query);
       console.error(`geocoded: ${g.name} (${g.lat}, ${g.lng})`);
-      bbox = bboxAround(g.lat, g.lng, opts.radiusKm);
+      bbox = bboxAround(g.lat, g.lng, opts.radiusKm ?? 8);
     }
     console.error(`bbox s,w,n,e = ${bbox.join(",")}`);
+    if (opts.printBbox) {
+      console.log(bbox.join(","));
+      return;
+    }
     data = await overpass(bbox);
   }
   const places = placesFromOverpass(data);

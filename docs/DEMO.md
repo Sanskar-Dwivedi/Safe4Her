@@ -6,7 +6,7 @@
 - [ ] Teammate B has linked Telegram (`/start <code>` to the bot) → ✓ next to the contact in the app.
 - [ ] The watch home screen shows **Phone: connected** and **Account: <name>**, and Safety Mode is off.
 - [ ] Knock Knock on the watch is set to open Security4Her. Try it once, then press **Cancel**.
-- [ ] Safe places are seeded for the demo city. Pre-create 3 accounts if you want to show a danger zone appearing.
+- [ ] Safe places are seeded for **Nagpur** (`node scripts/seed_city.mjs --preset nagpur`, SQL run in Supabase). Pre-create 3 accounts if you want to show a danger zone appearing.
 - [ ] Phone volume is up so the countdown notification is audible. The live-track page loads on a laptop.
 
 ## 5-minute demo
