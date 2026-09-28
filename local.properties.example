@@ -1,0 +1,6 @@
+# Copy to local.properties (gitignored) and fill in. Both :wear and :mobile read these.
+sdk.dir=C\:\\Users\\YOU\\AppData\\Local\\Android\\Sdk
+SUPABASE_URL=https://YOUR-PROJECT.supabase.co
+SUPABASE_ANON_KEY=eyJ...
+TRACK_BASE_URL=https://sanskar-dwivedi.github.io/Safe4Her/
+MAPS_API_KEY=AIza...

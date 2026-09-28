@@ -1,0 +1,23 @@
+# Gradle / Android
+.gradle/
+build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+# Node / Supabase
+node_modules/
+supabase/.temp/
+supabase/.branches/
+.env
+.env.*
+# The shared DEBUG keystore is committed on purpose (keystore/debug.keystore).
+# Never commit a release keystore.
+keystore/release*
