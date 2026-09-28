@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -125,6 +127,18 @@ private fun Label(
 }
 
 @Composable
+private fun BrandTitle() {
+    Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+        Image(
+            painter = painterResource(`in`.security4her.app.R.drawable.logo_security4her),
+            contentDescription = null,
+            modifier = Modifier.size(26.dp).clip(RoundedCornerShape(5.dp)),
+        )
+        Label("Security4Her", color = C.purpleLight, size = 14.sp, weight = FontWeight.Bold)
+    }
+}
+
+@Composable
 private fun RoundButton(label: String, color: Color, diameter: Dp, textSize: TextUnit, onClick: () -> Unit) {
     Box(
         modifier = Modifier
@@ -166,7 +180,7 @@ private fun StatusRow(name: String, value: String, tone: Tone) {
 @Composable
 private fun SetupScreen(actions: WatchActions) {
     Screen {
-        Label("Security4Her", color = C.purpleLight, size = 16.sp, weight = FontWeight.Bold)
+        BrandTitle()
         Label("Allow location and notifications so an SOS can include where you are.", size = 13.sp)
         PillButton("Allow", C.purple) { actions.requestPermissions() }
         Label(
@@ -181,7 +195,7 @@ private fun SetupScreen(actions: WatchActions) {
 @Composable
 private fun HomeScreen(link: DeviceLink?, phoneReachable: Boolean?, safety: Boolean, actions: WatchActions) {
     Screen {
-        Label("Security4Her", color = C.purpleLight, size = 14.sp, weight = FontWeight.Bold)
+        BrandTitle()
         if (link?.testMode != false) Label("TEST MODE", color = C.amber, size = 11.sp, weight = FontWeight.Bold)
         RoundButton("SOS", C.red, 104.dp, 30.sp) { actions.sosNow() }
         PillButton(if (safety) "Safety Mode: ON" else "Safety Mode: OFF", if (safety) C.purple else Color(0xFF333333)) {

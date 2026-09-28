@@ -266,7 +266,19 @@ private fun Loading() {
 
 @Composable
 internal fun Logo(size: androidx.compose.ui.unit.Dp) {
-    Image(painterResource(R.drawable.logo_cat), contentDescription = "Security4Her", modifier = Modifier.size(size))
+    Box(
+        Modifier
+            .size(size)
+            .clip(RoundedCornerShape(size * 0.16f))
+            .background(Color(0xFFFEF7F6)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painterResource(R.drawable.logo_security4her),
+            contentDescription = "Security4Her",
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
 }
 
 @Composable

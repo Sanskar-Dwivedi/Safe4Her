@@ -652,7 +652,7 @@ class SosService : androidx.lifecycle.LifecycleService() {
                 ctx, 1, Intent(Intent.ACTION_DIAL, Uri.parse("tel:112")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE,
             )
             val b = NotificationCompat.Builder(ctx, CHANNEL)
-                .setSmallIcon(R.drawable.ic_notif_cat)
+                .setSmallIcon(R.drawable.ic_notif_security4her)
                 .setContentTitle("SOS active — tap to open")
                 .setContentText(
                     when (inc?.call) {
@@ -1010,7 +1010,7 @@ class LiveService : Service() {
             val open = PendingIntent.getActivity(ctx, 10, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
             val stop = PendingIntent.getBroadcast(ctx, 11, Intent(ctx, SosReceiver::class.java).setAction(SosReceiver.STOP_LIVE), PendingIntent.FLAG_IMMUTABLE)
             return NotificationCompat.Builder(ctx, CHANNEL)
-                .setSmallIcon(R.drawable.ic_notif_cat)
+                .setSmallIcon(R.drawable.ic_notif_security4her)
                 .setContentTitle("Sharing your live location")
                 .setContentText(if (s == null) "" else "${s.pushes} ${if (s.pushes == 1) "update" else "updates"} sent" + if (s.failing) ", no internet right now" else "")
                 .setOngoing(true)

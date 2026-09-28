@@ -432,7 +432,7 @@ object Evidence {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val n = NotificationCompat.Builder(ctx, "evidence")
-            .setSmallIcon(R.drawable.ic_notif_cat)
+            .setSmallIcon(R.drawable.ic_notif_security4her)
             .setContentTitle("SOS active: tap to record evidence")
             .setContentText("Android needs the app open to start the microphone and camera.")
             .setPriority(NotificationCompat.PRIORITY_MAX)

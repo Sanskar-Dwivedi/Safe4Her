@@ -451,7 +451,7 @@ class JourneyService : Service() {
             channels(ctx)
             val s = Journey.state.value
             val b = NotificationCompat.Builder(ctx, CHANNEL)
-                .setSmallIcon(R.drawable.ic_notif_cat)
+                .setSmallIcon(R.drawable.ic_notif_security4her)
                 .setContentTitle(if (s == null) "Safe Journey" else "On the way to ${s.dest.name}")
                 .setContentText(
                     if (s == null) "" else "Arrive by ${Journey.hhmm(s.deadline)}" +
@@ -476,7 +476,7 @@ class JourneyService : Service() {
             // With a PIN set, "I'm OK" must go through the app so someone else can't dismiss it.
             val ok = if (Settings.load(ctx).pin.isNotBlank()) open(ctx, 23) else action(ctx, 23, SosReceiver.JOURNEY_OK)
             val n = NotificationCompat.Builder(ctx, CHANNEL_ALERT)
-                .setSmallIcon(R.drawable.ic_notif_cat)
+                .setSmallIcon(R.drawable.ic_notif_security4her)
                 .setContentTitle("Are you OK?")
                 .setContentText("${Journey.reasonShort(s.checkReason, s).replaceFirstChar { it.uppercase() }}. Answer or your contacts get an SOS.")
                 .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -499,7 +499,7 @@ class JourneyService : Service() {
         fun notifyArrived(ctx: Context, place: String) {
             channels(ctx)
             val n = NotificationCompat.Builder(ctx, CHANNEL)
-                .setSmallIcon(R.drawable.ic_notif_cat)
+                .setSmallIcon(R.drawable.ic_notif_security4her)
                 .setContentTitle("You've reached $place")
                 .setContentText("Safe Journey is over. Live sharing stopped.")
                 .setAutoCancel(true)
