@@ -128,7 +128,8 @@ cloud project. All RPCs are called via PostgREST `rpc/<name>` with named paramet
 
 - Entry point: `in.security4her.app.map.SafetyMapScreen(supabase: io.github.jan.supabase.SupabaseClient, modifier: Modifier = Modifier)`.
 - It uses only `supabase.postgrest.rpc(...)`, Fused Location, and Maps Compose.
-- Codex's `mobile/build.gradle.kts` must include `maps-compose` and `play-services-location` (versions above), the supabase-kt `postgrest-kt` module, and `kotlinx-serialization`.
+- Codex's `mobile/build.gradle.kts` must include `maps-compose`, `play-services-location`, `kotlinx-coroutines-play-services`, `activity-compose`, Compose `material3`, the supabase-kt `postgrest-kt` module, and the `kotlinx-serialization` plugin + `kotlinx-serialization-json` (versions above).
+- Files: `map/MapRepository.kt` (RPC calls + `SafePlace`/`DangerCell` models) and `map/SafetyMapScreen.kt`. Host it inside your Scaffold content, with no extra top padding needed.
 - Codex's manifest must declare `ACCESS_FINE_LOCATION`, `CALL_PHONE` and the Maps API key meta-data.
 
 ## Change requests
