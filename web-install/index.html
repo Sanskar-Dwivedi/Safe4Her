@@ -8,7 +8,9 @@
 <meta name="theme-color" content="#16101E">
 <meta property="og:title" content="Install Security4Her">
 <meta property="og:description" content="Free women's safety app for Android and Wear OS. Install it in about a minute.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 108 108'%3E%3Ccircle cx='54' cy='54' r='54' fill='%23C49BFF'/%3E%3Cpath d='M27 52Q25 31 32 21Q34.5 19 37 21.5L51 35ZM81 52Q83 31 76 21Q73.5 19 71 21.5L57 35Z' fill='%23FFF6EC' stroke='%232A1740' stroke-width='2.2'/%3E%3Cellipse cx='54' cy='60' rx='31' ry='24.5' fill='%23FFF6EC' stroke='%232A1740' stroke-width='2.2'/%3E%3Cellipse cx='43' cy='62' rx='6.5' ry='7.6' fill='%232A1740'/%3E%3Cellipse cx='65' cy='62' rx='6.5' ry='7.6' fill='%232A1740'/%3E%3C/svg%3E">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:image" content="https://security4her.vercel.app/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -426,8 +428,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
       <circle cx="44.7" cy="56.8" r="2.5" fill="#fff"/><circle cx="66.5" cy="56.8" r="2.5" fill="#fff"/>
     </g>
     <symbol id="logo" viewBox="0 0 108 108">
-      <circle cx="54" cy="54" r="54" fill="#C49BFF"/>
-      <g transform="translate(5.4 5.6) scale(.9)"><use href="#cat-face"/><use href="#cat-eyes-static"/></g>
+      <image href="logo.png" width="108" height="108"/>
     </symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   </defs>
@@ -621,7 +622,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
       <div class="cta">
         <a class="btn" href="Security4Her-watch.apk" download data-action="watch-download">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
-          Download the watch app <span class="meta">33.8 MB</span>
+          Download the watch app <span class="meta">34.2 MB</span>
         </a>
         <p class="cta-note">Wear OS 3 or newer. Watches can't install from a browser, so this goes on from a computer over Wi-Fi.</p>
       </div>
@@ -800,7 +801,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
     <a class="brand" href="#phone"><svg aria-hidden="true"><use href="#logo"/></svg>Security4Her</a>
     <div class="foot-meta">
       <span>Phone app 0.1.0 for Android 8 and newer. Watch app 0.2.0 for Wear OS 3 and newer.</span>
-      <span class="hash">Phone app SHA-256 <code id="sha">1bac98daf2447cf18d3bd0ca0cc08ab39b2cc00107b434f1f09a6862c9088440</code><button class="copy-btn" type="button" data-copy-from="sha">Copy</button></span>
+      <span class="hash">Phone app SHA-256 <code id="sha">996c52f57ca4be471ec3bc32a846a4b3cfe90bf5afebd9271b2c649fd7edb28b</code><button class="copy-btn" type="button" data-copy-from="sha">Copy</button></span>
       <span>Built for a hackathon. The DigiLocker sign-in is a demo and doesn't contact any real service.</span>
     </div>
   </div>
@@ -812,7 +813,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
 <script>
 (() => {
-  const APK = { url: "Security4Her-phone.apk", name: "Security4Her-phone.apk", bytes: 27370771 };
+  const APK = { url: "Security4Her-phone.apk", name: "Security4Her-phone.apk", bytes: 27370834 };
   const CANONICAL = "https://security4her.vercel.app/";
   const TABS = ["phone", "watch", "inside", "help"];
   const $ = (s, r = document) => r.querySelector(s);
