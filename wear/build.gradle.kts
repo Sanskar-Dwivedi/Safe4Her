@@ -1,4 +1,5 @@
 // Security4Her — Wear OS watch app (Claude-owned module; see CONTRACT.md).
+import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,7 +7,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
-val localProps = java.util.Properties().apply {
+val localProps = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 fun cfg(key: String) = "\"${localProps.getProperty(key, "")}\""

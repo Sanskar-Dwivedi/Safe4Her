@@ -134,3 +134,5 @@ cloud project. All RPCs are called via PostgREST `rpc/<name>` with named paramet
 
 ## Change requests
 _(append: date, who, what, why)_
+- 2026-09-28, Claude (for Atharva): wrote the Codex-owned `mobile/` app (outside `map/`) because the Codex track never landed. Demo mode when `SUPABASE_URL` is blank (local fake backend); map tab falls back to a demo list without a Maps key.
+- 2026-09-28, Claude: `wear/build.gradle.kts` and the §1 snippet — `java.util.Properties()` doesn't resolve in module scripts (the `java` extension shadows the package). Fixed with `import java.util.Properties`. Build on JDK 17 (Gradle 8.14.3 can't run on JDK 25).
