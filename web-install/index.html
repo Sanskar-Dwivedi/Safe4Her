@@ -1,0 +1,1126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Install Security4Her</title>
+<meta name="description" content="Install Security4Her, the free women's safety app for Android and Wear OS. SOS, live location, Safe Journey and a community safety map.">
+<meta name="theme-color" content="#16101E">
+<meta property="og:title" content="Install Security4Her">
+<meta property="og:description" content="Free women's safety app for Android and Wear OS. Install it in about a minute.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 108 108'%3E%3Ccircle cx='54' cy='54' r='54' fill='%23C49BFF'/%3E%3Cpath d='M27 52Q25 31 32 21Q34.5 19 37 21.5L51 35ZM81 52Q83 31 76 21Q73.5 19 71 21.5L57 35Z' fill='%23FFF6EC' stroke='%232A1740' stroke-width='2.2'/%3E%3Cellipse cx='54' cy='60' rx='31' ry='24.5' fill='%23FFF6EC' stroke='%232A1740' stroke-width='2.2'/%3E%3Cellipse cx='43' cy='62' rx='6.5' ry='7.6' fill='%232A1740'/%3E%3Cellipse cx='65' cy='62' rx='6.5' ry='7.6' fill='%232A1740'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --night:#16101E; --plum:#221A2C; --plum2:#2E2439; --line:#3D3149;
+  --ink:#F3EDF7; --muted:#A99BB8; --lilac:#C49BFF; --lilac-deep:#8A5CD6; --on-lilac:#1E0E33;
+  --cream:#FFF6EC; --cat-ink:#2A1740; --sos:#FF4D5E; --green:#5EE0A0;
+  --display:"Baloo 2", "Instrument Sans", system-ui, sans-serif;
+  --body:"Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:ui-monospace, "Cascadia Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --spring:cubic-bezier(.34,1.56,.64,1);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--night);color:var(--ink);font:400 17px/1.55 var(--body);-webkit-font-smoothing:antialiased;overflow-x:clip}
+a{color:var(--lilac);text-underline-offset:3px}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--lilac);outline-offset:3px;border-radius:10px}
+h1,h2,h3{font-family:var(--display);font-weight:800;margin:0;letter-spacing:-.01em;line-height:1}
+p{margin:0}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+
+/* ---------- top bar + tabs ---------- */
+.topbar{position:sticky;top:0;z-index:20;background:rgba(22,16,30,.88);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid transparent;transition:border-color .2s}
+.topbar.scrolled{border-bottom-color:var(--line)}
+.nav{display:flex;align-items:center;gap:16px;padding:14px 0}
+.brand{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font:800 22px/1 var(--display);flex:none}
+.brand svg{width:38px;height:38px}
+.tabs{position:relative;margin-left:auto;display:flex;gap:2px;padding:5px;border-radius:19px;background:var(--plum)}
+.tab{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:8px;border:0;background:none;padding:10px 16px 9px;border-radius:14px;font:700 16px/1 var(--display);color:var(--muted);transition:color .25s;-webkit-tap-highlight-color:transparent}
+.tab svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{color:var(--on-lilac)}
+.tab-ind{position:absolute;z-index:0;top:5px;bottom:8px;left:0;width:0;border-radius:14px;background:var(--lilac);box-shadow:0 3px 0 var(--lilac-deep);transition:transform .45s var(--spring),width .45s var(--spring)}
+.tab-ind.instant{transition:none}
+
+.panel[hidden]{display:none}
+.panel:focus{outline:none}
+.panel.enter{animation:tabIn .42s var(--ease) both}
+@keyframes tabIn{from{opacity:0;transform:translateX(var(--dx,24px))}to{opacity:1;transform:none}}
+
+/* ---------- buttons (chunky, pressable) ---------- */
+.btn{--bg:var(--lilac);--edge:var(--lilac-deep);--fg:var(--on-lilac);
+  position:relative;display:inline-flex;align-items:center;justify-content:center;gap:12px;
+  border:0;border-radius:18px;background:var(--bg);color:var(--fg);
+  font:800 19px/1 var(--display);padding:18px 26px 16px;text-decoration:none;
+  box-shadow:0 6px 0 var(--edge);transform:translateY(0);
+  transition:transform .08s ease, box-shadow .08s ease, filter .15s;overflow:hidden;isolation:isolate;-webkit-tap-highlight-color:transparent}
+.btn:hover{filter:brightness(1.06)}
+.btn:active{transform:translateY(6px);box-shadow:0 0 0 var(--edge)}
+.btn-ghost{--bg:var(--plum);--edge:#140d1b;--fg:var(--ink);box-shadow:0 6px 0 var(--edge), inset 0 0 0 2px var(--line)}
+.btn-ghost:active{box-shadow:0 0 0 var(--edge), inset 0 0 0 2px var(--line)}
+.btn-sm{font-size:16px;padding:12px 18px 10px;border-radius:14px;box-shadow:0 4px 0 var(--edge)}
+.btn-sm:active{transform:translateY(4px)}
+.btn-ghost.btn-sm{box-shadow:0 4px 0 var(--edge), inset 0 0 0 2px var(--line)}
+.btn .fill{position:absolute;inset:0;z-index:-1;background:rgba(255,255,255,.28);transform-origin:left;transform:scaleX(var(--p,0));transition:transform .2s linear}
+.btn .meta{font:600 14px/1 var(--body);opacity:.72}
+.btn svg{width:22px;height:22px;flex:none}
+
+/* ---------- installer layout (phone and watch) ---------- */
+.installer{display:grid;grid-template-columns:minmax(0,1fr) 360px;grid-template-areas:"copy device" "steps device";column-gap:72px;padding-top:40px;padding-bottom:80px}
+.copy{grid-area:copy}
+.device-col{grid-area:device;position:relative}
+.steps-col{grid-area:steps;margin-top:56px}
+.hero-title{font-size:clamp(46px,7vw,84px);line-height:.92;max-width:11ch}
+.lede{color:var(--muted);font-size:19px;max-width:34em;margin-top:20px}
+.cta{display:flex;flex-wrap:wrap;align-items:center;gap:18px 22px;margin-top:32px}
+.cta-note{color:var(--muted);font-size:14px;max-width:24em}
+.ios-note{display:none;margin-top:24px;padding:14px 16px;border-radius:16px;background:var(--plum);color:var(--muted);font-size:15px;max-width:34em}
+[data-device="ios"] .ios-note{display:block}
+
+.qr-card{display:none;align-items:center;gap:18px;margin-top:28px;padding:14px 18px 14px 14px;border-radius:22px;background:var(--plum);max-width:440px}
+[data-device="desktop"] .qr-card{display:flex}
+.qr{width:124px;height:124px;flex:none;border-radius:14px;background:var(--cream);padding:9px;display:grid;place-items:center;color:var(--on-lilac);font-size:12px;text-align:center}
+.qr img,.qr canvas{width:106px!important;height:106px!important;image-rendering:pixelated}
+.qr-card b{display:block;font:800 20px/1.1 var(--display);margin-bottom:4px}
+.qr-card p{color:var(--muted);font-size:14px}
+.qr-card button{background:none;border:0;padding:0;color:var(--lilac);font-weight:600;font-size:14px;margin-top:8px;text-decoration:underline;text-underline-offset:3px}
+
+/* ---------- steps ---------- */
+.steps-head{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 14px;margin-bottom:18px}
+.steps-head h2{font-size:32px}
+.steps-head span{color:var(--muted);font-size:15px}
+.meter{height:10px;border-radius:99px;background:var(--plum2);overflow:hidden;margin-bottom:22px}
+.meter i{display:block;height:100%;width:var(--m,0%);background:var(--lilac);border-radius:inherit;transition:width .5s var(--ease)}
+.steps{list-style:none;margin:0;padding:0;position:relative}
+.step{position:relative;padding-left:58px}
+.step::before{content:"";position:absolute;left:19px;top:44px;bottom:-4px;width:3px;border-radius:3px;background:var(--line)}
+.step:last-child::before{display:none}
+.step.done::before{background:var(--lilac)}
+.step-head{display:flex;align-items:center;width:100%;min-height:52px;background:none;border:0;padding:6px 0;text-align:left;border-radius:12px}
+.num{position:absolute;left:0;top:6px;width:41px;height:41px;border-radius:50%;display:grid;place-items:center;
+  background:var(--plum);box-shadow:inset 0 0 0 2.5px var(--line);font:800 18px/1 var(--display);color:var(--muted);transition:background .25s,box-shadow .25s,color .25s,transform .35s var(--spring)}
+.num svg{width:20px;height:20px;display:none}
+.step.on .num{background:var(--lilac);color:var(--on-lilac);box-shadow:0 4px 0 var(--lilac-deep);transform:scale(1.06)}
+.step.done .num{background:var(--plum2);box-shadow:inset 0 0 0 2.5px var(--lilac);color:var(--lilac)}
+.step.done .num span{display:none}
+.step.done .num svg{display:block}
+.step-title{font:700 21px/1.2 var(--display);color:var(--muted);transition:color .2s}
+.step.on .step-title,.step.done .step-title{color:var(--ink)}
+.step-head:hover .step-title{color:var(--ink)}
+.step-body{display:grid;grid-template-rows:0fr;transition:grid-template-rows .4s var(--ease)}
+.step.on .step-body{grid-template-rows:1fr}
+.step-body>div{overflow:hidden;min-width:0}
+.step-inner{padding:4px 0 26px;color:var(--muted);max-width:34em}
+.step-inner p+p{margin-top:10px}
+.step-inner strong{color:var(--ink);font-weight:600}
+.step-actions{display:flex;flex-wrap:wrap;gap:14px;margin-top:18px;align-items:center}
+.link{background:none;border:0;padding:0;color:var(--lilac);font-weight:600;font-size:15px;text-decoration:underline;text-underline-offset:3px}
+.cred{display:grid;grid-template-columns:auto 1fr auto;gap:6px 14px;align-items:center;margin:14px 0 0;padding:14px 16px;border-radius:16px;background:var(--plum);font-size:15px}
+.cred dt{color:var(--muted)}
+.cred dd{margin:0;color:var(--ink);font-weight:600;letter-spacing:.02em}
+.copy-btn{background:var(--plum2);border:0;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:600;color:var(--ink);flex:none}
+.copy-btn.ok{background:var(--lilac);color:var(--on-lilac)}
+
+.done-card{display:none;margin-top:12px;padding:22px 22px 24px;border-radius:24px;background:var(--plum)}
+.done-card.show{display:block;animation:rise .5s var(--spring) both}
+.done-card h3{font-size:30px;margin-bottom:6px}
+.done-card p{color:var(--muted)}
+
+/* adb inputs + commands */
+.fields{display:grid;grid-template-columns:minmax(0,1fr) 104px;gap:10px;margin-top:14px}
+.fields label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);font-weight:600;min-width:0}
+.fields input{background:var(--plum);border:2px solid var(--line);border-radius:14px;padding:12px 14px;color:var(--ink);font:500 16px/1 var(--mono);width:100%;min-width:0}
+.fields input:focus{outline:none;border-color:var(--lilac)}
+.fields input::placeholder{color:#6f6280}
+.cmd{display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px 10px 10px 16px;border-radius:14px;background:#0F0A15;box-shadow:inset 0 0 0 1px var(--line);min-width:0}
+.cmd code{flex:1;min-width:0;font:500 14.5px/1.4 var(--mono);color:var(--ink);overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+.cmd code::before{content:"$ ";color:var(--muted)}
+.cmd code em{font-style:normal;color:var(--lilac)}
+
+/* ---------- mascot ---------- */
+.device-stick{position:sticky;top:96px;display:flex;flex-direction:column;align-items:center}
+.cat{position:relative;z-index:3;width:170px;height:138px;margin-bottom:-26px;pointer-events:none}
+.cat svg{width:100%;height:100%;overflow:visible}
+.cat .eyes{transform-box:fill-box;transform-origin:center;animation:blink 5.2s infinite}
+.cat .happy-eyes,.cat .hearts{opacity:0}
+.cat[data-mood="happy"] .eyes{opacity:0}
+.cat[data-mood="happy"] .happy-eyes{opacity:1}
+.cat[data-mood="happy"] .hearts{opacity:1}
+.cat[data-mood="happy"] .hearts path{animation:heart 1.6s var(--ease) infinite}
+.cat[data-mood="happy"] .hearts path:nth-child(2){animation-delay:.5s}
+.cat[data-mood="excited"] svg,.cat[data-mood="happy"] svg{animation:hop .7s var(--spring) infinite alternate}
+.cat .head{transition:transform .5s var(--spring);transform-box:fill-box;transform-origin:50% 90%}
+.caption{margin-top:18px;display:flex;align-items:center;gap:12px;color:var(--muted);font-size:14px}
+.caption button{background:var(--plum);border:0;border-radius:99px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--ink)}
+
+/* ---------- phone mock ---------- */
+.phone{position:relative;width:300px;height:612px;border-radius:48px;background:#0E0913;padding:11px;
+  box-shadow:inset 0 0 0 2px #3a2e47, 0 40px 80px -30px rgba(196,155,255,.35), 0 0 0 9px #241b2e}
+.screen{position:relative;height:100%;border-radius:38px;overflow:hidden;background:#F4F2F7;color:#1D1A22;font-size:13px;line-height:1.35}
+.sb{position:absolute;top:0;left:0;right:0;height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-weight:600;font-size:12px;z-index:5;color:#1D1A22;transition:color .3s}
+.sb.dark{color:#EDE7F3}
+.sb .punch{position:absolute;left:50%;top:10px;width:12px;height:12px;border-radius:50%;background:#0E0913;transform:translateX(-50%)}
+.sb .ico{display:flex;gap:5px;align-items:center}
+.sb .ico i{display:block;width:13px;height:9px;border-radius:2px;border:1.6px solid currentColor}
+.sb .ico b{display:block;width:10px;height:10px;clip-path:polygon(100% 0,100% 100%,0 100%);background:currentColor}
+.scr{position:absolute;inset:0;padding-top:34px;opacity:0;visibility:hidden;transform:scale(.98);transition:opacity .35s var(--ease),transform .35s var(--ease),visibility 0s .35s}
+.scr.on{opacity:1;visibility:visible;transform:none;transition:opacity .35s var(--ease),transform .35s var(--ease)}
+
+.tap{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;background:rgba(138,92,214,.35);box-shadow:0 0 0 2px rgba(138,92,214,.7);pointer-events:none;opacity:0;z-index:9}
+.play .scr.on .tap{animation:tap 1s var(--ease) var(--d,.6s) var(--n,1) both}
+
+.chrome{display:flex;align-items:center;gap:8px;margin:6px 10px;padding:9px 12px;background:#E6E1EC;border-radius:99px;font-size:11.5px;color:#4a4453;white-space:nowrap;overflow:hidden}
+.chrome svg{width:12px;height:12px;flex:none}
+.ghost-page{padding:14px 16px;display:grid;gap:10px;opacity:.55}
+.ghost-page i{display:block;height:12px;border-radius:6px;background:#D9D3E0}
+.ghost-page i.big{height:34px;width:78%;background:#CFC6DA}
+.ghost-page i.btnish{height:40px;width:62%;border-radius:12px;background:#C49BFF}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:22px 22px 0 0;padding:20px 18px 22px;box-shadow:0 -10px 30px rgba(0,0,0,.12)}
+.play .scr.on .sheet{animation:sheetUp .45s var(--ease) .15s both}
+.sheet-title{font-weight:700;font-size:15px;margin-bottom:12px}
+.file{display:flex;gap:12px;align-items:center}
+.apk{width:40px;height:40px;border-radius:10px;background:#E9F4E6;color:#2E7D32;display:grid;place-items:center;font-weight:800;font-size:10px;flex:none}
+.file b{display:block;font-size:13.5px}
+.file small{color:#6b6475;font-size:12px}
+.pbar{height:6px;border-radius:9px;background:#ECE7F1;margin:14px 0 4px;overflow:hidden}
+.pbar i{display:block;height:100%;width:0;background:#6D4AB8;border-radius:inherit;transition:width .2s linear}
+.sheet-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:12px}
+.pbtn{border:0;border-radius:99px;padding:9px 16px;font-size:13px;font-weight:600;background:none;color:#6D4AB8}
+.pbtn.solid{background:#6D4AB8;color:#fff}
+.warn{font-size:12px;color:#6b6475;margin-top:2px}
+
+.shade{position:absolute;inset:0;background:#1C1722;color:#EDE7F3;padding:48px 12px 0}
+.shade .clock{font-size:40px;font-weight:300;padding:0 8px 2px;letter-spacing:-.02em}
+.shade .date{font-size:12px;color:#B7AEC2;padding:0 8px 16px}
+.tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
+.tiles span{height:46px;border-radius:18px;background:#2E2738;display:flex;align-items:center;padding:0 12px;font-size:12px;color:#CFC6DA}
+.tiles span.on{background:#D8C3FF;color:#26173d}
+.notif{background:#2E2738;border-radius:20px;padding:12px 14px}
+.play .scr.on .notif{animation:rise .45s var(--spring) .2s both}
+.n-head{display:flex;gap:6px;align-items:center;font-size:11.5px;color:#B7AEC2;margin-bottom:6px}
+.n-head i{width:16px;height:16px;border-radius:50%;background:conic-gradient(#EA4335 0 33%,#FBBC05 0 66%,#34A853 0)}
+.notif b{display:block;font-size:13.5px}
+.notif small{color:#B7AEC2}
+.n-actions{display:flex;gap:16px;margin-top:10px;font-weight:700;font-size:12.5px;color:#D8C3FF}
+
+.set-head{display:flex;align-items:center;gap:12px;padding:14px 16px 10px;font-size:19px}
+.set-head svg{width:20px;height:20px}
+.set-app{display:flex;align-items:center;gap:12px;padding:10px 18px 18px}
+.set-app i{width:36px;height:36px;border-radius:50%;background:conic-gradient(#EA4335 0 33%,#FBBC05 0 66%,#34A853 0);box-shadow:inset 0 0 0 9px #fff}
+.set-row{margin:0 12px;padding:16px;border-radius:18px;background:#fff;display:flex;align-items:center;gap:12px;font-size:14px}
+.set-row span:first-child{flex:1}
+.toggle{position:relative;width:46px;height:28px;border-radius:99px;background:#E6E1EC;box-shadow:inset 0 0 0 2px #79727F;flex:none}
+.toggle::after{content:"";position:absolute;top:7px;left:8px;width:14px;height:14px;border-radius:50%;background:#79727F}
+.play .scr.on .toggle{animation:toggleBg .25s ease var(--t,1.25s) both}
+.play .scr.on .toggle::after{animation:toggleKnob .3s var(--spring) var(--t,1.25s) both}
+.set-foot{margin:14px 22px;font-size:11.5px;color:#6b6475}
+
+.dim{position:absolute;inset:0;background:rgba(20,14,26,.45)}
+.dialog{position:absolute;left:16px;right:16px;top:50%;transform:translateY(-50%);background:#F7F2FA;border-radius:26px;padding:22px 20px 16px;min-height:176px}
+.play .scr.on .dialog{animation:popIn .4s var(--spring) .1s both}
+.dlg-app{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px}
+.dlg-app svg{width:34px;height:34px}
+.layer{position:absolute;left:20px;right:20px;top:66px;bottom:16px}
+.dlg-q{font-size:14px;color:#3C3645}
+.dlg-actions{position:absolute;right:0;bottom:0;display:flex;gap:6px}
+.l-prog,.l-done{opacity:0}
+.play .scr.on .l-ask{animation:fadeOut .2s ease 1.55s both}
+.play .scr.on .l-prog{animation:fadeIn .2s ease 1.65s both, fadeOut .2s ease 3.25s forwards}
+.play .scr.on .l-done{animation:fadeIn .25s ease 3.35s both}
+.play .scr.on .l-prog .pbar i{animation:grow 1.5s var(--ease) 1.75s both}
+
+.app{position:absolute;inset:0;background:#16101E;color:#F3EDF7;padding-top:34px}
+.v1,.v2{position:absolute;inset:34px 0 0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}
+.v2{opacity:0;justify-content:flex-start;padding-top:28px}
+.play .scr.on .v1{animation:fadeOut .3s ease 2.3s both}
+.play .scr.on .v2{animation:fadeIn .35s ease 2.45s both}
+.check{width:74px;height:74px;border-radius:50%;background:rgba(196,155,255,.16);display:grid;place-items:center;margin-bottom:16px}
+.check svg{width:36px;height:36px}
+.play .scr.on .check{animation:checkPop .5s var(--spring) .35s both}
+.check path{stroke-dasharray:40;stroke-dashoffset:40}
+.play .scr.on .check path{animation:draw .45s ease .75s forwards}
+.v1 b{font:800 20px/1.1 var(--display)}
+.v1 small{display:block;color:#A99BB8;margin-top:6px;font-size:12.5px}
+.chip{display:inline-block;margin-top:14px;padding:5px 11px;border-radius:99px;border:1.5px solid #C49BFF;color:#C49BFF;font-size:12px;font-weight:600}
+.hi{align-self:flex-start;text-align:left;margin-bottom:6px}
+.hi small{color:#A99BB8;font-size:12px}
+.hi b{display:block;font:800 22px/1.1 var(--display)}
+.pills{align-self:flex-start;display:flex;gap:6px;margin:8px 0 26px}
+.pills span{white-space:nowrap;font-size:10.5px;padding:4px 8px;border-radius:99px;background:#221A2C;color:#A99BB8}
+.pills span.g{color:#5EE0A0}
+.sos{position:relative;width:170px;height:170px;border-radius:50%;display:grid;place-items:center}
+.sos::before{content:"";position:absolute;inset:0;border-radius:50%;border:3px solid #3D3149}
+.sos::after{content:"";position:absolute;inset:0;border-radius:50%;border:3px solid transparent;border-top-color:#FF4D5E;border-right-color:#FF4D5E;transform:rotate(-45deg)}
+.sos span{width:128px;height:128px;border-radius:50%;background:#FF4D5E;display:grid;place-items:center;font:800 30px/1 var(--display);color:#fff;box-shadow:0 0 0 12px rgba(255,77,94,.14)}
+.play .scr.on .sos span{animation:pulse 1.8s ease-in-out 2.8s infinite}
+.sos-hint{margin-top:16px;color:#A99BB8;font-size:12px}
+
+/* ---------- watch mock ---------- */
+.watch{position:relative;width:300px;height:430px;display:grid;place-items:center}
+.strap{position:absolute;left:50%;width:170px;height:120px;transform:translateX(-50%);background:linear-gradient(#2E2439,#241b2e);z-index:0}
+.strap.top{top:-4px;border-radius:26px 26px 8px 8px}
+.strap.bottom{bottom:-4px;border-radius:8px 8px 26px 26px}
+.strap::after{content:"";position:absolute;left:50%;width:120px;height:3px;border-radius:3px;background:#3a2e47;transform:translateX(-50%)}
+.strap.top::after{top:26px}.strap.bottom::after{bottom:26px}
+.case{position:relative;z-index:1;width:292px;height:292px;border-radius:50%;background:#0E0913;padding:14px;
+  box-shadow:inset 0 0 0 2px #3a2e47, 0 0 0 9px #241b2e, 0 40px 80px -30px rgba(196,155,255,.4)}
+.crown{position:absolute;right:-17px;top:50%;width:14px;height:44px;border-radius:0 8px 8px 0;background:#2E2439;transform:translateY(-50%);box-shadow:inset -2px 0 0 #3a2e47}
+.wscreen{position:relative;width:100%;height:100%;border-radius:50%;overflow:hidden;background:#000;color:#EDE7F3;font-size:13px;line-height:1.3}
+.wscreen .scr{padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.wt{font:600 11px/1 var(--body);color:#B7AEC2;position:absolute;top:18px;left:0;right:0}
+.face-time{font:300 64px/1 var(--body);letter-spacing:-.03em}
+.face-date{color:#B7AEC2;font-size:13px;margin-top:4px}
+.face-comp{display:flex;align-items:center;gap:8px;margin-top:18px;padding:7px 12px 7px 8px;border-radius:99px;background:#1c1622;font-size:12px;color:#B7AEC2}
+.face-comp svg{width:22px;height:22px}
+.wlist{width:100%;padding:0 30px;display:grid;gap:6px}
+.wrow{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:99px;background:#1c1622;text-align:left;font-size:12.5px}
+.wrow span{flex:1}
+.wrow small{display:block;color:#9B91A8;font-size:10.5px}
+.wrow.hl{box-shadow:inset 0 0 0 2px #C49BFF}
+.wrow .toggle{flex:none;width:36px;height:22px;background:#2E2738;box-shadow:inset 0 0 0 2px #6f6280}
+.wrow .toggle::after{top:6px;left:7px;width:10px;height:10px;background:#6f6280}
+.play .scr.on .wrow .toggle{animation-name:wToggleBg}
+.play .scr.on .wrow .toggle::after{animation-name:wToggleKnob}
+.wtoast{position:absolute;bottom:34px;left:50%;transform:translateX(-50%);white-space:nowrap;padding:8px 14px;border-radius:99px;background:#EDE7F3;color:#1C1722;font-size:11.5px;font-weight:600;opacity:0}
+.play .scr.on .wtoast{animation:toastIn .35s var(--spring) 2.6s both}
+.wcode{font:800 34px/1 var(--display);letter-spacing:.08em;color:#C49BFF;margin:6px 0 12px}
+.wlabel{color:#9B91A8;font-size:11px}
+.waddr{font:600 14px/1.2 var(--mono);margin-top:3px}
+.ring{position:absolute;inset:4px;width:calc(100% - 8px);height:calc(100% - 8px);transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:6;stroke-linecap:round}
+.ring .track{stroke:#1c1622}
+.ring .prog{stroke:#C49BFF;stroke-dasharray:830;stroke-dashoffset:830}
+.play .scr.on .ring .prog{animation:ringFill 2.4s var(--ease) .4s forwards}
+.winst svg.logo{width:64px;height:64px;margin-bottom:10px}
+.w-a,.w-b{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.w-b{opacity:0}
+.play .scr.on .w-a{animation:fadeOut .25s ease 2.8s both}
+.play .scr.on .w-b{animation:fadeIn .3s ease 2.9s both}
+.wsos{width:128px;height:128px;border-radius:50%;background:#FF4D5E;display:grid;place-items:center;font:800 30px/1 var(--display);color:#fff;box-shadow:0 0 0 10px rgba(255,77,94,.16)}
+.play .scr.on .wsos{animation:pulse 1.8s ease-in-out 1s infinite}
+.wlinked{display:flex;align-items:center;gap:6px;font-size:11.5px;color:#5EE0A0;margin-bottom:12px}
+.wlinked i{width:7px;height:7px;border-radius:50%;background:#5EE0A0}
+.whint{margin-top:12px;color:#9B91A8;font-size:11.5px}
+
+/* ---------- content tabs ---------- */
+.page{padding-top:48px;padding-bottom:88px}
+.band-grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:56px;align-items:start}
+.page h2{font-size:clamp(38px,5vw,60px);line-height:.96}
+.page .sub{color:var(--muted);margin-top:16px;max-width:26em}
+.feats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:30px 36px}
+.feat{display:grid;grid-template-columns:44px minmax(0,1fr);grid-template-rows:auto 1fr;gap:4px 14px;align-content:start}
+.feat .ic{grid-row:span 2;width:44px;height:44px;border-radius:14px;background:var(--plum);display:grid;place-items:center}
+.feat .ic svg{width:22px;height:22px;stroke:var(--lilac);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.feat b{font:700 19px/1.2 var(--display);padding-top:2px}
+.feat p{color:var(--muted);font-size:15px}
+.page .cta{margin-top:28px}
+.faq details{border-bottom:1px solid var(--line)}
+.faq details:first-of-type{border-top:1px solid var(--line)}
+.faq summary{list-style:none;display:flex;align-items:center;gap:16px;padding:20px 2px;font:700 20px/1.25 var(--display);cursor:pointer}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"";margin-left:auto;flex:none;width:12px;height:12px;border-right:3px solid var(--lilac);border-bottom:3px solid var(--lilac);transform:rotate(45deg) translate(-3px,-3px);transition:transform .3s var(--spring)}
+.faq details[open] summary::after{transform:rotate(-135deg) translate(-3px,-3px)}
+.faq .ans{color:var(--muted);padding:0 2px 22px;max-width:40em}
+.faq .ans code{font:500 14px var(--mono);color:var(--ink)}
+.faq details[open] .ans{animation:rise .35s var(--ease)}
+.faq-group+.faq-group{margin-top:36px}
+.faq-group h3{font-size:22px;color:var(--muted);margin-bottom:10px}
+
+/* footer */
+footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);font-size:14px}
+.foot{display:flex;flex-wrap:wrap;gap:18px 40px;align-items:flex-start}
+.foot .brand{font-size:19px}
+.foot .brand svg{width:30px;height:30px}
+.foot-meta{display:grid;gap:8px;min-width:0;flex:1}
+.hash{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+.hash code{font:500 12.5px/1.4 var(--mono);color:var(--ink);word-break:break-all;min-width:0}
+
+/* toast */
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,calc(100% + 40px));visibility:hidden;background:var(--ink);color:var(--on-lilac);font-weight:600;font-size:15px;padding:12px 18px;border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.4);transition:transform .35s var(--spring),visibility 0s .35s;z-index:50;max-width:calc(100% - 32px)}
+.toast.show{transform:translate(-50%,0);visibility:visible;transition-delay:0s}
+#confetti{position:fixed;inset:0;pointer-events:none;z-index:40}
+
+/* ---------- keyframes ---------- */
+@keyframes blink{0%,93%,100%{transform:scaleY(1)}95.5%{transform:scaleY(.1)}}
+@keyframes hop{from{transform:translateY(0)}to{transform:translateY(-8px)}}
+@keyframes heart{0%{transform:translateY(0);opacity:0}25%{opacity:1}100%{transform:translateY(-16px);opacity:0}}
+@keyframes tap{0%{opacity:0;transform:scale(.4)}35%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.5)}}
+@keyframes sheetUp{from{transform:translateY(100%)}to{transform:none}}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes popIn{from{opacity:0;transform:translateY(-50%) scale(.85)}to{opacity:1;transform:translateY(-50%) scale(1)}}
+@keyframes checkPop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:none}}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes fadeOut{from{opacity:1}to{opacity:0;visibility:hidden}}
+@keyframes grow{from{width:0}to{width:100%}}
+@keyframes ringFill{to{stroke-dashoffset:0}}
+@keyframes toggleBg{to{background:#6D4AB8;box-shadow:inset 0 0 0 2px #6D4AB8}}
+@keyframes toggleKnob{to{left:22px;top:4px;width:20px;height:20px;background:#fff}}
+@keyframes wToggleBg{to{background:#C49BFF;box-shadow:inset 0 0 0 2px #C49BFF}}
+@keyframes wToggleKnob{to{left:17px;top:4px;width:14px;height:14px;background:#1E0E33}}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 12px rgba(255,77,94,.14)}50%{box-shadow:0 0 0 20px rgba(255,77,94,.06)}}
+
+/* ---------- responsive ---------- */
+@media (max-width:960px){
+  .installer{grid-template-columns:minmax(0,1fr);grid-template-areas:"copy" "device" "steps";padding-top:24px}
+  .device-col{margin-top:44px}
+  .device-stick{position:static}
+  .steps-col{margin-top:40px}
+  .band-grid{grid-template-columns:minmax(0,1fr);gap:32px}
+}
+@media (max-width:700px){
+  .nav{flex-wrap:wrap;gap:12px;padding:12px 0 10px}
+  .tabs{margin-left:0;width:100%}
+  .tab{flex:1;padding:10px 4px 9px;font-size:15px;gap:6px}
+}
+@media (max-width:620px){
+  .wrap{padding-left:16px;padding-right:16px}
+  body{font-size:16px}
+  .lede{font-size:17px}
+  .installer .cta .btn{width:100%}
+  .cta{gap:14px}
+  .cat{width:140px;height:114px;margin-bottom:-22px}
+  .phone{width:264px;height:540px;border-radius:44px}
+  .screen{border-radius:34px}
+  .watch{transform:scale(.88);margin:-26px 0}
+  .feats{grid-template-columns:minmax(0,1fr)}
+  .page{padding-top:32px;padding-bottom:64px}
+  .step{padding-left:54px}
+  .fields{grid-template-columns:minmax(0,1fr) 92px}
+  .cmd code{white-space:normal;word-break:break-all}
+  .foot{flex-direction:column}
+}
+@media (max-width:400px){ .tab svg{display:none} }
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+}
+</style>
+</head>
+<body>
+
+<!-- Mascot parts, reused as the logo and as the guide peeking over each device -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="cat-face">
+      <path d="M27,52 Q25,31 32,21 Q34.5,19 37,21.5 L51,35 Z M81,52 Q83,31 76,21 Q73.5,19 71,21.5 L57,35 Z" fill="#FFF6EC" stroke="#2A1740" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M31.5,45 Q31,32 34.5,26.5 L45.5,37.5 Z M76.5,45 Q77,32 73.5,26.5 L62.5,37.5 Z" fill="#FF9EB5"/>
+      <ellipse cx="54" cy="58" rx="31" ry="24.5" fill="#FFF6EC" stroke="#2A1740" stroke-width="2.2"/>
+      <ellipse cx="35.6" cy="67.5" rx="4.6" ry="2.6" fill="#FF9EB5" opacity=".75"/>
+      <ellipse cx="72.4" cy="67.5" rx="4.6" ry="2.6" fill="#FF9EB5" opacity=".75"/>
+      <path d="M51.9,64.6 Q54,63.8 56.1,64.6 Q55.2,66.6 54,66.8 Q52.8,66.6 51.9,64.6 Z" fill="#FF7A9C"/>
+      <path d="M50.4,68 Q52.2,70.4 54,68.2 Q55.8,70.4 57.6,68" fill="none" stroke="#2A1740" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M20,61 L27.5,62.5 M20.5,66.5 L27.5,65.5 M88,61 L80.5,62.5 M87.5,66.5 L80.5,65.5" stroke="#2A1740" stroke-width="1.2" stroke-linecap="round"/>
+      <path d="M37,78.5 Q54,87.5 71,78.5" fill="none" stroke="#FF4D5E" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="54" cy="86.4" r="4.4" fill="#FFD166" stroke="#2A1740" stroke-width="1.2"/>
+      <path d="M54,88.6 L52.2,86.9 Q51.3,85.9 52.1,85.1 Q53,84.4 54,85.4 Q55,84.4 55.9,85.1 Q56.7,85.9 55.8,86.9 Z" fill="#FF4D5E"/>
+    </g>
+    <g id="cat-eyes-static">
+      <ellipse cx="43.1" cy="60.5" rx="6.5" ry="7.6" fill="#2A1740"/>
+      <ellipse cx="64.9" cy="60.5" rx="6.5" ry="7.6" fill="#2A1740"/>
+      <circle cx="44.7" cy="56.8" r="2.5" fill="#fff"/><circle cx="66.5" cy="56.8" r="2.5" fill="#fff"/>
+    </g>
+    <symbol id="logo" viewBox="0 0 108 108">
+      <circle cx="54" cy="54" r="54" fill="#C49BFF"/>
+      <g transform="translate(5.4 5.6) scale(.9)"><use href="#cat-face"/><use href="#cat-eyes-static"/></g>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<template id="cat-tpl">
+  <div class="cat" data-mood="idle" aria-hidden="true">
+    <svg viewBox="12 10 84 88">
+      <g class="head">
+        <use href="#cat-face"/>
+        <g class="eyes"><g class="pupils"><use href="#cat-eyes-static"/></g></g>
+        <path class="happy-eyes" d="M37.5,62 Q43,54.5 48.5,62 M59.5,62 Q65,54.5 70.5,62" fill="none" stroke="#2A1740" stroke-width="3" stroke-linecap="round"/>
+        <g class="hearts" fill="#FF4D5E"><path d="M16,30 l-3,-3 q-1.5,-1.8 0,-3 q1.6,-1.2 3,.5 q1.4,-1.7 3,-.5 q1.5,1.2 0,3 z"/><path d="M92,26 l-3,-3 q-1.5,-1.8 0,-3 q1.6,-1.2 3,.5 q1.4,-1.7 3,-.5 q1.5,1.2 0,3 z"/></g>
+      </g>
+      <g fill="#FFF6EC" stroke="#2A1740" stroke-width="2.2"><ellipse cx="36" cy="91" rx="10" ry="6.5"/><ellipse cx="72" cy="91" rx="10" ry="6.5"/></g>
+      <path d="M33,89 v3.5 M39,89 v3.5 M69,89 v3.5 M75,89 v3.5" stroke="#2A1740" stroke-width="1.3" stroke-linecap="round"/>
+    </svg>
+  </div>
+</template>
+
+<header class="topbar" id="topbar">
+  <div class="wrap nav">
+    <a class="brand" href="#phone"><svg aria-hidden="true"><use href="#logo"/></svg>Security4Her</a>
+    <div class="tabs" role="tablist" aria-label="Install and learn">
+      <span class="tab-ind instant" id="tab-ind" aria-hidden="true"></span>
+      <button class="tab" role="tab" id="t-phone" aria-controls="p-phone" data-tab="phone"><svg viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="3"/><path d="M11 18h2"/></svg>Phone</button>
+      <button class="tab" role="tab" id="t-watch" aria-controls="p-watch" data-tab="watch"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><path d="M9 6.5 9.6 2.5h4.8L15 6.5M9 17.5l.6 4h4.8l.6-4M12 9.5V12l1.5 1.5"/></svg>Watch</button>
+      <button class="tab" role="tab" id="t-inside" aria-controls="p-inside" data-tab="inside"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z"/></svg>Features</button>
+      <button class="tab" role="tab" id="t-help" aria-controls="p-help" data-tab="help"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5h.01"/></svg>Help</button>
+    </div>
+  </div>
+</header>
+
+<main>
+<!-- ================= PHONE ================= -->
+<section class="panel" id="p-phone" role="tabpanel" aria-labelledby="t-phone" tabindex="-1">
+  <div class="wrap installer" data-installer="phone">
+    <div class="copy">
+      <h1 class="hero-title">Help is one long press away.</h1>
+      <p class="lede">Security4Her texts your trusted people your live location, records what's happening and calls for help, from your phone or your watch. It's free, with no subscription.</p>
+      <div class="cta">
+        <button class="btn" id="dl" type="button" aria-describedby="dl-note">
+          <span class="fill"></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
+          <span id="dl-label">Download for Android</span>
+          <span class="meta" id="dl-meta">27.4 MB</span>
+        </button>
+        <p class="cta-note" id="dl-note">Android 8 or newer. Not on the Play Store yet, so it installs from this page.</p>
+      </div>
+      <p class="ios-note" role="note">Security4Her runs on Android phones and Wear OS watches. There's no iPhone version yet, so open this page on an Android phone to install it.</p>
+      <div class="qr-card">
+        <div class="qr" id="qr" aria-label="QR code that opens this page on your phone" role="img"></div>
+        <div>
+          <b>Install from your phone</b>
+          <p>Point your Android phone's camera at the code to open this page there, then tap Download.</p>
+          <button type="button" id="copy-link">Copy the link instead</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="device-col">
+      <div class="device-stick">
+        <div class="cat-slot"></div>
+        <div class="phone device play" aria-label="Preview of the current install step" role="img">
+          <div class="screen">
+            <div class="sb" id="sb"><span>12:41</span><span class="punch"></span><span class="ico"><b></b><i></i></span></div>
+            <div class="scr" data-s="1">
+              <div class="chrome"><svg viewBox="0 0 24 24" fill="none" stroke="#4a4453" stroke-width="2.4"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>security4her.vercel.app</div>
+              <div class="ghost-page"><i class="big"></i><i></i><i style="width:84%"></i><i style="width:70%"></i><i class="btnish"></i><i style="width:90%;margin-top:16px"></i><i style="width:60%"></i></div>
+              <div class="sheet">
+                <div class="sheet-title" id="ph-title">Download file?</div>
+                <div class="file"><div class="apk">APK</div><div><b>Security4Her-phone.apk</b><small id="ph-meta">27.4 MB</small></div></div>
+                <div class="pbar"><i id="ph-bar"></i></div>
+                <p class="warn" id="ph-warn">Chrome shows this for every app that isn't from the Play Store.</p>
+                <div class="sheet-actions"><span class="pbtn">Cancel</span><span class="pbtn solid" id="ph-btn" style="cursor:pointer">Download anyway</span></div>
+              </div>
+            </div>
+            <div class="scr" data-s="2">
+              <div class="shade">
+                <div class="clock">12:42</div>
+                <div class="date">Tue, 29 Sep</div>
+                <div class="tiles"><span class="on">Wi-Fi</span><span>Bluetooth</span><span class="on">Location</span><span>Do not disturb</span></div>
+                <div class="notif">
+                  <div class="n-head"><i></i>Chrome, now</div>
+                  <b>Security4Her-phone.apk</b>
+                  <small>Download complete, 27.4 MB</small>
+                  <div class="n-actions"><span>Open</span><span style="color:#B7AEC2">Delete</span></div>
+                </div>
+              </div>
+              <span class="tap" style="left:40px;top:318px;--d:.9s"></span>
+            </div>
+            <div class="scr" data-s="3">
+              <div class="set-head"><svg viewBox="0 0 24 24" fill="none" stroke="#1D1A22" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5m6-6-6 6 6 6"/></svg>Install unknown apps</div>
+              <div class="set-app"><i></i><div><b>Chrome</b><br><small style="color:#6b6475">Version 140</small></div></div>
+              <div class="set-row"><span>Allow from this source</span><span class="toggle"></span></div>
+              <p class="set-foot">Your phone and personal data are more vulnerable to attack by unknown apps. You can turn this back off after installing.</p>
+              <span class="tap" style="left:228px;top:198px;--d:.8s"></span>
+            </div>
+            <div class="scr" data-s="4">
+              <div class="ghost-page" style="opacity:.35"><i class="big"></i><i></i><i style="width:80%"></i></div>
+              <div class="dim"></div>
+              <div class="dialog">
+                <div class="dlg-app"><svg><use href="#logo"/></svg>Security4Her</div>
+                <div class="layer l-ask"><p class="dlg-q">Do you want to install this app?</p><div class="dlg-actions"><span class="pbtn">Cancel</span><span class="pbtn solid">Install</span></div></div>
+                <div class="layer l-prog"><p class="dlg-q">Installing…</p><div class="pbar"><i></i></div></div>
+                <div class="layer l-done"><p class="dlg-q">App installed.</p><div class="dlg-actions"><span class="pbtn">Done</span><span class="pbtn solid">Open</span></div></div>
+              </div>
+              <span class="tap" style="left:228px;top:356px;--d:1s"></span>
+            </div>
+            <div class="scr" data-s="5">
+              <div class="app">
+                <div class="v1">
+                  <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#C49BFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+                  <b>You're verified</b>
+                  <small>Priya Sharma, female, confirmed by the demo DigiLocker sign-in</small>
+                  <span class="chip">Women only</span>
+                </div>
+                <div class="v2">
+                  <div class="hi"><small>Good evening</small><b>Priya</b></div>
+                  <div class="pills"><span class="g">GPS ready</span><span>3 contacts</span><span>Watch linked</span></div>
+                  <div class="sos"><span>SOS</span></div>
+                  <p class="sos-hint">Hold for 2 seconds to alert your contacts</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="caption"><span class="cap">Step 1 of 5</span><button type="button" class="replay">Replay</button></div>
+      </div>
+    </div>
+
+    <div class="steps-col">
+      <div class="steps-head"><h2>Install in five steps</h2><span class="eta">About a minute</span></div>
+      <div class="meter" aria-hidden="true"><i></i></div>
+      <ol class="steps">
+        <li class="step" data-step="1">
+          <button class="step-head" type="button"><span class="num"><span>1</span><svg><use href="#i-check"/></svg></span><span class="step-title">Download the app</span></button>
+          <div class="step-body"><div><div class="step-inner">
+            <p>Tap <strong>Download</strong>. Chrome will warn that the file might be harmful; it says that about every app from outside the Play Store. Tap <strong>Download anyway</strong>.</p>
+            <div class="step-actions"><button class="btn btn-sm" type="button" data-action="download">Download</button><button class="link" type="button" data-next>I already have it</button></div>
+          </div></div></div>
+        </li>
+        <li class="step" data-step="2">
+          <button class="step-head" type="button"><span class="num"><span>2</span><svg><use href="#i-check"/></svg></span><span class="step-title">Open the file</span></button>
+          <div class="step-body"><div><div class="step-inner">
+            <p>When the download finishes, tap <strong>Open</strong> on the notification. Missed it? Open the <strong>Files</strong> app, go to <strong>Downloads</strong> and tap Security4Her-phone.apk.</p>
+            <div class="step-actions"><button class="btn btn-sm" type="button" data-next>I opened it</button></div>
+          </div></div></div>
+        </li>
+        <li class="step" data-step="3">
+          <button class="step-head" type="button"><span class="num"><span>3</span><svg><use href="#i-check"/></svg></span><span class="step-title">Let Chrome install apps</span></button>
+          <div class="step-body"><div><div class="step-inner">
+            <p>Android asks this once. Tap <strong>Settings</strong>, turn on <strong>Allow from this source</strong>, then press back. If you've installed an app this way before, you won't see it.</p>
+            <div class="step-actions"><button class="btn btn-sm" type="button" data-next>It's allowed</button></div>
+          </div></div></div>
+        </li>
+        <li class="step" data-step="4">
+          <button class="step-head" type="button"><span class="num"><span>4</span><svg><use href="#i-check"/></svg></span><span class="step-title">Install</span></button>
+          <div class="step-body"><div><div class="step-inner">
+            <p>Tap <strong>Install</strong> and wait a few seconds. If Play Protect asks about an unknown developer, tap <strong>More details</strong>, then <strong>Install anyway</strong>.</p>
+            <div class="step-actions"><button class="btn btn-sm" type="button" data-next>It's installed</button></div>
+          </div></div></div>
+        </li>
+        <li class="step" data-step="5">
+          <button class="step-head" type="button"><span class="num"><span>5</span><svg><use href="#i-check"/></svg></span><span class="step-title">Open it and verify</span></button>
+          <div class="step-body"><div><div class="step-inner">
+            <p>Open Security4Her, create your account and verify with the demo DigiLocker sign-in. It's for women only; use this demo account:</p>
+            <dl class="cred">
+              <dt>Aadhaar</dt><dd>2345 6789 4821</dd><button class="copy-btn" type="button" data-copy="234567894821">Copy</button>
+              <dt>OTP</dt><dd>123456</dd><button class="copy-btn" type="button" data-copy="123456">Copy</button>
+            </dl>
+            <div class="step-actions"><button class="btn btn-sm" type="button" data-finish>I'm in</button></div>
+          </div></div></div>
+        </li>
+      </ol>
+      <div class="done-card" role="status">
+        <h3>You're set up.</h3>
+        <p>Add two or three trusted contacts, then try an SOS with <strong style="color:var(--ink)">Test Mode</strong> on. Texts and calls go to your own demo number instead of the police.</p>
+        <div class="step-actions"><a class="btn btn-sm" href="#watch">Add the watch</a><button class="btn btn-sm btn-ghost" type="button" data-restart>Start over</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= WATCH ================= -->
+<section class="panel" id="p-watch" role="tabpanel" aria-labelledby="t-watch" tabindex="-1" hidden>
+  <div class="wrap installer" data-installer="watch">
+    <div class="copy">
+      <h1 class="hero-title">SOS on your wrist.</h1>
+      <p class="lede">Press and hold on your Wear OS watch to raise the alarm, even when your phone is deep in a bag. The watch records audio from your wrist and sends it to your phone as evidence.</p>
+      <div class="cta">
+        <a class="btn" href="Security4Her-watch.apk" download data-action="watch-download">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
+          Download the watch app <span class="meta">33.8 MB</span>
+        </a>
+        <p class="cta-note">Wear OS 3 or newer. Watches can't install from a browser, so this goes on from a computer over Wi-Fi.</p>
+      </div>
+    </div>
+
+    <div class="device-col">
+      <div class="device-stick">
+        <div class="cat-slot"></div>
+        <div class="watch device play" aria-label="Preview of the current watch step" role="img">
+          <div class="strap top"></div><div class="strap bottom"></div>
+          <div class="case"><span class="crown"></span>
+            <div class="wscreen">
+              <div class="scr" data-s="1">
+                <div class="face-time">12:41</div>
+                <div class="face-date">Tue 29 Sep</div>
+                <div class="face-comp"><svg><use href="#logo"/></svg>Security4Her isn't installed</div>
+              </div>
+              <div class="scr" data-s="2">
+                <div class="wt">About</div>
+                <div class="wlist">
+                  <div class="wrow"><span>Model<small>Wear OS watch</small></span></div>
+                  <div class="wrow hl"><span>Build number<small>Tap 7 times</small></span></div>
+                  <div class="wrow"><span>Versions</span></div>
+                </div>
+                <span class="tap" style="left:50%;top:50%;--d:.5s;--n:3"></span>
+                <div class="wtoast">You're now a developer!</div>
+              </div>
+              <div class="scr" data-s="3">
+                <div class="wt">Developer options</div>
+                <div class="wlist">
+                  <div class="wrow"><span>ADB debugging</span><span class="toggle" style="--t:.9s"></span></div>
+                  <div class="wrow"><span>Debug over Wi-Fi</span><span class="toggle" style="--t:1.7s"></span></div>
+                  <div class="wrow"><span>Wireless debugging</span></div>
+                </div>
+              </div>
+              <div class="scr" data-s="4">
+                <div class="wt">Pair new device</div>
+                <div class="wlabel">Wi-Fi pairing code</div>
+                <div class="wcode">482 913</div>
+                <div class="wlabel">IP address &amp; port</div>
+                <div class="waddr" id="w-show-pair">192.168.1.23:37119</div>
+              </div>
+              <div class="scr winst" data-s="5">
+                <svg class="ring" viewBox="0 0 280 280"><circle class="track" cx="140" cy="140" r="132"/><circle class="prog" cx="140" cy="140" r="132"/></svg>
+                <div class="w-a"><svg class="logo"><use href="#logo"/></svg><b>Installing</b><span class="wlabel" style="margin-top:4px">from your computer</span></div>
+                <div class="w-b"><svg class="logo"><use href="#logo"/></svg><b>Installed</b><span class="wlabel" style="margin-top:4px">Success</span></div>
+              </div>
+              <div class="scr" data-s="6">
+                <div class="wlinked"><i></i>Phone linked</div>
+                <div class="wsos">SOS</div>
+                <div class="whint">Hold to alert your contacts</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="caption"><span class="cap">Step 1 of 6</span><button type="button" class="replay">Replay</button></div>
+      </div>
+    </div>
+
+    <div class="steps-col">
+      <div class="steps-head"><h2>Install in six steps</h2><span class="eta">About five minutes</span></div>
+      <div class="meter" aria-hidden="true"><i></i></div>
+      <ol class="steps">
+        <li class="step" data-step="1">
+          <button class="step-head" type="button"><span class="num"><span>1</span><svg><use href="#i-check"/></svg></span><span class="step-title">Get the files on your computer</span></button>
+          <div class="step-body"><div><div class="step-inner">
+            <p>Download the watch app to your computer. You also need <a href="https://developer.android.com/tools/releases/platform-tools" target="_blank" rel="noopener">Android platform tools</a>, which gives you the <strong>adb</strong> command. Put the watch app in the platform tools folder to keep things simple.</p>
+            <div class="step-actions"><a class="btn btn-sm" href="Security4Her-watch.apk" download data-action="watch-download">Download watch app</a><button class="link" type="button" data-next>I have both</button></div>
+          </div></div></div>
+        </li>
+        <li class="step" data-step="2">
+          <button class="step-head" type="button"><span class="num"><span>2</span><svg><use href="#i-check"/></svg></span><span class="step-title">Turn on developer options</span></button>
+          <div class="step-body"><div><div class="step-inner">
+            <p>On the watch, open <strong>Settings</strong>, then <strong>System</strong>, then <strong>About</strong>. Tap <strong>Build number</strong> seven times until it says you're a developer. On some watches it's under About, then Versions.</p>
+            <div class="step-actions"><button class="btn btn-sm" type="button" data-next>I'm a developer</button></div>
+          </div></div></div>
+        </li>
+        <li class="step" data-step="3">
+          <button class="step-head" type="button"><span class="num"><span>3</span><svg><use href="#i-check"/></svg></span><span class="step-title">Turn on wireless debugging</span></button>
+          <div class="step-body"><div><div class="step-inner">
+            <p>Go back to Settings and open <strong>Developer options</strong>. Turn on <strong>ADB debugging</strong> and <strong>Debug over Wi-Fi</strong>, then open <strong>Wireless debugging</strong>. Keep the watch and computer on the same Wi-Fi.</p>
+            <div class="step-actions"><button class="btn btn-sm" type="button" data-next>It's on</button></div>
+          </div></div></div>
+        </li>
+        <li class="step" data-step="4">
+          <button class="step-head" type="button"><span class="num"><span>4</span><svg><use href="#i-check"/></svg></span><span class="step-title">Pair the computer</span></button>
+          <div class="step-body"><div><div class="step-inner">
+            <p>Tap <strong>Pair new device</strong> on the watch and type what it shows. Then run the command and enter the six-digit code.</p>
+            <div class="fields">
+              <label>Watch IP address<input id="w-ip" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="192.168.1.23"></label>
+              <label>Pairing port<input id="w-pp" inputmode="numeric" autocomplete="off" placeholder="37119"></label>
+            </div>
+            <div class="cmd"><code id="c1"></code><button class="copy-btn" type="button" data-copy-from="c1">Copy</button></div>
+            <div class="step-actions"><button class="btn btn-sm" type="button" data-next>It says paired</button></div>
+          </div></div></div>
+        </li>
+        <li class="step" data-step="5">
+          <button class="step-head" type="button"><span class="num"><span>5</span><svg><use href="#i-check"/></svg></span><span class="step-title">Connect and install</span></button>
+          <div class="step-body"><div><div class="step-inner">
+            <p>Back on the Wireless debugging screen, the watch shows its address with a different port. Type that port, then run both commands from the folder with the watch app.</p>
+            <div class="fields"><label>Debug port<input id="w-cp" inputmode="numeric" autocomplete="off" placeholder="41857"></label></div>
+            <div class="cmd"><code id="c2"></code><button class="copy-btn" type="button" data-copy-from="c2">Copy</button></div>
+            <div class="cmd"><code id="c3">adb install Security4Her-watch.apk</code><button class="copy-btn" type="button" data-copy-from="c3">Copy</button></div>
+            <div class="step-actions"><button class="btn btn-sm" type="button" data-next>It says Success</button></div>
+          </div></div></div>
+        </li>
+        <li class="step" data-step="6">
+          <button class="step-head" type="button"><span class="num"><span>6</span><svg><use href="#i-check"/></svg></span><span class="step-title">Open it on the watch</span></button>
+          <div class="step-body"><div><div class="step-inner">
+            <p>Open the phone app first, then Security4Her on the watch. They find each other on their own, and the phone shows <strong>Watch linked</strong>. You can turn wireless debugging off again.</p>
+            <div class="step-actions"><button class="btn btn-sm" type="button" data-finish>It's linked</button></div>
+          </div></div></div>
+        </li>
+      </ol>
+      <div class="done-card" role="status">
+        <h3>Your watch is ready.</h3>
+        <p>Try it with <strong style="color:var(--ink)">Test Mode</strong> on in the phone app: press and hold SOS on the watch and see the alert arrive on your phone.</p>
+        <div class="step-actions"><a class="btn btn-sm" href="#inside">See what it can do</a><button class="btn btn-sm btn-ghost" type="button" data-restart>Start over</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FEATURES ================= -->
+<section class="panel" id="p-inside" role="tabpanel" aria-labelledby="t-inside" tabindex="-1" hidden>
+  <div class="wrap page band-grid">
+    <div>
+      <h2>What you're installing</h2>
+      <p class="sub">Everything works without a subscription. Maps and routing use OpenStreetMap, so nothing is behind a paywall.</p>
+      <div class="cta"><a class="btn btn-sm" href="#phone">Install on your phone</a><a class="btn btn-sm btn-ghost" href="#watch">Add a watch</a></div>
+    </div>
+    <div class="feats">
+      <div class="feat"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/></svg></span><b>SOS from phone or watch</b><p>Hold the button, or trigger it from your wrist. A countdown lets you cancel a mistake.</p></div>
+      <div class="feat"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></span><b>Live location by SMS</b><p>Your contacts get a text with a link to a map that follows you every 20 seconds.</p></div>
+      <div class="feat"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 19c4-1 3-7 8-7s4 6 8 7"/><circle cx="12" cy="6" r="2.5"/></svg></span><b>Safe Journey</b><p>Pick where you're going. If you're late or stop moving and don't check in, your contacts are alerted.</p></div>
+      <div class="feat"><span class="ic"><svg viewBox="0 0 24 24"><path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3z"/><path d="M9 4v13M15 7v13"/></svg></span><b>Community safety map</b><p>See safe places, hospitals and police nearby, and red zones marked by women or by repeated SOS alerts.</p></div>
+      <div class="feat"><span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 11l5-3v8l-5-3"/></svg></span><b>Evidence recording</b><p>Audio and video start with the SOS, fingerprinted so any edit shows. Your watch records audio too.</p></div>
+      <div class="feat"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></span><b>Women-only community</b><p>Accounts are verified through DigiLocker before joining. In this build that sign-in is a demo.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= HELP ================= -->
+<section class="panel" id="p-help" role="tabpanel" aria-labelledby="t-help" tabindex="-1" hidden>
+  <div class="wrap page band-grid">
+    <div>
+      <h2>Stuck somewhere?</h2>
+      <p class="sub">Most install problems are one of these. The install steps remember where you were, so you can pick up where you left off.</p>
+    </div>
+    <div class="faq">
+      <div class="faq-group">
+        <h3>Phone</h3>
+        <details><summary>Chrome says the file might be harmful</summary><p class="ans">Chrome shows that warning for every app that doesn't come from the Play Store. Tap Download anyway. To check it's the real file, compare its SHA-256 fingerprint with the one at the bottom of this page.</p></details>
+        <details><summary>Nothing happens when I tap the file</summary><p class="ans">Android needs permission for Chrome (or your Files app) to install apps. Open Settings, search for "Install unknown apps", pick the app you're opening the file from and turn on Allow from this source.</p></details>
+        <details><summary>It says "App not installed"</summary><p class="ans">An older copy of Security4Her is probably still on the phone. Uninstall it, then open the file again. Also check you have about 80 MB free.</p></details>
+        <details><summary>Why does it ask for so many permissions?</summary><p class="ans">Location to share where you are, SMS and phone to reach your contacts without internet, microphone and camera to record evidence during an SOS, and notifications to show the alert. Nothing is recorded or shared unless an SOS or Safe Journey is running.</p></details>
+      </div>
+      <div class="faq-group">
+        <h3>Watch</h3>
+        <details><summary>adb says "command not found"</summary><p class="ans">Run the commands from inside the platform tools folder. On Windows use <code>.\adb</code> in PowerShell; on Mac or Linux use <code>./adb</code>.</p></details>
+        <details><summary>Pairing fails or times out</summary><p class="ans">The pairing code and port change every time you open Pair new device, so type the ones showing right now. The watch and computer must be on the same Wi-Fi, and some guest or office networks block this.</p></details>
+        <details><summary>The phone never shows Watch linked</summary><p class="ans">The watch must be paired with the phone in the Wear OS or Galaxy Wearable app first. Open the Security4Her phone app, then the watch app, and give it a few seconds.</p></details>
+      </div>
+      <div class="faq-group">
+        <h3>Trying it out</h3>
+        <details><summary>Can I try an SOS without alerting anyone?</summary><p class="ans">Yes. Turn on Test Mode in Settings. Texts and the automatic call go to a demo number you choose, and Safe Journey timers are shortened so you can see an alert in a minute.</p></details>
+        <details><summary>Which account do I use to sign in?</summary><p class="ans">The DigiLocker sign-in is a demo. Use Aadhaar 2345 6789 4821 with OTP 123456 to verify as Priya Sharma. The other demo account, Rohan Mehta (3456 7890 1357), is male and is turned away, which shows the women-only check.</p></details>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <a class="brand" href="#phone"><svg aria-hidden="true"><use href="#logo"/></svg>Security4Her</a>
+    <div class="foot-meta">
+      <span>Phone app 0.1.0 for Android 8 and newer. Watch app 0.2.0 for Wear OS 3 and newer.</span>
+      <span class="hash">Phone app SHA-256 <code id="sha">1bac98daf2447cf18d3bd0ca0cc08ab39b2cc00107b434f1f09a6862c9088440</code><button class="copy-btn" type="button" data-copy-from="sha">Copy</button></span>
+      <span>Built for a hackathon. The DigiLocker sign-in is a demo and doesn't contact any real service.</span>
+    </div>
+  </div>
+</footer>
+
+<canvas id="confetti" aria-hidden="true"></canvas>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+<script>
+(() => {
+  const APK = { url: "Security4Her-phone.apk", name: "Security4Her-phone.apk", bytes: 27370771 };
+  const CANONICAL = "https://security4her.vercel.app/";
+  const TABS = ["phone", "watch", "inside", "help"];
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const smooth = reduce ? "auto" : "smooth";
+  const mb = b => (b / 1e6).toFixed(1) + " MB";
+
+  // ---------- device ----------
+  const forced = new URLSearchParams(location.search).get("device");
+  const ua = navigator.userAgent;
+  const device = forced || (/android/i.test(ua) ? "android"
+    : (/iphone|ipad|ipod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) ? "ios" : "desktop");
+  document.documentElement.dataset.device = device;
+
+  const store = {
+    get(k) { try { return localStorage.getItem("s4h-install-" + k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem("s4h-install-" + k, v); } catch {} },
+  };
+
+  let toastT;
+  function toast(msg) {
+    const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2800);
+  }
+
+  // ---------- mascots (one per device) ----------
+  $$(".cat-slot").forEach(slot => slot.replaceWith($("#cat-tpl").content.firstElementChild.cloneNode(true)));
+
+  // ---------- a guided installer: steps on the left, a device that acts them out ----------
+  function installer(root, { key, count, onGo = () => {} }) {
+    const dev = $(".device", root), cat = $(".cat", root), done = $(".done-card", root), eta = $(".eta", root);
+    const firstEta = eta.textContent;
+    let step = 1, finished = false;
+    const api = {
+      cat, get step() { return step; }, get finished() { return finished; },
+      replay() { dev.classList.remove("play"); void dev.offsetWidth; dev.classList.add("play"); },
+      go(n, { scroll = false } = {}) {
+        step = Math.max(1, Math.min(count, n));
+        $$(".step", root).forEach(li => {
+          const k = +li.dataset.step, on = k === step && !finished;
+          li.classList.toggle("on", on);
+          li.classList.toggle("done", k < step || finished);
+          li.querySelector(".step-head").setAttribute("aria-expanded", on);
+          on ? li.setAttribute("aria-current", "step") : li.removeAttribute("aria-current");
+        });
+        $$(".scr", dev).forEach(s => s.classList.toggle("on", +s.dataset.s === step));
+        $(".cap", root).textContent = finished ? "All done" : `Step ${step} of ${count}`;
+        $(".meter i", root).style.setProperty("--m", (finished ? 100 : ((step - 1) / count) * 100 + 4) + "%");
+        eta.textContent = finished ? "Done" : step === 1 ? firstEta : `${count - step + 1} to go`;
+        onGo(step);
+        api.replay();
+        store.set(key, finished ? "done" : String(step));
+        if (scroll) {
+          const li = $(`.step[data-step="${step}"]`, root), r = li.getBoundingClientRect();
+          if (r.top < 90 || r.bottom > innerHeight - 40) li.scrollIntoView({ behavior: smooth, block: "center" });
+        }
+      },
+      finish() {
+        finished = true; api.go(count);
+        done.classList.add("show"); cat.dataset.mood = "happy";
+        done.scrollIntoView({ behavior: smooth, block: "center" });
+        setTimeout(() => confetti(done), reduce ? 0 : 350);
+      },
+      reset() { finished = false; done.classList.remove("show"); cat.dataset.mood = "idle"; },
+    };
+    $$(".step-head", root).forEach(h => h.addEventListener("click", () => { if (finished) api.reset(); api.go(+h.closest(".step").dataset.step); }));
+    $$("[data-next]", root).forEach(b => b.addEventListener("click", () => { api.go(step + 1, { scroll: true }); nudge(cat); }));
+    $("[data-finish]", root).addEventListener("click", api.finish);
+    $(".replay", root).addEventListener("click", api.replay);
+    $("[data-restart]", root).addEventListener("click", () => { api.reset(); api.go(1, { scroll: true }); if (key === "phone") setDl("idle"); });
+    const saved = store.get(key);
+    if (saved === "done") { finished = true; api.go(count); done.classList.add("show"); cat.dataset.mood = "happy"; }
+    else api.go(+saved || 1);
+    return api;
+  }
+
+  let dlState = "idle";
+  const phone = installer($('[data-installer="phone"]'), { key: "phone", count: 5,
+    onGo: s => $("#sb").classList.toggle("dark", s === 2 || s === 5) });
+  const watch = installer($('[data-installer="watch"]'), { key: "watch", count: 6 });
+
+  // ---------- tabs ----------
+  const tabBtns = $$(".tab"), ind = $("#tab-ind");
+  let current = null;
+  function moveInd() {
+    const b = $(`.tab[data-tab="${current}"]`);
+    ind.style.width = b.offsetWidth + "px";
+    ind.style.transform = `translateX(${b.offsetLeft}px)`;
+  }
+  function show(id, { focus = false, fromNav = false } = {}) {
+    if (!TABS.includes(id)) id = "phone";
+    if (id === current) return;
+    const dir = current ? Math.sign(TABS.indexOf(id) - TABS.indexOf(current)) : 0;
+    current = id;
+    tabBtns.forEach(b => { const on = b.dataset.tab === id; b.setAttribute("aria-selected", on); b.tabIndex = on ? 0 : -1; });
+    $$(".panel").forEach(p => {
+      const on = p.id === "p-" + id;
+      p.hidden = !on;
+      if (on && dir) { p.style.setProperty("--dx", dir * 28 + "px"); p.classList.remove("enter"); void p.offsetWidth; p.classList.add("enter"); }
+    });
+    moveInd();
+    if (fromNav && scrollY > 0) scrollTo({ top: 0, behavior: smooth });
+    if (id === "phone") phone.replay();
+    if (id === "watch") watch.replay();
+    if (focus) $(`.tab[data-tab="${id}"]`).focus();
+    if (location.hash.slice(1) !== id) history.replaceState(null, "", "#" + id);
+    requestAnimationFrame(look);
+  }
+  tabBtns.forEach(b => b.addEventListener("click", () => show(b.dataset.tab, { fromNav: true })));
+  $(".tabs").addEventListener("keydown", e => {
+    const i = TABS.indexOf(current);
+    const n = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? TABS.length - 1 : null;
+    if (n === null) return;
+    e.preventDefault();
+    show(TABS[(n + TABS.length) % TABS.length], { focus: true, fromNav: true });
+  });
+  // In-page links like "Add the watch" switch tabs instead of jumping
+  document.addEventListener("click", e => {
+    const a = e.target.closest('a[href^="#"]');
+    if (!a) return;
+    const id = a.getAttribute("href").slice(1);
+    if (TABS.includes(id)) { e.preventDefault(); show(id, { fromNav: true }); }
+  });
+  addEventListener("hashchange", () => show(location.hash.slice(1), { fromNav: true }));
+  addEventListener("resize", () => current && moveInd());
+  show(location.hash.slice(1) || "phone");
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => { moveInd(); requestAnimationFrame(() => ind.classList.remove("instant")); });
+  addEventListener("scroll", () => $("#topbar").classList.toggle("scrolled", scrollY > 8), { passive: true });
+
+  // ---------- phone download with real progress ----------
+  const dlBtn = $("#dl");
+  function setDl(state, p = 0, loaded = 0) {
+    dlState = state;
+    dlBtn.style.setProperty("--p", state === "loading" ? p : 0);
+    const label = $("#dl-label"), meta = $("#dl-meta");
+    const bar = $("#ph-bar"), phMeta = $("#ph-meta"), phTitle = $("#ph-title"), phBtn = $("#ph-btn"), warn = $("#ph-warn");
+    bar.style.width = (state === "loading" ? p * 100 : state === "done" ? 100 : 0) + "%";
+    warn.style.display = state === "idle" ? "" : "none";
+    if (state === "idle") {
+      label.textContent = device === "desktop" ? "Download the APK" : "Download for Android";
+      meta.textContent = mb(APK.bytes);
+      phTitle.textContent = "Download file?"; phMeta.textContent = mb(APK.bytes); phBtn.textContent = "Download anyway";
+      if (!phone.finished) phone.cat.dataset.mood = "idle";
+    } else if (state === "loading") {
+      label.textContent = `Downloading ${Math.round(p * 100)}%`;
+      meta.textContent = `${mb(loaded)} of ${mb(APK.bytes)}`;
+      phTitle.textContent = "Downloading…"; phMeta.textContent = `${mb(loaded)} of ${mb(APK.bytes)}`; phBtn.textContent = `${Math.round(p * 100)}%`;
+      phone.cat.dataset.mood = "excited";
+    } else if (state === "done") {
+      label.textContent = "Downloaded"; meta.textContent = "Open it from your notifications";
+      phTitle.textContent = "Download complete"; phMeta.textContent = mb(APK.bytes); phBtn.textContent = "Open";
+      if (!phone.finished) phone.cat.dataset.mood = "idle";
+    } else if (state === "handoff") {
+      label.textContent = "Downloading in your browser"; meta.textContent = "Watch the notification";
+      phTitle.textContent = "Downloading…"; phMeta.textContent = mb(APK.bytes); phBtn.textContent = "…";
+    }
+  }
+  function clickDownload(href, name) {
+    const a = document.createElement("a"); a.href = href; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  function handoff() {
+    // Let the browser manage the download; it shows progress in the notification shade.
+    clickDownload(APK.url, APK.name);
+    setDl("handoff");
+    toast("Your browser is downloading it. Open it when the notification says it's done.");
+    setTimeout(() => { if (phone.step === 1) phone.go(2, { scroll: true }); }, 1400);
+  }
+  async function download() {
+    if (dlState === "loading") return;
+    if (dlState === "done") { toast("Already downloaded. Open it from your notifications or the Files app."); return; }
+    if (phone.step !== 1) phone.go(1);
+    if (location.protocol === "file:" || !("ReadableStream" in window)) return handoff();
+    setDl("loading");
+    try {
+      const res = await fetch(APK.url, { cache: "no-store" });
+      if (!res.ok || !res.body) throw new Error("HTTP " + res.status);
+      const total = +res.headers.get("content-length") || APK.bytes;
+      const reader = res.body.getReader(), chunks = [];
+      let loaded = 0, last = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value); loaded += value.length;
+        const now = performance.now();
+        if (now - last > 60) { last = now; setDl("loading", Math.min(1, loaded / total), loaded); }
+      }
+      setDl("loading", 1, loaded);
+      const url = URL.createObjectURL(new Blob(chunks, { type: "application/vnd.android.package-archive" }));
+      clickDownload(url, APK.name);
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setDl("done");
+      store.set("downloaded", "1");
+      toast(device === "android" ? "Downloaded. Tap Open on the notification." : "Downloaded. Copy it to your Android phone to install it.");
+      setTimeout(() => phone.go(2, { scroll: true }), 700);
+    } catch (e) {
+      console.warn("In-page download failed, handing off to the browser", e);
+      handoff();
+    }
+  }
+  dlBtn.addEventListener("click", download);
+  $$('[data-action="download"]').forEach(b => b.addEventListener("click", download));
+  $("#ph-btn").addEventListener("click", () => { if (dlState === "idle") download(); });
+  setDl(store.get("downloaded") === "1" ? "done" : "idle");
+
+  // Watch app: the browser downloads it; move the guide along
+  $$('[data-action="watch-download"]').forEach(a => a.addEventListener("click", () => {
+    toast("Downloading the watch app. Next, turn on developer options on the watch.");
+    nudge(watch.cat);
+    if (watch.step === 1 && !watch.finished) setTimeout(() => watch.go(2, { scroll: true }), 1200);
+  }));
+
+  // ---------- adb commands follow what the watch shows ----------
+  const wIp = $("#w-ip"), wPp = $("#w-pp"), wCp = $("#w-cp");
+  const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  function cmds() {
+    const ip = wIp.value.trim().replace(/[^\d.:a-fA-F]/g, "") || "192.168.1.23";
+    const pp = wPp.value.replace(/\D/g, "") || "37119";
+    const cp = wCp.value.replace(/\D/g, "") || "41857";
+    $("#c1").innerHTML = `adb pair <em>${esc(ip)}:${esc(pp)}</em>`;
+    $("#c2").innerHTML = `adb connect <em>${esc(ip)}:${esc(cp)}</em>`;
+    $("#w-show-pair").textContent = `${ip}:${pp}`;
+    store.set("adb", JSON.stringify([wIp.value, wPp.value, wCp.value]));
+  }
+  try { const w = JSON.parse(store.get("adb") || "[]"); wIp.value = w[0] || ""; wPp.value = w[1] || ""; wCp.value = w[2] || ""; } catch {}
+  [wIp, wPp, wCp].forEach(i => i.addEventListener("input", cmds));
+  cmds();
+
+  // ---------- copy ----------
+  async function copy(text, btn) {
+    try { await navigator.clipboard.writeText(text); }
+    catch {
+      const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select();
+      try { document.execCommand("copy"); } catch {} t.remove();
+    }
+    if (btn) { const o = btn.textContent; btn.textContent = "Copied"; btn.classList.add("ok"); setTimeout(() => { btn.textContent = o; btn.classList.remove("ok"); }, 1400); }
+  }
+  document.addEventListener("click", e => {
+    const b = e.target.closest("[data-copy],[data-copy-from]");
+    if (b) copy(b.dataset.copy ?? $("#" + b.dataset.copyFrom).textContent, b);
+  });
+
+  // ---------- QR (desktop) ----------
+  const pageUrl = /^https?:$/.test(location.protocol) && !/^(localhost|127\.|192\.168\.)/.test(location.hostname)
+    ? location.origin + location.pathname : CANONICAL;
+  $("#copy-link").addEventListener("click", () => { copy(pageUrl); toast("Link copied. Send it to your phone."); });
+  addEventListener("load", () => {
+    if (device !== "desktop") return;
+    if (!window.QRCode) { $("#qr").textContent = "Connect to the internet to show the code"; return; }
+    new QRCode($("#qr"), { text: pageUrl, width: 212, height: 212, colorDark: "#1E0E33", colorLight: "#FFF6EC", correctLevel: QRCode.CorrectLevel.M });
+  });
+
+  // ---------- cats: eyes follow the pointer ----------
+  let raf = 0, px = innerWidth / 2, py = innerHeight;
+  addEventListener("pointermove", e => { px = e.clientX; py = e.clientY; if (!raf) raf = requestAnimationFrame(look); }, { passive: true });
+  function look() {
+    raf = 0;
+    $$(".panel:not([hidden]) .cat").forEach(cat => {
+      const r = cat.getBoundingClientRect();
+      const dx = px - (r.left + r.width * .5), dy = py - (r.top + r.height * .55), d = Math.hypot(dx, dy) || 1;
+      const k = Math.min(1, d / 260);
+      $(".pupils", cat).setAttribute("transform", `translate(${(dx / d * 2.6 * k).toFixed(2)} ${(dy / d * 2.2 * k).toFixed(2)})`);
+      if (!reduce) $(".head", cat).style.transform = `rotate(${(dx / d * 4 * k).toFixed(2)}deg)`;
+    });
+  }
+  function nudge(cat) {
+    if (reduce || cat.dataset.mood !== "idle") return;
+    cat.dataset.mood = "excited";
+    setTimeout(() => { if (cat.dataset.mood === "excited" && dlState !== "loading") cat.dataset.mood = "idle"; }, 700);
+  }
+
+  // ---------- confetti ----------
+  function confetti(from) {
+    if (reduce) return;
+    const c = $("#confetti"), x = c.getContext("2d"), dpr = devicePixelRatio || 1;
+    c.width = innerWidth * dpr; c.height = innerHeight * dpr; x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const colors = ["#C49BFF", "#FFF6EC", "#FF9EB5", "#FFD166", "#8A5CD6"];
+    const r = from.getBoundingClientRect();
+    const ox = r.left + r.width / 2, oy = Math.min(innerHeight * .7, Math.max(80, r.top + 30));
+    const parts = Array.from({ length: 150 }, () => ({
+      x: ox, y: oy, vx: (Math.random() - .5) * 16, vy: -Math.random() * 15 - 5,
+      w: 6 + Math.random() * 6, h: 4 + Math.random() * 6, a: Math.random() * 6, va: (Math.random() - .5) * .4,
+      c: colors[Math.random() * colors.length | 0],
+    }));
+    const t0 = performance.now();
+    (function frame(t) {
+      const age = t - t0;
+      x.clearRect(0, 0, innerWidth, innerHeight);
+      for (const p of parts) {
+        p.vy += .45; p.vx *= .985; p.x += p.vx; p.y += p.vy; p.a += p.va;
+        x.save(); x.globalAlpha = Math.max(0, 1 - age / 2600); x.translate(p.x, p.y); x.rotate(p.a);
+        x.fillStyle = p.c; x.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); x.restore();
+      }
+      if (age < 2600) requestAnimationFrame(frame); else x.clearRect(0, 0, innerWidth, innerHeight);
+    })(t0);
+  }
+
+  // They leave the page to install; say where they were when they come back
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    const g = current === "watch" ? watch : current === "phone" ? phone : null;
+    if (g && !g.finished && g.step > 1) {
+      const t = $(`.panel:not([hidden]) .step[data-step="${g.step}"] .step-title`).textContent;
+      toast(`Welcome back. You're on step ${g.step}: ${t.charAt(0).toLowerCase() + t.slice(1)}.`);
+    }
+  });
+})();
+</script>
+</body>
+</html>
