@@ -69,10 +69,35 @@ import `in`.security4her.app.core.Profile
 import `in`.security4her.app.core.Settings
 import `in`.security4her.app.core.Store
 import `in`.security4her.app.core.friendly
-import `in`.security4her.app.map.SafetyMapScreen
 import `in`.security4her.app.sos.Incident
 import `in`.security4her.app.sos.SosEngine
 import `in`.security4her.app.sos.WearBridge
+import `in`.security4her.app.sos.Sms
+import `in`.security4her.app.sos.WhatsApp
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Settings as SettingsIcon
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
+import android.widget.Toast
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -101,6 +126,11 @@ private val Lilac = Color(0xFFC49BFF)
 private val OnLilac = Color(0xFF1E0E33)
 private val SosRed = Color(0xFFFF4D5E)
 private val Amber = Color(0xFFFFB547)
+private val WaGreen = Color(0xFF25D366) // WhatsApp's own green, only on WhatsApp actions
+
+@OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+private fun instrument(w: Int) = Font(R.font.instrument_sans, FontWeight(w), variationSettings = FontVariation.Settings(FontVariation.weight(w)))
+private val Instrument = FontFamily(instrument(400), instrument(500), instrument(600), instrument(700))
 
 @Composable
 private fun S4hTheme(content: @Composable () -> Unit) {
@@ -111,15 +141,19 @@ private fun S4hTheme(content: @Composable () -> Unit) {
         surfaceContainerHigh = Surface2, surfaceContainerHighest = Surface2, surfaceContainerLow = Surface1,
         outline = Line, outlineVariant = Line, error = SosRed, onError = Color.White,
     )
+    val f = Instrument
     val base = Typography()
     val type = base.copy(
-        displaySmall = TextStyle(fontSize = 36.sp, lineHeight = 40.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.8).sp),
-        headlineSmall = TextStyle(fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.3).sp),
-        titleMedium = TextStyle(fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold),
-        bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
-        bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 21.sp),
-        bodySmall = TextStyle(fontSize = 12.5.sp, lineHeight = 18.sp),
-        labelLarge = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+        displaySmall = TextStyle(fontFamily = f, fontSize = 38.sp, lineHeight = 42.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp),
+        headlineMedium = TextStyle(fontFamily = f, fontSize = 30.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp),
+        headlineSmall = TextStyle(fontFamily = f, fontSize = 25.sp, lineHeight = 31.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp),
+        titleMedium = TextStyle(fontFamily = f, fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold),
+        titleSmall = TextStyle(fontFamily = f, fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
+        bodyLarge = TextStyle(fontFamily = f, fontSize = 16.sp, lineHeight = 24.sp),
+        bodyMedium = TextStyle(fontFamily = f, fontSize = 14.sp, lineHeight = 21.sp),
+        bodySmall = TextStyle(fontFamily = f, fontSize = 12.5.sp, lineHeight = 18.sp),
+        labelLarge = TextStyle(fontFamily = f, fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+        labelMedium = TextStyle(fontFamily = f, fontSize = 13.sp, fontWeight = FontWeight.Medium),
     )
     MaterialTheme(colorScheme = scheme, typography = type) {
         CompositionLocalProvider(LocalContentColor provides Ink, content = content)
@@ -135,7 +169,9 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class Stage { Loading, Auth, Verify, Onboard, Main }
-private enum class Tab(val label: String) { Home("Home"), Contacts("Contacts"), Map("Map"), Settings("Settings") }
+private enum class Tab(val label: String, val icon: ImageVector) {
+    Home("Home", Icons.Filled.Home), Contacts("Contacts", Icons.Filled.Person), Map("Map", Icons.Filled.Place), Settings("Settings", Icons.Filled.SettingsIcon)
+}
 
 @Composable
 private fun Root() {
@@ -307,39 +343,47 @@ private fun VerifyScreen(profile: Profile, onDone: (Profile) -> Unit) {
 
 // ---------------------------------------------------------------- Permissions
 
-private data class Perm(val title: String, val why: String, val granted: (Context) -> Boolean, val ask: () -> Unit)
+private data class Perm(val key: String, val title: String, val why: String, val granted: (Context) -> Boolean, val ask: () -> Unit)
 
 @Composable
 private fun PermissionsScreen(onDone: () -> Unit) {
     val ctx = LocalContext.current
     var tick by remember { mutableIntStateOf(0) }
+    var asked by remember { mutableStateOf(setOf<String>()) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++ }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { tick++ }
     fun has(p: String) = ContextCompat.checkSelfPermission(ctx, p) == PackageManager.PERMISSION_GRANTED
+    fun request(key: String, vararg p: String) {
+        asked = asked + key
+        launcher.launch(arrayOf(*p))
+    }
 
     val perms = buildList {
-        add(Perm("Location", "Your texts and live link show where you are.", { has(Manifest.permission.ACCESS_FINE_LOCATION) }) {
-            launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        add(Perm("loc", "Location", "Your texts and WhatsApp messages show where you are.", { has(Manifest.permission.ACCESS_FINE_LOCATION) }) {
+            request("loc", Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
         })
         if (Build.VERSION.SDK_INT >= 29) add(
-            Perm("Location all the time", "Lets your watch start SOS while the phone is locked. Choose \"Allow all the time\".",
+            Perm("bg", "Location all the time", "Lets your watch start SOS while the phone is locked. Choose \"Allow all the time\".",
                 { has(Manifest.permission.ACCESS_BACKGROUND_LOCATION) }) {
-                if (has(Manifest.permission.ACCESS_FINE_LOCATION)) launcher.launch(arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION))
-                else launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+                if (has(Manifest.permission.ACCESS_FINE_LOCATION)) request("bg", Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                else request("loc", Manifest.permission.ACCESS_FINE_LOCATION)
             },
         )
-        add(Perm("Text messages", "Texts your contacts the moment SOS starts.", { has(Manifest.permission.SEND_SMS) }) {
-            launcher.launch(arrayOf(Manifest.permission.SEND_SMS))
+        add(Perm("sms", "Text messages", "Texts your contacts with your location the moment SOS starts.", { has(Manifest.permission.SEND_SMS) }) {
+            request("sms", Manifest.permission.SEND_SMS)
         })
-        add(Perm("Phone calls", "Calls your chosen number when the countdown ends.", { has(Manifest.permission.CALL_PHONE) }) {
-            launcher.launch(arrayOf(Manifest.permission.CALL_PHONE))
+        add(Perm("sim", "Choose the right SIM", "On dual-SIM phones, sends from the SIM you use for texts.", { has(Manifest.permission.READ_PHONE_STATE) }) {
+            request("sim", Manifest.permission.READ_PHONE_STATE)
+        })
+        add(Perm("call", "Phone calls", "Calls your chosen number when the countdown ends.", { has(Manifest.permission.CALL_PHONE) }) {
+            request("call", Manifest.permission.CALL_PHONE)
         })
         if (Build.VERSION.SDK_INT >= 33) add(
-            Perm("Notifications", "Shows SOS progress and the Cancel call button.", { has(Manifest.permission.POST_NOTIFICATIONS) }) {
-                launcher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+            Perm("notif", "Notifications", "Shows SOS progress and the Cancel call button.", { has(Manifest.permission.POST_NOTIFICATIONS) }) {
+                request("notif", Manifest.permission.POST_NOTIFICATIONS)
             },
         )
-        add(Perm("Run in the background", "Stops Android from pausing SOS to save battery.",
+        add(Perm("battery", "Run in the background", "Stops Android from pausing SOS to save battery.",
             { it.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(it.packageName) }) {
             runCatching {
                 ctx.startActivity(Intent(AndroidSettings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${ctx.packageName}")))
@@ -347,27 +391,38 @@ private fun PermissionsScreen(onDone: () -> Unit) {
         })
     }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 32.dp)) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 28.dp)) {
         Text("Let SOS work when it matters", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(8.dp))
         Text("Each of these is used only during an SOS.", color = Muted, style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             key(tick) {
                 perms.forEach { p ->
                     val ok = p.granted(ctx)
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Surface1).padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(p.title, style = MaterialTheme.typography.titleMedium)
-                            Text(p.why, color = Muted, style = MaterialTheme.typography.bodyMedium)
+                    val blocked = !ok && p.key in asked && p.key != "battery"
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Surface1).padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(p.title, style = MaterialTheme.typography.titleMedium)
+                                Text(p.why, color = Muted, style = MaterialTheme.typography.bodyMedium)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            when {
+                                ok -> Text("Allowed", color = Lilac, style = MaterialTheme.typography.labelLarge)
+                                blocked -> OutlinedButton(onClick = {
+                                    ctx.startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")))
+                                }, border = androidx.compose.foundation.BorderStroke(1.dp, Amber)) { Text("Settings", color = Amber) }
+                                else -> OutlinedButton(onClick = p.ask, border = androidx.compose.foundation.BorderStroke(1.dp, Lilac)) { Text("Allow", color = Lilac) }
+                            }
                         }
-                        Spacer(Modifier.width(12.dp))
-                        if (ok) Text("Allowed", color = Lilac, style = MaterialTheme.typography.labelLarge)
-                        else OutlinedButton(onClick = p.ask, border = androidx.compose.foundation.BorderStroke(1.dp, Lilac)) {
-                            Text("Allow", color = Lilac)
+                        if (blocked && p.key == "sms") {
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                "Android blocks SMS for apps installed outside the Play Store. In Settings, tap ⋮ (top right) → " +
+                                    "Allow restricted settings, then Permissions → SMS → Allow.",
+                                color = Amber, style = MaterialTheme.typography.bodySmall,
+                            )
                         }
                     }
                 }
@@ -404,9 +459,9 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
         if (settings.testMode) TestBanner(settings.demoNumber.isBlank()) { tab = Tab.Settings }
         Box(Modifier.weight(1f)) {
             when (tab) {
-                Tab.Home -> HomeScreen(profile, contacts, settings, onContacts = { tab = Tab.Contacts })
+                Tab.Home -> HomeScreen(profile, contacts, settings, onTab = { tab = it })
                 Tab.Contacts -> ContactsScreen(contacts, contactsError) { reload++ }
-                Tab.Map -> if (!Backend.mock && BuildConfig.HAS_MAPS_KEY) SafetyMapScreen(Backend.client) else DemoMap()
+                Tab.Map -> SafeMapScreen()
                 Tab.Settings -> SettingsScreen(profile, settings, onChange = { settings = it }, onSignedOut = onSignedOut)
             }
         }
@@ -417,14 +472,14 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
 @Composable
 private fun TestBanner(noDemoNumber: Boolean, onFix: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(Amber.copy(alpha = 0.14f)).clickable(onClick = onFix).padding(horizontal = 20.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().background(Amber.copy(alpha = 0.12f)).clickable(onClick = onFix).padding(horizontal = 20.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(Amber))
+        Box(Modifier.size(7.dp).clip(CircleShape).background(Amber))
         Spacer(Modifier.width(10.dp))
         Text(
-            if (noDemoNumber) "Test Mode is on. Set a demo number so police texts and calls reach a teammate."
-            else "Test Mode is on. Police texts and calls go to your demo number, never 112.",
+            if (noDemoNumber) "Test Mode: set a demo number so police texts and calls reach a teammate."
+            else "Test Mode: police texts and calls go to your demo number, never 112.",
             color = Amber, style = MaterialTheme.typography.bodySmall,
         )
     }
@@ -432,16 +487,19 @@ private fun TestBanner(noDemoNumber: Boolean, onFix: () -> Unit) {
 
 @Composable
 private fun TabBar(tab: Tab, onTab: (Tab) -> Unit) {
-    Row(Modifier.fillMaxWidth().background(Surface1).padding(horizontal = 8.dp)) {
+    Row(Modifier.fillMaxWidth().background(Surface1).padding(horizontal = 8.dp, vertical = 6.dp)) {
         Tab.entries.forEach { t ->
             val sel = t == tab
             Column(
-                Modifier.weight(1f).clickable { onTab(t) }.padding(top = 10.dp, bottom = 12.dp),
+                Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).clickable { onTab(t) }.padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Box(Modifier.width(24.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(if (sel) Lilac else Color.Transparent))
-                Spacer(Modifier.height(8.dp))
-                Text(t.label, color = if (sel) Ink else Muted, fontSize = 13.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal)
+                Box(
+                    Modifier.clip(RoundedCornerShape(16.dp)).background(if (sel) Lilac.copy(alpha = 0.16f) else Color.Transparent)
+                        .padding(horizontal = 18.dp, vertical = 4.dp),
+                ) { Icon(t.icon, contentDescription = null, tint = if (sel) Lilac else Muted, modifier = Modifier.size(22.dp)) }
+                Spacer(Modifier.height(4.dp))
+                Text(t.label, color = if (sel) Ink else Muted, fontSize = 12.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal)
             }
         }
     }
@@ -449,10 +507,28 @@ private fun TabBar(tab: Tab, onTab: (Tab) -> Unit) {
 
 // ---------------------------------------------------------------- Home
 
+private fun has(ctx: Context, p: String) = ContextCompat.checkSelfPermission(ctx, p) == PackageManager.PERMISSION_GRANTED
+
+@android.annotation.SuppressLint("MissingPermission")
+private suspend fun hereNow(ctx: Context): android.location.Location? = runCatching {
+    if (!has(ctx, Manifest.permission.ACCESS_FINE_LOCATION)) return null
+    val c = LocationServices.getFusedLocationProviderClient(ctx)
+    withTimeoutOrNull(8_000) { c.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).await() } ?: c.lastLocation.await()
+}.getOrNull()
+
+private fun greeting(): String {
+    val h = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    return when (h) { in 5..11 -> "Good morning"; in 12..16 -> "Good afternoon"; else -> "Good evening" }
+}
+
 @Composable
-private fun HomeScreen(profile: Profile, contacts: List<Contact>?, settings: Settings, onContacts: () -> Unit) {
+private fun HomeScreen(profile: Profile, contacts: List<Contact>?, settings: Settings, onTab: (Tab) -> Unit) {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     var watch by remember { mutableStateOf<Boolean?>(null) }
+    var locOn by remember { mutableStateOf(has(ctx, Manifest.permission.ACCESS_FINE_LOCATION)) }
+    var sharing by remember { mutableStateOf(false) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { locOn = has(ctx, Manifest.permission.ACCESS_FINE_LOCATION) }
     LaunchedEffect(Unit) {
         while (true) {
             watch = WearBridge.watchReachable(ctx)
@@ -460,30 +536,58 @@ private fun HomeScreen(profile: Profile, contacts: List<Contact>?, settings: Set
         }
     }
     val alerted = contacts?.filter { it.receivesSos }.orEmpty()
+    val name = profile.displayName ?: "there"
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 20.dp)) {
-        Text("Hi, ${profile.displayName ?: "there"}", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(6.dp))
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(if (watch == true) Lilac else Line))
-            Spacer(Modifier.width(8.dp))
-            Text(
-                when (watch) { null -> "Looking for your watch"; true -> "Watch connected"; false -> "Watch not reachable. Phone SOS still works." },
-                color = Muted, style = MaterialTheme.typography.bodyMedium,
-            )
+            Column(Modifier.weight(1f)) {
+                Text(greeting(), color = Muted, style = MaterialTheme.typography.bodyMedium)
+                Text(name, style = MaterialTheme.typography.headlineMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Avatar(name, 46.dp)
         }
-        Spacer(Modifier.height(36.dp))
+        Spacer(Modifier.height(18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            StatusPill(Modifier.weight(1f), "Location", if (locOn) "On" else "Off", locOn)
+            StatusPill(Modifier.weight(1f), "Contacts", if (contacts == null) "…" else "${alerted.size} ready", alerted.isNotEmpty()) { onTab(Tab.Contacts) }
+            StatusPill(Modifier.weight(1f), "Watch", when (watch) { true -> "Linked"; false -> "Not nearby"; null -> "…" }, watch == true)
+        }
+        Spacer(Modifier.height(26.dp))
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             SosHoldButton { SosEngine.start(ctx, trigger = "button", source = "phone") }
         }
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
         Text(
-            "Texts go out as soon as you let go. A call follows after ${settings.countdownSec} seconds unless you cancel it.",
+            "Hold for 1.5 seconds. Your location goes out by text" + (if (settings.autoWhatsapp) " and WhatsApp" else "") +
+                ", then a call follows after ${settings.countdownSec} s.",
             color = Muted, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
         )
-        Spacer(Modifier.height(32.dp))
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Surface1).padding(18.dp)) {
+        Spacer(Modifier.height(24.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            QuickAction(Modifier.weight(1f), Icons.Filled.Share, "Share location", WaGreen, busy = sharing) {
+                if (sharing) return@QuickAction
+                sharing = true
+                scope.launch {
+                    val loc = hereNow(ctx)
+                    sharing = false
+                    if (loc == null) {
+                        Toast.makeText(ctx, "Turn on location to share it.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        WhatsApp.share(
+                            ctx,
+                            "$name is sharing her location: https://maps.google.com/?q=%.6f,%.6f (Security4Her)".format(Locale.US, loc.latitude, loc.longitude),
+                        )
+                    }
+                }
+            }
+            QuickAction(Modifier.weight(1f), Icons.Filled.Call, "Call 112", SosRed) {
+                ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:112")))
+            }
+            QuickAction(Modifier.weight(1f), Icons.Filled.Place, "Safe places", Lilac) { onTab(Tab.Map) }
+        }
+        Spacer(Modifier.height(16.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Surface1).padding(18.dp)) {
             Text("Who hears from you", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(12.dp))
             when {
@@ -491,7 +595,7 @@ private fun HomeScreen(profile: Profile, contacts: List<Contact>?, settings: Set
                 alerted.isEmpty() -> {
                     Text("No one yet. Add at least one trusted contact so your SOS reaches someone.", color = Muted)
                     Spacer(Modifier.height(14.dp))
-                    OutlinedButton(onClick = onContacts, border = androidx.compose.foundation.BorderStroke(1.dp, Lilac)) {
+                    OutlinedButton(onClick = { onTab(Tab.Contacts) }, border = androidx.compose.foundation.BorderStroke(1.dp, Lilac)) {
                         Text("Add contacts", color = Lilac)
                     }
                 }
@@ -500,7 +604,7 @@ private fun HomeScreen(profile: Profile, contacts: List<Contact>?, settings: Set
                         alerted.take(5).forEach { Avatar(it.name, 40.dp) }
                     }
                     Spacer(Modifier.height(10.dp))
-                    val police = if (settings.testMode) settings.demoNumber.ifBlank { null }?.let { "demo number" } else "police ${settings.policeNumber}"
+                    val police = if (settings.testMode) settings.demoNumber.ifBlank { null }?.let { "your demo number" } else "police ${settings.policeNumber}"
                     Text(
                         alerted.joinToString(", ") { it.name } + (police?.let { ", and $it" } ?: ""),
                         color = Muted, style = MaterialTheme.typography.bodyMedium,
@@ -512,13 +616,47 @@ private fun HomeScreen(profile: Profile, contacts: List<Contact>?, settings: Set
 }
 
 @Composable
+private fun StatusPill(modifier: Modifier, label: String, value: String, ok: Boolean, onClick: (() -> Unit)? = null) {
+    Column(
+        modifier.clip(RoundedCornerShape(14.dp)).background(Surface1)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(7.dp).clip(CircleShape).background(if (ok) Lilac else Amber))
+            Spacer(Modifier.width(6.dp))
+            Text(label, color = Muted, fontSize = 12.sp)
+        }
+        Spacer(Modifier.height(3.dp))
+        Text(value, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun QuickAction(modifier: Modifier, icon: ImageVector, label: String, tint: Color, busy: Boolean = false, onClick: () -> Unit) {
+    Column(
+        modifier.clip(RoundedCornerShape(18.dp)).background(Surface1).clickable(onClick = onClick).padding(vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.size(42.dp).clip(CircleShape).background(tint.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
+            if (busy) CircularProgressIndicator(Modifier.size(18.dp), color = tint, strokeWidth = 2.dp)
+            else Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
 private fun SosHoldButton(onFire: () -> Unit) {
     val progress = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     var holding by remember { mutableStateOf(false) }
+    val breathe = rememberInfiniteTransition(label = "breathe")
+    val halo by breathe.animateFloat(0.86f, 1f, infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "halo")
     Box(
-        Modifier.size(252.dp).pointerInput(Unit) {
+        Modifier.size(256.dp).pointerInput(Unit) {
             detectTapGestures(onPress = {
                 holding = true
                 val job = scope.launch {
@@ -540,23 +678,18 @@ private fun SosHoldButton(onFire: () -> Unit) {
         Canvas(Modifier.fillMaxSize()) {
             val w = 9.dp.toPx()
             val inset = w / 2
-            drawCircle(SosRed.copy(alpha = 0.16f), radius = size.minDimension / 2 - inset, style = Stroke(w))
+            val r = size.minDimension / 2
+            drawCircle(SosRed.copy(alpha = 0.10f), radius = (r - inset) * (if (holding) 1f else halo))
+            drawCircle(SosRed.copy(alpha = 0.18f), radius = r - inset, style = Stroke(w))
             drawArc(
                 SosRed, -90f, 360f * progress.value, false,
                 topLeft = Offset(inset, inset), size = Size(size.width - w, size.height - w), style = Stroke(w, cap = StrokeCap.Round),
             )
-            drawCircle(
-                SosRed.copy(alpha = 0.35f), radius = size.minDimension / 2 - 18.dp.toPx(),
-                style = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 10f))),
-            )
         }
-        Box(
-            Modifier.size(190.dp).clip(CircleShape).background(SosRed),
-            contentAlignment = Alignment.Center,
-        ) {
+        Box(Modifier.size(188.dp).clip(CircleShape).background(SosRed), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("SOS", color = Color.White, fontSize = 56.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
-                Text(if (holding) "Keep holding" else "Hold to send", color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp)
+                Text("SOS", color = Color.White, fontSize = 58.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, fontFamily = Instrument)
+                Text(if (holding) "Keep holding" else "Hold to send", color = Color.White.copy(alpha = 0.88f), fontSize = 14.sp)
             }
         }
     }
@@ -565,7 +698,7 @@ private fun SosHoldButton(onFire: () -> Unit) {
 @Composable
 private fun Avatar(name: String, size: androidx.compose.ui.unit.Dp) {
     Box(
-        Modifier.size(size).clip(CircleShape).background(Surface2).border(2.dp, Surface1, CircleShape),
+        Modifier.size(size).clip(CircleShape).background(Surface2).border(2.dp, Night, CircleShape),
         contentAlignment = Alignment.Center,
     ) { Text(name.trim().take(1).uppercase(), color = Lilac, fontWeight = FontWeight.SemiBold) }
 }
@@ -731,11 +864,13 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var linkMsg by remember { mutableStateOf<String?>(null) }
+    val testStatus by Sms.testStatus.collectAsStateWithLifecycle()
     fun set(s: Settings) {
         s.save(ctx)
         onChange(s)
         if (s.testMode != settings.testMode) scope.launch { WearBridge.linkWatch(ctx) }
     }
+    val switchColors = SwitchDefaults.colors(checkedTrackColor = Lilac, checkedThumbColor = OnLilac, uncheckedTrackColor = Surface2, uncheckedBorderColor = Line)
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 20.dp)) {
         Text("Settings", style = MaterialTheme.typography.headlineSmall)
@@ -749,9 +884,38 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
                     colors = SwitchDefaults.colors(checkedTrackColor = Amber, checkedThumbColor = Night, uncheckedTrackColor = Surface2, uncheckedBorderColor = Line),
                 )
             }
-            if (settings.testMode) {
-                Spacer(Modifier.height(12.dp))
-                Field(settings.demoNumber, { set(settings.copy(demoNumber = it)) }, "Demo number (a teammate's phone)", KeyboardType.Phone)
+            Spacer(Modifier.height(12.dp))
+            Field(settings.demoNumber, { set(settings.copy(demoNumber = it)) }, "Demo number (a teammate's phone)", KeyboardType.Phone)
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = { Sms.sendTest(ctx, settings.demoNumber) }, enabled = settings.demoNumber.count(Char::isDigit) >= 3,
+                border = androidx.compose.foundation.BorderStroke(1.dp, Lilac),
+            ) { Text("Send a test text", color = Lilac) }
+            Text(
+                testStatus ?: "Checks that this phone can send SOS texts, without starting an SOS.",
+                color = when {
+                    testStatus?.startsWith("Failed") == true -> SosRed
+                    testStatus?.startsWith("Delivered") == true -> Lilac
+                    else -> Muted
+                },
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+        Section("WhatsApp") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Open WhatsApp during SOS")
+                    Text(
+                        "WhatsApp doesn't let apps send messages by themselves, so it opens with your SOS and location typed in. Tap send.",
+                        color = Muted, style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Switch(checked = settings.autoWhatsapp, onCheckedChange = { set(settings.copy(autoWhatsapp = it)) }, colors = switchColors)
+            }
+            if (WhatsApp.pkg(ctx) == null) {
+                Spacer(Modifier.height(8.dp))
+                Text("WhatsApp isn't installed on this phone.", color = Amber, style = MaterialTheme.typography.bodySmall)
             }
         }
         Section("During SOS") {
@@ -784,14 +948,17 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
             linkMsg?.let { Spacer(Modifier.height(6.dp)); Text(it, color = Muted, style = MaterialTheme.typography.bodySmall) }
         }
         Section("Account") {
-            Text(profile.displayName ?: "You", style = MaterialTheme.typography.titleMedium)
-            Text(
-                if (profile.verificationMethod == "digilocker") "Verified with DigiLocker" else "Verified (demo)",
-                color = Lilac, style = MaterialTheme.typography.bodyMedium,
-            )
-            Spacer(Modifier.height(10.dp))
-            TextButton(onClick = { scope.launch { runCatching { Backend.signOut() }; onSignedOut() } }, contentPadding = PaddingValues(0.dp)) {
-                Text("Sign out", color = SosRed)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Avatar(profile.displayName ?: "?", 40.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(profile.displayName ?: "You", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (profile.verificationMethod == "digilocker") "Verified with DigiLocker" else "Verified (demo)",
+                        color = Lilac, style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                TextButton(onClick = { scope.launch { runCatching { Backend.signOut() }; onSignedOut() } }) { Text("Sign out", color = SosRed) }
             }
         }
     }
@@ -800,41 +967,61 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
 @Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
     Text(title, color = Muted, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Surface1).padding(16.dp), content = content)
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Surface1).padding(16.dp), content = content)
     Spacer(Modifier.height(22.dp))
 }
 
 // ---------------------------------------------------------------- Active SOS
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ActiveSosScreen(inc: Incident) {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var askPin by remember { mutableStateOf(false) }
+    var resending by remember { mutableStateOf(false) }
     LaunchedEffect(inc.active) { while (inc.active) { now = System.currentTimeMillis(); delay(250) } }
     BackHandler(inc.active) {}
     val secs = ((now - inc.startedAt) / 1000).coerceAtLeast(0)
     val clock = SimpleDateFormat("HH:mm:ss", Locale.US)
+    val hasWa = remember { WhatsApp.pkg(ctx) != null }
+    val people = inc.recipients.filter { !it.police }
+
+    fun whatsapp(r: `in`.security4her.app.sos.Recipient?) = scope.launch {
+        val text = withContext(Dispatchers.IO) { SosEngine.sosText() }
+        val ok = if (r != null) WhatsApp.openChat(ctx, r.phone, text) else WhatsApp.share(ctx, text)
+        if (ok) SosEngine.logWhatsapp(r?.name ?: "a group")
+    }
+
+    // Once per SOS started on this phone: open WhatsApp to the first contact after the texts go out (they wait for GPS).
+    LaunchedEffect(inc.id) {
+        if (!inc.active || inc.whatsappOpened || inc.source != "phone" || !Settings.load(ctx).autoWhatsapp || !hasWa) return@LaunchedEffect
+        withTimeoutOrNull(12_000) { while (SosEngine.current.value?.recipients.isNullOrEmpty()) delay(200) }
+        val cur = SosEngine.current.value ?: return@LaunchedEffect
+        if (!cur.active || cur.whatsappOpened) return@LaunchedEffect
+        val first = cur.recipients.firstOrNull { !it.police } ?: return@LaunchedEffect
+        SosEngine.markWhatsappOpened()
+        whatsapp(first)
+    }
 
     Column(Modifier.fillMaxSize()) {
-        Column(
-            Modifier.fillMaxWidth().background(if (inc.active) SosRed else Surface1).padding(horizontal = 24.dp, vertical = 22.dp),
-        ) {
+        Column(Modifier.fillMaxWidth().background(if (inc.active) SosRed else Surface1).padding(horizontal = 24.dp, vertical = 22.dp)) {
             Text(
-                when (inc.state) { "active" -> "SOS active"; "resolved" -> "You marked yourself safe"; else -> "SOS cancelled" },
+                when (inc.state) { "active" -> "SOS active"; "resolved" -> "You're marked safe"; else -> "SOS cancelled" },
                 color = Color.White, style = MaterialTheme.typography.displaySmall,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 if (inc.active) "Running for %d:%02d".format(secs / 60, secs % 60) + if (inc.test) "  ·  Test Mode" else ""
                 else if (inc.smsSent > 0) "Your contacts are getting an \"I'm safe\" text." else "No texts had gone out, so no one was told.",
-                color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyLarge,
+                color = Color.White.copy(alpha = 0.88f), style = MaterialTheme.typography.bodyLarge,
             )
         }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // Call
             Card {
-                val left = inc.callAt?.let { ((it - now) / 1000.0).let { s -> kotlin.math.ceil(s).toInt().coerceAtLeast(0) } }
+                val left = inc.callAt?.let { kotlin.math.ceil((it - now) / 1000.0).toInt().coerceAtLeast(0) }
                 Text(
                     when (inc.call) {
                         "waiting" -> if (left != null) "Calling ${inc.callNumber} in $left s" else "Preparing call"
@@ -855,42 +1042,81 @@ private fun ActiveSosScreen(inc: Incident) {
                     Button(
                         onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:112"))) },
                         colors = ButtonDefaults.buttonColors(containerColor = SosRed, contentColor = Color.White),
-                    ) { Text("Call 112") }
+                    ) {
+                        Icon(Icons.Filled.Call, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Call 112")
+                    }
                 }
             }
-            // Live link
+            // WhatsApp
+            if (inc.active) Card {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(34.dp).clip(CircleShape).background(WaGreen.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Filled.Send, null, tint = WaGreen, modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("Send on WhatsApp", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (hasWa) "Opens with your SOS and location typed in. Tap send." else "WhatsApp isn't installed on this phone.",
+                            color = Muted, style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+                if (hasWa) {
+                    Spacer(Modifier.height(12.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        people.forEach { r ->
+                            Button(
+                                onClick = { whatsapp(r) },
+                                colors = ButtonDefaults.buttonColors(containerColor = WaGreen, contentColor = Color(0xFF06270F)),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                            ) { Text(r.name, fontWeight = FontWeight.SemiBold) }
+                        }
+                        OutlinedButton(
+                            onClick = { whatsapp(null) }, border = androidx.compose.foundation.BorderStroke(1.dp, WaGreen),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        ) { Text("A group or several chats", color = WaGreen) }
+                    }
+                }
+            }
+            // Location
             Card {
-                Text("Live location link", style = MaterialTheme.typography.titleMedium)
+                Text("Your location", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(6.dp))
-                Text(
-                    inc.shareUrl ?: when (inc.server) { "failed" -> "Server unreachable. Texts include a map link instead."; "retrying" -> "Server not reachable. Retrying."; else -> "Creating link" },
-                    color = if (inc.shareUrl != null) Lilac else Muted, style = MaterialTheme.typography.bodyMedium,
-                )
-                inc.shareUrl?.let { url ->
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedButton(onClick = {
-                        ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url), "Share live link"))
-                    }, border = androidx.compose.foundation.BorderStroke(1.dp, Lilac)) { Text("Share link", color = Lilac) }
-                }
-                inc.lat?.let {
-                    Spacer(Modifier.height(8.dp))
+                if (inc.lat != null && inc.lng != null) {
                     Text(
-                        "Last fix %.4f, %.4f  ±%s m, %s".format(Locale.US, inc.lat, inc.lng, inc.acc?.roundToInt() ?: "?", clock.format(Date(inc.fixAt ?: now))),
-                        color = Muted, style = MaterialTheme.typography.bodySmall,
+                        "%.5f, %.5f  ±%s m, fixed %s".format(Locale.US, inc.lat, inc.lng, inc.acc?.roundToInt() ?: "?", clock.format(Date(inc.fixAt ?: now))),
+                        color = Muted, style = MaterialTheme.typography.bodyMedium,
                     )
+                } else Text("Waiting for GPS. Texts send your location as soon as it's found.", color = Muted, style = MaterialTheme.typography.bodyMedium)
+                if (!Backend.mock && inc.shareUrl != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(inc.shareUrl, color = Lilac, style = MaterialTheme.typography.bodySmall)
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (inc.active && inc.recipients.isNotEmpty()) OutlinedButton(
+                        onClick = { resending = true; SosEngine.resendLocation(); scope.launch { delay(4000); resending = false } },
+                        enabled = !resending, border = androidx.compose.foundation.BorderStroke(1.dp, Lilac),
+                    ) { Text(if (resending) "Sending…" else "Text it again", color = Lilac) }
+                    if (inc.lat != null) TextButton(onClick = {
+                        runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:${inc.lat},${inc.lng}?q=${inc.lat},${inc.lng}"))) }
+                    }) { Text("Open in Maps", color = Ink) }
                 }
             }
-            // Recipients
+            // Texts
             if (inc.recipients.isNotEmpty()) Card {
                 Text("Texts", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(6.dp))
                 inc.recipients.forEach { r ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Avatar(r.name, 32.dp)
+                        Avatar(r.name, 34.dp)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(r.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(r.phone, color = Muted, style = MaterialTheme.typography.bodySmall)
+                            Text(r.error ?: r.phone, color = if (r.error != null) SosRed else Muted, style = MaterialTheme.typography.bodySmall)
                         }
                         Text(
                             when (r.state) { "sending" -> "Sending"; "sent" -> "Sent"; "delivered" -> "Delivered"; else -> "Failed" },
@@ -921,7 +1147,7 @@ private fun ActiveSosScreen(inc: Incident) {
                 }
             }
         }
-        Box(Modifier.fillMaxWidth().padding(20.dp)) {
+        Box(Modifier.fillMaxWidth().padding(18.dp)) {
             if (inc.active) {
                 PrimaryButton("I'm safe") {
                     if (Settings.load(ctx).pin.isBlank()) SosEngine.end("resolved") else askPin = true
@@ -955,95 +1181,7 @@ private fun ActiveSosScreen(inc: Incident) {
 
 @Composable
 private fun Card(content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Surface1).padding(18.dp), content = content)
-}
-
-// ---------------------------------------------------------------- Demo map (no backend / no Maps key)
-
-private data class DemoPlace(val name: String, val kind: String, val lat: Double, val lng: Double)
-
-// MOCK: a few real Nagpur landmarks, shown when Supabase or the Maps key isn't configured.
-private val demoCenter = 21.1458 to 79.0882
-private val demoPlaces = listOf(
-    DemoPlace("Sitabuldi Police Station", "Police", 21.1466, 79.0849),
-    DemoPlace("Dhantoli Police Station", "Police", 21.1352, 79.0874),
-    DemoPlace("Government Medical College & Hospital", "Hospital", 21.1336, 79.0940),
-    DemoPlace("Mayo Hospital (IGGMC)", "Hospital", 21.1530, 79.0968),
-    DemoPlace("Sadar Police Station", "Police", 21.1600, 79.0800),
-    DemoPlace("24-hour pharmacy, Dharampeth", "Pharmacy", 21.1420, 79.0700),
-)
-
-@Composable
-private fun DemoMap() {
-    val ctx = LocalContext.current
-    fun meters(p: DemoPlace): Pair<Double, Double> {
-        val dy = (p.lat - demoCenter.first) * 111_320
-        val dx = (p.lng - demoCenter.second) * 111_320 * cos(Math.toRadians(demoCenter.first))
-        return dx to dy
-    }
-    val sorted = demoPlaces.sortedBy { val (x, y) = meters(it); x * x + y * y }
-    val maxR = 2_500.0
-
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
-        Text("Nearest safe places", style = MaterialTheme.typography.headlineSmall)
-        Text("Sitabuldi, Nagpur", color = Muted, style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.height(16.dp))
-        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(20.dp)).background(Surface1)) {
-            Canvas(Modifier.fillMaxSize().padding(18.dp)) {
-                val c = Offset(size.width / 2, size.height / 2)
-                val r = size.minDimension / 2
-                listOf(0.33f, 0.66f, 1f).forEach { drawCircle(Line, radius = r * it, center = c, style = Stroke(1.dp.toPx())) }
-                drawLine(Line, Offset(c.x, 0f), Offset(c.x, size.height), 1.dp.toPx())
-                drawLine(Line, Offset(0f, c.y), Offset(size.width, c.y), 1.dp.toPx())
-                demoPlaces.forEach { p ->
-                    val (x, y) = meters(p)
-                    val o = Offset(c.x + (x / maxR * r).toFloat(), c.y - (y / maxR * r).toFloat())
-                    drawCircle(if (p.kind == "Police") Lilac else Ink.copy(alpha = if (p.kind == "Hospital") 0.9f else 0.5f), radius = 6.dp.toPx(), center = o)
-                }
-                drawCircle(SosRed.copy(alpha = 0.25f), radius = 14.dp.toPx(), center = c)
-                drawCircle(SosRed, radius = 6.dp.toPx(), center = c)
-            }
-            Text("You", color = SosRed, style = MaterialTheme.typography.bodySmall, modifier = Modifier.align(Alignment.Center).padding(top = 40.dp))
-            Text("2.5 km", color = Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp))
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Legend(Lilac, "Police"); Legend(Ink.copy(alpha = 0.9f), "Hospital"); Legend(Ink.copy(alpha = 0.5f), "Pharmacy")
-        }
-        Spacer(Modifier.height(18.dp))
-        sorted.forEach { p ->
-            val (x, y) = meters(p)
-            val d = sqrt(x * x + y * y)
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(14.dp)).background(Surface1).padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "${p.kind}, " + if (d < 1000) "${(d / 10).roundToInt() * 10} m" else "%.1f km".format(Locale.US, d / 1000),
-                        color = Muted, style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                TextButton(onClick = {
-                    runCatching {
-                        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=walking")))
-                    }
-                }) { Text("Go", color = Lilac) }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        Note("Sample places for the demo city. Connect Supabase and a Maps key to see the live map and community reports.")
-    }
-}
-
-@Composable
-private fun Legend(color: Color, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
-        Spacer(Modifier.width(6.dp))
-        Text(label, color = Muted, style = MaterialTheme.typography.bodySmall)
-    }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Surface1).padding(18.dp), content = content)
 }
 
 // ---------------------------------------------------------------- Shared bits

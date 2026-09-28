@@ -19,6 +19,7 @@ import android.os.Bundle
 import android.os.IBinder
 import android.telecom.TelecomManager
 import android.telephony.SmsManager
+import android.telephony.SubscriptionManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -64,7 +65,7 @@ import java.util.UUID
 private const val TAG = "S4hSos"
 
 @Serializable
-data class Recipient(val name: String, val phone: String, val police: Boolean = false, val state: String = "sending")
+data class Recipient(val name: String, val phone: String, val police: Boolean = false, val state: String = "sending", val error: String? = null)
 
 @Serializable
 data class SosEvent(val at: Long, val text: String, val kind: String = "info") // info | ok | fail
@@ -88,6 +89,8 @@ data class Incident(
     val callNumber: String? = null,
     val callAt: Long? = null,
     val call: String = "waiting", // waiting | placed | cancelled | skipped | failed
+    val smsNeedsLocation: Boolean = false, // first text went out before GPS had a fix
+    val whatsappOpened: Boolean = false,
     val events: List<SosEvent> = emptyList(),
 ) {
     val active get() = state == "active"
@@ -130,12 +133,16 @@ object SosEngine {
 
     private suspend fun pipeline(s: Settings) {
         val inc = _current.value ?: return
-        // 1. Location
+        // 1. Location: last known now, a fresh GPS fix as soon as it lands
         if (inc.lat == null) lastFix()?.let { setFix(it, "Last known location") }
-        jobs += scope.launch { withTimeoutOrNull(10_000) { freshFix() }?.let { setFix(it, "Location fixed") } }
+        jobs += scope.launch {
+            withTimeoutOrNull(20_000) { freshFix() }?.let { setFix(it, "Location fixed"); followUpLocation(s) }
+        }
         // 2. Server (share link)
         jobs += scope.launch { serverUpsert() }
-        withTimeoutOrNull(4_000) { while (_current.value?.shareUrl == null && _current.value?.server != "failed") delay(200) }
+        // Give GPS up to 8 s so the first text carries a location; a follow-up text goes out otherwise.
+        withTimeoutOrNull(8_000) { while (!hasFreshFix()) delay(200) }
+        if (!Backend.mock) withTimeoutOrNull(2_000) { while (_current.value?.shareUrl == null && _current.value?.server != "failed") delay(200) }
         // 3. SMS
         sendSos(s)
         // 4. Countdown call
@@ -158,7 +165,7 @@ object SosEngine {
                 val token = Backend.upsertIncident(inc.id, inc.trigger, inc.source, inc.lat, inc.lng, inc.acc, inc.test)
                 val url = BuildConfig.TRACK_BASE_URL.ifBlank { "https://sanskar-dwivedi.github.io/Safe4Her/" } + "?k=" + token
                 update { it.copy(server = "ok", shareUrl = url) }
-                log(if (Backend.mock) "Live link created (demo mode)" else "Server accepted · live link ready", "ok")
+                log(if (Backend.mock) "Demo mode: no live link, texts carry a Google Maps link" else "Server accepted · live link ready", if (Backend.mock) "info" else "ok")
                 return
             } catch (e: Exception) {
                 Log.w(TAG, "upsert_incident failed", e)
@@ -182,20 +189,27 @@ object SosEngine {
             log("No one to text. Add trusted contacts.", "fail")
             return
         }
-        update { it.copy(recipients = list) }
+        update { it.copy(recipients = list, smsNeedsLocation = it.lat == null) }
         val body = smsBody(s)
         log("Texting ${list.size} ${if (list.size == 1) "person" else "people"}")
         list.forEach { r -> sendSms(r.phone, body, inc.id) }
     }
 
+    private fun userName() = runCatching { runBlocking { Backend.profile().displayName } }.getOrNull() ?: "a Security4Her user"
+
+    private fun mapsLink(lat: Double, lng: Double) = "https://maps.google.com/?q=%.6f,%.6f".format(Locale.US, lat, lng)
+
+    /** The SOS message, shared by SMS and WhatsApp. */
+    fun sosText(): String = smsBody(Settings.load(app))
+
     private fun smsBody(s: Settings): String {
         val inc = _current.value!!
-        val name = runCatching { runBlocking { Backend.profile().displayName } }.getOrNull() ?: "a Security4Her user"
+        val name = userName()
         return buildString {
             append("SOS from $name. I may be in danger.")
-            inc.shareUrl?.let { append(" Live location: $it") }
+            if (!Backend.mock) inc.shareUrl?.let { append(" Live location: $it") }
             if (inc.lat != null && inc.lng != null) {
-                append(" Last seen: https://maps.google.com/?q=%.5f,%.5f".format(Locale.US, inc.lat, inc.lng))
+                append(" My location: ${mapsLink(inc.lat, inc.lng)}")
                 val time = SimpleDateFormat("HH:mm", Locale.US).format(Date(inc.fixAt ?: System.currentTimeMillis()))
                 append(" (±${inc.acc?.toInt() ?: "?"}m, $time)")
             } else append(" Location not available yet.")
@@ -204,29 +218,14 @@ object SosEngine {
     }
 
     private fun sendSms(phone: String, body: String, incidentId: String) {
-        if (ContextCompat.checkSelfPermission(app, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-            setRecipient(phone, "failed")
-            log("SMS permission missing", "fail")
-            return
-        }
-        try {
-            val sms = if (Build.VERSION.SDK_INT >= 31) app.getSystemService(SmsManager::class.java) else @Suppress("DEPRECATION") SmsManager.getDefault()
-            val parts = sms.divideMessage(body)
-            fun pi(action: String) = PendingIntent.getBroadcast(
-                app, (phone + action + incidentId).hashCode(),
-                Intent(app, SosReceiver::class.java).setAction(action).putExtra("phone", phone).putExtra("id", incidentId),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            val sent = ArrayList(parts.map { pi(SosReceiver.SENT) })
-            val delivered = ArrayList(parts.map { pi(SosReceiver.DELIVERED) })
-            sms.sendMultipartTextMessage(phone, null, parts, sent, delivered)
-        } catch (e: Exception) {
-            Log.w(TAG, "SMS to $phone failed", e)
-            setRecipient(phone, "failed")
+        val err = Sms.send(app, phone, body, incidentId)
+        if (err != null) {
+            setRecipient(phone, "failed", err)
+            log("Text to $phone failed: $err", "fail")
         }
     }
 
-    fun onSmsResult(id: String, phone: String, action: String, ok: Boolean) {
+    fun onSmsResult(id: String, phone: String, action: String, ok: Boolean, code: Int) {
         if (_current.value?.id != id) return
         val r = _current.value?.recipients?.firstOrNull { it.phone == phone } ?: return
         val next = when {
@@ -236,12 +235,51 @@ object SosEngine {
             else -> "failed"
         }
         if (next == r.state) return
-        setRecipient(phone, next)
+        val err = if (next == "failed") Sms.reason(code) else null
+        setRecipient(phone, next, err)
         log(
-            "${r.name}: " + when (next) { "delivered" -> "text delivered"; "sent" -> "text sent"; else -> "text failed" },
+            "${r.name}: " + when (next) { "delivered" -> "text delivered"; "sent" -> "text sent"; else -> "text failed ($err)" },
             if (next == "failed") "fail" else "ok",
         )
     }
+
+    private fun hasFreshFix(): Boolean {
+        val at = _current.value?.fixAt ?: return false
+        return System.currentTimeMillis() - at < 2 * 60_000
+    }
+
+    /** If the first text went out without a location, text the location as soon as GPS has it. */
+    private fun followUpLocation(s: Settings) {
+        val inc = _current.value ?: return
+        if (!inc.active || !inc.smsNeedsLocation || inc.lat == null || inc.lng == null) return
+        update { it.copy(smsNeedsLocation = false) }
+        val body = "Location of ${userName()}: ${mapsLink(inc.lat, inc.lng)} (±${inc.acc?.toInt() ?: "?"}m)" + if (s.testMode) " [TEST]" else ""
+        val to = inc.recipients.filter { it.state != "failed" }
+        to.forEach { sendSms(it.phone, body, inc.id) }
+        if (to.isNotEmpty()) log("Location texted to ${to.size}", "ok")
+    }
+
+    /** "Text my location again": fresh fix, then a text to everyone who got the SOS. */
+    fun resendLocation() {
+        scope.launch {
+            val f = withTimeoutOrNull(12_000) { freshFix() } ?: lastFix()
+            if (f == null) {
+                log("Couldn't get a location fix. Is location on?", "fail")
+                return@launch
+            }
+            setFix(f, null)
+            pushLocation(f)
+            val inc = _current.value ?: return@launch
+            val s = Settings.load(app)
+            val body = "Update from ${userName()}: ${mapsLink(f.lat, f.lng)} (±${f.acc?.toInt() ?: "?"}m)" + if (s.testMode) " [TEST]" else ""
+            inc.recipients.forEach { sendSms(it.phone, body, inc.id) }
+            log("Location update texted to ${inc.recipients.size}", "ok")
+        }
+    }
+
+    fun markWhatsappOpened() = update { it.copy(whatsappOpened = true) }
+
+    fun logWhatsapp(name: String) = log("WhatsApp opened for $name. Tap send there.")
 
     private suspend fun countdownCall(s: Settings) {
         val number = if (s.testMode) s.demoNumber else s.autoCallNumber.ifBlank {
@@ -348,8 +386,8 @@ object SosEngine {
     private fun hasLocation() =
         ContextCompat.checkSelfPermission(app, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-    private fun setRecipient(phone: String, state: String) =
-        update { inc -> inc.copy(recipients = inc.recipients.map { if (it.phone == phone) it.copy(state = state) else it }) }
+    private fun setRecipient(phone: String, state: String, error: String? = null) =
+        update { inc -> inc.copy(recipients = inc.recipients.map { if (it.phone == phone) it.copy(state = state, error = error) else it }) }
 
     private fun log(text: String, kind: String = "info") =
         update { it.copy(events = it.events + SosEvent(System.currentTimeMillis(), text, kind)) }
@@ -435,10 +473,12 @@ class PhoneWearListenerService : WearableListenerService() {
 class SosReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            SENT, DELIVERED -> SosEngine.onSmsResult(
-                intent.getStringExtra("id").orEmpty(), intent.getStringExtra("phone").orEmpty(), intent.action!!,
-                resultCode == Activity.RESULT_OK,
-            )
+            SENT, DELIVERED -> {
+                val id = intent.getStringExtra("id").orEmpty()
+                val ok = resultCode == Activity.RESULT_OK
+                if (id == Sms.TEST_ID) Sms.onTestResult(intent.action!!, ok, resultCode)
+                else SosEngine.onSmsResult(id, intent.getStringExtra("phone").orEmpty(), intent.action!!, ok, resultCode)
+            }
             CANCEL_CALL -> SosEngine.cancelCall()
         }
     }
@@ -512,5 +552,119 @@ class SosService : Service() {
             }
             return b.build()
         }
+    }
+}
+
+/** SMS sending that picks the right SIM on dual-SIM phones and explains failures in plain words. */
+object Sms {
+    const val TEST_ID = "test"
+    private val _test = MutableStateFlow<String?>(null)
+    val testStatus: StateFlow<String?> = _test.asStateFlow()
+
+    fun clean(phone: String) = phone.filter { it.isDigit() || it == '+' }
+
+    @SuppressLint("MissingPermission")
+    private fun manager(ctx: Context): SmsManager {
+        var sub = SmsManager.getDefaultSmsSubscriptionId()
+        if (sub == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+            sub = runCatching {
+                ctx.getSystemService(SubscriptionManager::class.java).activeSubscriptionInfoList?.firstOrNull()?.subscriptionId
+            }.getOrNull() ?: SubscriptionManager.INVALID_SUBSCRIPTION_ID
+        }
+        return if (Build.VERSION.SDK_INT >= 31) {
+            val m = ctx.getSystemService(SmsManager::class.java)
+            if (sub != SubscriptionManager.INVALID_SUBSCRIPTION_ID) m.createForSubscriptionId(sub) else m
+        } else {
+            @Suppress("DEPRECATION")
+            if (sub != SubscriptionManager.INVALID_SUBSCRIPTION_ID) SmsManager.getSmsManagerForSubscriptionId(sub) else SmsManager.getDefault()
+        }
+    }
+
+    /** Queues the text; returns null when handed to the radio, else a reason it couldn't be. */
+    fun send(ctx: Context, phone: String, body: String, id: String): String? {
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+            return "SMS permission is off"
+        }
+        val to = clean(phone)
+        if (to.count { it.isDigit() } < 3) return "number looks wrong"
+        return try {
+            val sms = manager(ctx)
+            val parts = sms.divideMessage(body)
+            fun pi(action: String, i: Int) = PendingIntent.getBroadcast(
+                ctx, (to + action + id + i).hashCode(),
+                Intent(ctx, SosReceiver::class.java).setAction(action).putExtra("phone", phone).putExtra("id", id),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            val sent = ArrayList(parts.indices.map { pi(SosReceiver.SENT, it) })
+            val delivered = ArrayList(parts.indices.map { pi(SosReceiver.DELIVERED, it) })
+            sms.sendMultipartTextMessage(to, null, parts, sent, delivered)
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "SMS to $to failed", e)
+            e.message?.take(60) ?: "phone refused to send"
+        }
+    }
+
+    fun reason(code: Int) = when (code) {
+        SmsManager.RESULT_ERROR_GENERIC_FAILURE -> "carrier or SIM refused it; check SMS balance"
+        SmsManager.RESULT_ERROR_NO_SERVICE -> "no mobile signal"
+        SmsManager.RESULT_ERROR_RADIO_OFF -> "airplane mode or SIM off"
+        SmsManager.RESULT_ERROR_NULL_PDU -> "message couldn't be built"
+        SmsManager.RESULT_ERROR_LIMIT_EXCEEDED -> "Android paused sending, too many texts"
+        SmsManager.RESULT_ERROR_SHORT_CODE_NOT_ALLOWED, SmsManager.RESULT_ERROR_SHORT_CODE_NEVER_ALLOWED -> "short numbers are blocked"
+        else -> "error $code"
+    }
+
+    fun sendTest(ctx: Context, phone: String) {
+        _test.value = "Sending a test text to $phone"
+        send(ctx, phone, "Security4Her test: if you got this, SOS texts from this phone work.", TEST_ID)?.let { _test.value = "Failed: $it" }
+    }
+
+    fun onTestResult(action: String, ok: Boolean, code: Int) {
+        _test.value = when {
+            action == SosReceiver.DELIVERED && ok -> "Delivered. SOS texts work from this phone."
+            action == SosReceiver.DELIVERED -> _test.value
+            ok -> "Sent. Waiting for the delivery report."
+            else -> "Failed: ${reason(code)}"
+        }
+    }
+}
+
+/**
+ * WhatsApp can't be sent silently by another app, so we open it with the SOS message typed in:
+ * straight to one contact's chat, or to WhatsApp's chat picker (a family group, or several chats).
+ */
+object WhatsApp {
+    private val packages = listOf("com.whatsapp", "com.whatsapp.w4b")
+
+    fun pkg(ctx: Context): String? = packages.firstOrNull {
+        runCatching { ctx.packageManager.getPackageInfo(it, 0) }.isSuccess
+    }
+
+    /** Digits with country code, as WhatsApp wants them. 10-digit numbers are treated as Indian (+91). */
+    fun intl(phone: String): String {
+        val d = phone.filter(Char::isDigit)
+        return when {
+            phone.trim().startsWith("+") -> d
+            d.length == 11 && d.startsWith("0") -> "91" + d.drop(1)
+            d.length == 10 -> "91$d"
+            else -> d
+        }
+    }
+
+    fun openChat(ctx: Context, phone: String, text: String): Boolean {
+        val uri = Uri.parse("https://api.whatsapp.com/send?phone=${intl(phone)}&text=${Uri.encode(text)}")
+        val i = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        pkg(ctx)?.let { i.setPackage(it) }
+        return runCatching { ctx.startActivity(i) }.isSuccess
+    }
+
+    fun share(ctx: Context, text: String): Boolean {
+        val i = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+        val p = pkg(ctx)
+        return runCatching {
+            if (p != null) ctx.startActivity(i.setPackage(p).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            else ctx.startActivity(Intent.createChooser(i, "Share location").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.isSuccess
     }
 }

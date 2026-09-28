@@ -74,6 +74,8 @@ dependencies {
     implementation("com.google.android.gms:play-services-wearable:19.0.0")
     implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("com.google.maps.android:maps-compose:6.12.2")
+    implementation("org.osmdroid:osmdroid-android:6.1.20") // real map without an API key
+    implementation("androidx.compose.material:material-icons-core:1.7.8")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
     implementation(platform("io.github.jan-tennert.supabase:bom:3.6.0"))

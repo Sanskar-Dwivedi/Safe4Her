@@ -110,6 +110,7 @@ data class Settings(
     val autoCallNumber: String,
     val countdownSec: Int,
     val pin: String,
+    val autoWhatsapp: Boolean,
 ) {
     companion object {
         fun load(ctx: Context): Settings = with(Store.prefs(ctx)) {
@@ -120,6 +121,7 @@ data class Settings(
                 autoCallNumber = getString("auto_call_number", "")!!,
                 countdownSec = getInt("countdown_sec", 10),
                 pin = getString("pin", "")!!,
+                autoWhatsapp = getBoolean("auto_whatsapp", true),
             )
         }
     }
@@ -131,6 +133,7 @@ data class Settings(
         .putString("auto_call_number", autoCallNumber.trim())
         .putInt("countdown_sec", countdownSec.coerceIn(3, 60))
         .putString("pin", pin)
+        .putBoolean("auto_whatsapp", autoWhatsapp)
         .apply()
 }
 
