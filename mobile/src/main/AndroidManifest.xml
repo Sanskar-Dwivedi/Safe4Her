@@ -18,16 +18,11 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- WhatsApp location sharing -->
-    <queries>
-        <package android:name="com.whatsapp" />
-        <package android:name="com.whatsapp.w4b" />
-    </queries>
-
     <application
         android:name=".App"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.S4h">
@@ -56,6 +51,11 @@
 
         <service
             android:name=".sos.SosService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <service
+            android:name=".sos.LiveService"
             android:exported="false"
             android:foregroundServiceType="location" />
 

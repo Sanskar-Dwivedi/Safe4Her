@@ -73,7 +73,12 @@ import `in`.security4her.app.sos.Incident
 import `in`.security4her.app.sos.SosEngine
 import `in`.security4her.app.sos.WearBridge
 import `in`.security4her.app.sos.Sms
-import `in`.security4her.app.sos.WhatsApp
+import `in`.security4her.app.sos.LiveShare
+import `in`.security4her.app.core.AppLog
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import `in`.security4her.app.sos.ShareSheet
+import `in`.security4her.app.sos.Locator
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -110,8 +115,15 @@ import kotlin.math.sqrt
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
+        AppLog.init(this)
         Backend.init(this)
         SosEngine.init(this)
+        fun has(p: String) = if (ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED) "on" else "off"
+        AppLog.info(
+            "App",
+            "Opened · ${if (Backend.mock) "demo mode" else "server mode"} · location ${has(Manifest.permission.ACCESS_FINE_LOCATION)}, " +
+                "SMS ${has(Manifest.permission.SEND_SMS)}, calls ${has(Manifest.permission.CALL_PHONE)}",
+        )
     }
 }
 
@@ -126,7 +138,7 @@ private val Lilac = Color(0xFFC49BFF)
 private val OnLilac = Color(0xFF1E0E33)
 private val SosRed = Color(0xFFFF4D5E)
 private val Amber = Color(0xFFFFB547)
-private val WaGreen = Color(0xFF25D366) // WhatsApp's own green, only on WhatsApp actions
+private val LiveGreen = Color(0xFF5EE0A0) // only for "live location is on"
 
 @OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
 private fun instrument(w: Int) = Font(R.font.instrument_sans, FontWeight(w), variationSettings = FontVariation.Settings(FontVariation.weight(w)))
@@ -214,11 +226,16 @@ private fun Root() {
 private fun Loading() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Shield(56.dp)
+            Logo(104.dp)
             Spacer(Modifier.height(20.dp))
             CircularProgressIndicator(Modifier.size(22.dp), color = Lilac, strokeWidth = 2.dp)
         }
     }
+}
+
+@Composable
+private fun Logo(size: androidx.compose.ui.unit.Dp) {
+    Image(painterResource(R.drawable.logo_cat), contentDescription = "Security4Her", modifier = Modifier.size(size))
 }
 
 @Composable
@@ -239,7 +256,7 @@ private fun AuthScreen(onDone: (Profile) -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp, vertical = 40.dp)) {
-        Shield(44.dp)
+        Logo(84.dp)
         Spacer(Modifier.height(28.dp))
         Text("Security4Her", style = MaterialTheme.typography.displaySmall)
         Spacer(Modifier.height(10.dp))
@@ -279,6 +296,7 @@ private fun AuthScreen(onDone: (Profile) -> Unit) {
                     onDone(if (creating) Backend.signUp(name, email, password) else Backend.signIn(email, password))
                 } catch (e: Exception) {
                     error = e.friendly()
+                    AppLog.warn("Account", error!!, e)
                 } finally {
                     busy = false
                 }
@@ -330,6 +348,7 @@ private fun VerifyScreen(profile: Profile, onDone: (Profile) -> Unit) {
                     if (Backend.mockVerifyFemale()) onDone(Backend.profile()) else error = "Verification didn't go through. Try again."
                 } catch (e: Exception) {
                     error = e.friendly()
+                    AppLog.warn("Account", error!!, e)
                 } finally {
                     busy = false
                 }
@@ -359,7 +378,7 @@ private fun PermissionsScreen(onDone: () -> Unit) {
     }
 
     val perms = buildList {
-        add(Perm("loc", "Location", "Your texts and WhatsApp messages show where you are.", { has(Manifest.permission.ACCESS_FINE_LOCATION) }) {
+        add(Perm("loc", "Location", "Your texts and live link show where you are.", { has(Manifest.permission.ACCESS_FINE_LOCATION) }) {
             request("loc", Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
         })
         if (Build.VERSION.SDK_INT >= 29) add(
@@ -453,7 +472,12 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
             if (contacts == null) contacts = emptyList()
         }
     }
-    BackHandler(tab != Tab.Home) { tab = Tab.Home }
+    var showLog by rememberSaveable { mutableStateOf(false) }
+    BackHandler(tab != Tab.Home && !showLog) { tab = Tab.Home }
+    if (showLog) {
+        LogScreen { showLog = false }
+        return
+    }
 
     Column(Modifier.fillMaxSize()) {
         if (settings.testMode) TestBanner(settings.demoNumber.isBlank()) { tab = Tab.Settings }
@@ -462,7 +486,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
                 Tab.Home -> HomeScreen(profile, contacts, settings, onTab = { tab = it })
                 Tab.Contacts -> ContactsScreen(contacts, contactsError) { reload++ }
                 Tab.Map -> SafeMapScreen()
-                Tab.Settings -> SettingsScreen(profile, settings, onChange = { settings = it }, onSignedOut = onSignedOut)
+                Tab.Settings -> SettingsScreen(profile, settings, onChange = { settings = it }, onSignedOut = onSignedOut, onOpenLog = { showLog = true })
             }
         }
         TabBar(tab) { tab = it }
@@ -558,28 +582,30 @@ private fun HomeScreen(profile: Profile, contacts: List<Contact>?, settings: Set
         }
         Spacer(Modifier.height(16.dp))
         Text(
-            "Hold for 1.5 seconds. Your location goes out by text" + (if (settings.autoWhatsapp) " and WhatsApp" else "") +
-                ", then a call follows after ${settings.countdownSec} s.",
+            "Hold for 1.5 seconds. Your location and a live link go out by text, then a call follows after ${settings.countdownSec} s.",
             color = Muted, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
         )
         Spacer(Modifier.height(24.dp))
+        val live by LiveShare.session.collectAsStateWithLifecycle()
+        fun sendLink(url: String) = ShareSheet.text(ctx, "Follow my live location: $url (updates every 20 s). $name, via Security4Her", "Send live link")
+        live?.let { s ->
+            LiveCard(s, onSend = { sendLink(s.url) }, onStop = { LiveShare.stop(ctx) })
+            Spacer(Modifier.height(12.dp))
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            QuickAction(Modifier.weight(1f), Icons.Filled.Share, "Share location", WaGreen, busy = sharing) {
-                if (sharing) return@QuickAction
-                sharing = true
-                scope.launch {
-                    val loc = hereNow(ctx)
-                    sharing = false
-                    if (loc == null) {
-                        Toast.makeText(ctx, "Turn on location to share it.", Toast.LENGTH_SHORT).show()
-                    } else {
-                        WhatsApp.share(
-                            ctx,
-                            "$name is sharing her location: https://maps.google.com/?q=%.6f,%.6f (Security4Her)".format(Locale.US, loc.latitude, loc.longitude),
-                        )
-                    }
+            QuickAction(Modifier.weight(1f), Icons.Filled.Share, if (live == null) "Live location" else "Send link", LiveGreen) {
+                if (!locOn) {
+                    Toast.makeText(ctx, "Allow location first.", Toast.LENGTH_SHORT).show()
+                    return@QuickAction
                 }
+                if (!Locator.enabled(ctx)) {
+                    Toast.makeText(ctx, "Turn on location in quick settings first.", Toast.LENGTH_LONG).show()
+                    runCatching { ctx.startActivity(Intent(AndroidSettings.ACTION_LOCATION_SOURCE_SETTINGS)) }
+                    return@QuickAction
+                }
+                val s = live ?: LiveShare.start(ctx)
+                sendLink(s.url)
             }
             QuickAction(Modifier.weight(1f), Icons.Filled.Call, "Call 112", SosRed) {
                 ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:112")))
@@ -611,6 +637,37 @@ private fun HomeScreen(profile: Profile, contacts: List<Contact>?, settings: Set
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LiveCard(s: `in`.security4her.app.sos.LiveSession, onSend: () -> Unit, onStop: () -> Unit) {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(s.topic) { while (true) { now = System.currentTimeMillis(); delay(10_000) } }
+    val left = ((s.until - now) / 60_000).coerceAtLeast(0)
+    val breathe = rememberInfiniteTransition(label = "live")
+    val a by breathe.animateFloat(0.35f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "dot")
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Surface1).border(1.dp, LiveGreen.copy(alpha = 0.35f), RoundedCornerShape(20.dp)).padding(18.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(LiveGreen.copy(alpha = a)))
+            Spacer(Modifier.width(10.dp))
+            Text("Sharing your live location", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Text("$left min left", color = Muted, style = MaterialTheme.typography.bodySmall)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            when {
+                s.failing -> "No internet right now. Updates resume when you're back online."
+                s.pushes == 0 -> "Finding you…"
+                else -> "${s.pushes} ${if (s.pushes == 1) "update" else "updates"} sent. Anyone with the link sees where you are."
+            },
+            color = if (s.failing) Amber else Muted, style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(onClick = onSend, colors = ButtonDefaults.buttonColors(containerColor = LiveGreen, contentColor = Color(0xFF06270F))) { Text("Send link", fontWeight = FontWeight.SemiBold) }
+            OutlinedButton(onClick = onStop, border = androidx.compose.foundation.BorderStroke(1.dp, SosRed)) { Text("Stop sharing", color = SosRed) }
         }
     }
 }
@@ -744,7 +801,7 @@ private fun ContactsScreen(contacts: List<Contact>?, error: String?, onChanged: 
                 Modifier.fillMaxSize().padding(bottom = 40.dp), verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Shield(52.dp, Line)
+                Logo(76.dp)
                 Spacer(Modifier.height(18.dp))
                 Text("Who should hear from you first?", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(6.dp))
@@ -860,7 +917,7 @@ private fun ContactDialog(c: Contact, onDismiss: () -> Unit, onSave: (Contact) -
 // ---------------------------------------------------------------- Settings
 
 @Composable
-private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Settings) -> Unit, onSignedOut: () -> Unit) {
+private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var linkMsg by remember { mutableStateOf<String?>(null) }
@@ -901,21 +958,17 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
                 style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp),
             )
         }
-        Section("WhatsApp") {
+        Section("Location updates") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Open WhatsApp during SOS")
+                    Text("Text my location every 5 minutes")
                     Text(
-                        "WhatsApp doesn't let apps send messages by themselves, so it opens with your SOS and location typed in. Tap send.",
+                        "During an SOS, contacts also get a fresh Google Maps link by text, so they can follow you without internet.",
                         color = Muted, style = MaterialTheme.typography.bodySmall,
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Switch(checked = settings.autoWhatsapp, onCheckedChange = { set(settings.copy(autoWhatsapp = it)) }, colors = switchColors)
-            }
-            if (WhatsApp.pkg(ctx) == null) {
-                Spacer(Modifier.height(8.dp))
-                Text("WhatsApp isn't installed on this phone.", color = Amber, style = MaterialTheme.typography.bodySmall)
+                Switch(checked = settings.smsUpdates, onCheckedChange = { set(settings.copy(smsUpdates = it)) }, colors = switchColors)
             }
         }
         Section("During SOS") {
@@ -946,6 +999,16 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
                 }
             }, border = androidx.compose.foundation.BorderStroke(1.dp, Lilac)) { Text("Re-link watch", color = Lilac) }
             linkMsg?.let { Spacer(Modifier.height(6.dp)); Text(it, color = Muted, style = MaterialTheme.typography.bodySmall) }
+        }
+        Section("Activity log") {
+            val count = AppLog.entries.collectAsStateWithLifecycle().value.size
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onOpenLog).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Open the activity log")
+                    Text("Every SOS step, text, location fix and error ($count entries). Share it when something doesn't work.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                }
+                Text("›", color = Lilac, fontSize = 26.sp, modifier = Modifier.padding(start = 12.dp))
+            }
         }
         Section("Account") {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -985,25 +1048,7 @@ private fun ActiveSosScreen(inc: Incident) {
     BackHandler(inc.active) {}
     val secs = ((now - inc.startedAt) / 1000).coerceAtLeast(0)
     val clock = SimpleDateFormat("HH:mm:ss", Locale.US)
-    val hasWa = remember { WhatsApp.pkg(ctx) != null }
-    val people = inc.recipients.filter { !it.police }
-
-    fun whatsapp(r: `in`.security4her.app.sos.Recipient?) = scope.launch {
-        val text = withContext(Dispatchers.IO) { SosEngine.sosText() }
-        val ok = if (r != null) WhatsApp.openChat(ctx, r.phone, text) else WhatsApp.share(ctx, text)
-        if (ok) SosEngine.logWhatsapp(r?.name ?: "a group")
-    }
-
-    // Once per SOS started on this phone: open WhatsApp to the first contact after the texts go out (they wait for GPS).
-    LaunchedEffect(inc.id) {
-        if (!inc.active || inc.whatsappOpened || inc.source != "phone" || !Settings.load(ctx).autoWhatsapp || !hasWa) return@LaunchedEffect
-        withTimeoutOrNull(12_000) { while (SosEngine.current.value?.recipients.isNullOrEmpty()) delay(200) }
-        val cur = SosEngine.current.value ?: return@LaunchedEffect
-        if (!cur.active || cur.whatsappOpened) return@LaunchedEffect
-        val first = cur.recipients.firstOrNull { !it.police } ?: return@LaunchedEffect
-        SosEngine.markWhatsappOpened()
-        whatsapp(first)
-    }
+    val locationOn = remember(now / 3000) { Locator.enabled(ctx) }
 
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxWidth().background(if (inc.active) SosRed else Surface1).padding(horizontal = 24.dp, vertical = 22.dp)) {
@@ -1049,37 +1094,14 @@ private fun ActiveSosScreen(inc: Incident) {
                     }
                 }
             }
-            // WhatsApp
-            if (inc.active) Card {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(34.dp).clip(CircleShape).background(WaGreen.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.Send, null, tint = WaGreen, modifier = Modifier.size(18.dp))
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text("Send on WhatsApp", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            if (hasWa) "Opens with your SOS and location typed in. Tap send." else "WhatsApp isn't installed on this phone.",
-                            color = Muted, style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
-                if (hasWa) {
-                    Spacer(Modifier.height(12.dp))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        people.forEach { r ->
-                            Button(
-                                onClick = { whatsapp(r) },
-                                colors = ButtonDefaults.buttonColors(containerColor = WaGreen, contentColor = Color(0xFF06270F)),
-                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                            ) { Text(r.name, fontWeight = FontWeight.SemiBold) }
-                        }
-                        OutlinedButton(
-                            onClick = { whatsapp(null) }, border = androidx.compose.foundation.BorderStroke(1.dp, WaGreen),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        ) { Text("A group or several chats", color = WaGreen) }
-                    }
-                }
+            if (inc.active && !locationOn) Card {
+                Text("Location is switched off", style = MaterialTheme.typography.titleMedium, color = Amber)
+                Text("Your contacts can't see where you are until it's on.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = { runCatching { ctx.startActivity(Intent(AndroidSettings.ACTION_LOCATION_SOURCE_SETTINGS)) } },
+                    colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Night),
+                ) { Text("Turn on location") }
             }
             // Location
             Card {
@@ -1091,9 +1113,26 @@ private fun ActiveSosScreen(inc: Incident) {
                         color = Muted, style = MaterialTheme.typography.bodyMedium,
                     )
                 } else Text("Waiting for GPS. Texts send your location as soon as it's found.", color = Muted, style = MaterialTheme.typography.bodyMedium)
-                if (!Backend.mock && inc.shareUrl != null) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(inc.shareUrl, color = Lilac, style = MaterialTheme.typography.bodySmall)
+                inc.liveUrl?.let { url ->
+                    Spacer(Modifier.height(10.dp))
+                    Text("Live link", style = MaterialTheme.typography.titleSmall)
+                    Text(url, color = Lilac, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        when {
+                            !inc.active -> "Stopped. The page now says you're safe."
+                            inc.liveFailing -> "No internet right now. Updates resume when you're back online."
+                            inc.livePushes == 0 -> "Starting…"
+                            else -> "${inc.livePushes} ${if (inc.livePushes == 1) "update" else "updates"} sent, one every 20 s. The link is in every SOS text."
+                        },
+                        color = if (inc.liveFailing && inc.active) Amber else Muted, style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (inc.active) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                        OutlinedButton(
+                            onClick = { ShareSheet.text(ctx, "Follow my live location: $url", "Send live link") },
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LiveGreen),
+                        ) { Text("Share live link", color = LiveGreen) }
+                        TextButton(onClick = { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } }) { Text("Open", color = Ink) }
+                    }
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1182,6 +1221,104 @@ private fun ActiveSosScreen(inc: Incident) {
 @Composable
 private fun Card(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Surface1).padding(18.dp), content = content)
+}
+
+// ---------------------------------------------------------------- Activity log
+
+@Composable
+private fun LogScreen(onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val all by AppLog.entries.collectAsStateWithLifecycle()
+    var filter by rememberSaveable { mutableStateOf("All") }
+    var confirmClear by remember { mutableStateOf(false) }
+    BackHandler(onBack = onBack)
+    val filters = listOf("All", "Problems", "SOS", "Texts", "Location", "Live", "Map")
+    val shown = remember(all, filter) {
+        all.asReversed().filter { e ->
+            when (filter) {
+                "Problems" -> e.level == "warn" || e.level == "error"
+                "Texts" -> e.tag == "SMS" || (e.tag == "SOS" && "text" in e.msg.lowercase())
+                "All" -> true
+                else -> e.tag == filter
+            }
+        }
+    }
+    val day = SimpleDateFormat("EEE d MMM", Locale.US)
+    val time = SimpleDateFormat("HH:mm:ss", Locale.US)
+    fun dayLabel(at: Long): String {
+        val d = java.util.Calendar.getInstance().apply { timeInMillis = at }
+        val t = java.util.Calendar.getInstance()
+        val diff = t.get(java.util.Calendar.DAY_OF_YEAR) - d.get(java.util.Calendar.DAY_OF_YEAR) + 365 * (t.get(java.util.Calendar.YEAR) - d.get(java.util.Calendar.YEAR))
+        return when (diff) { 0 -> "Today"; 1 -> "Yesterday"; else -> day.format(Date(at)) }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Text("‹  Back", color = Lilac) }
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = {
+                ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, AppLog.export(shown.asReversed())), "Share activity log"))
+            }, enabled = shown.isNotEmpty()) { Text("Share", color = Lilac) }
+            TextButton(onClick = { confirmClear = true }, enabled = all.isNotEmpty()) { Text("Clear", color = SosRed) }
+        }
+        Text("Activity log", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(horizontal = 20.dp))
+        Text(
+            "${all.size} entries, kept only on this phone. Share them with your team when something doesn't work.",
+            color = Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+        )
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            filters.forEach { f ->
+                val sel = f == filter
+                val problems = if (f == "Problems") all.count { it.level == "warn" || it.level == "error" } else 0
+                Box(
+                    Modifier.clip(RoundedCornerShape(20.dp)).background(if (sel) Lilac else Surface1).clickable { filter = f }.padding(horizontal = 14.dp, vertical = 7.dp),
+                ) { Text(if (problems > 0) "$f  $problems" else f, color = if (sel) OnLilac else Ink, fontSize = 13.sp, fontWeight = FontWeight.Medium) }
+            }
+        }
+        if (shown.isEmpty()) {
+            Column(Modifier.fillMaxSize().padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Logo(72.dp)
+                Spacer(Modifier.height(14.dp))
+                Text(if (filter == "Problems") "No problems logged" else "Nothing logged yet", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (filter == "Problems") "Failed texts, missing GPS and connection errors show up here." else "Each SOS, text, location fix and live update is recorded here as it happens.",
+                    color = Muted, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            var lastDay = ""
+            shown.forEachIndexed { i, e ->
+                val d = dayLabel(e.at)
+                if (d != lastDay) {
+                    lastDay = d
+                    item(key = "day-$i") {
+                        Text(d, color = Muted, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 4.dp))
+                    }
+                }
+                item(key = "entry-$i") {
+                    val c = when (e.level) { "ok" -> Lilac; "warn" -> Amber; "error" -> SosRed; else -> Muted }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 7.dp)) {
+                        Text(time.format(Date(e.at)), color = Muted, fontSize = 12.sp, modifier = Modifier.width(62.dp).padding(top = 2.dp))
+                        Box(Modifier.padding(top = 6.dp).size(8.dp).clip(CircleShape).background(c))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(e.tag, color = c, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(e.msg, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (confirmClear) AlertDialog(
+        onDismissRequest = { confirmClear = false },
+        containerColor = Surface1,
+        title = { Text("Clear the activity log?") },
+        text = { Text("This deletes all ${all.size} entries from this phone. It doesn't affect any SOS.", color = Muted) },
+        confirmButton = { TextButton(onClick = { AppLog.clear(); confirmClear = false }) { Text("Clear log", color = SosRed) } },
+        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Keep", color = Muted) } },
+    )
 }
 
 // ---------------------------------------------------------------- Shared bits

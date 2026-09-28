@@ -19,6 +19,15 @@ import android.os.Bundle
 import android.os.IBinder
 import android.telecom.TelecomManager
 import android.telephony.SmsManager
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.os.Looper
+import androidx.core.location.LocationManagerCompat
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import kotlinx.coroutines.flow.first
 import android.telephony.SubscriptionManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -43,6 +52,14 @@ import `in`.security4her.app.core.Settings
 import `in`.security4her.app.core.SosLocationMsg
 import `in`.security4her.app.core.SosStartMsg
 import `in`.security4her.app.core.Store
+import `in`.security4her.app.core.AppLog
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import java.net.HttpURLConnection
+import java.net.URL
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -90,7 +107,10 @@ data class Incident(
     val callAt: Long? = null,
     val call: String = "waiting", // waiting | placed | cancelled | skipped | failed
     val smsNeedsLocation: Boolean = false, // first text went out before GPS had a fix
-    val whatsappOpened: Boolean = false,
+    val liveTopic: String? = null, // ntfy topic carrying live location updates
+    val liveUrl: String? = null,
+    val livePushes: Int = 0,
+    val liveFailing: Boolean = false,
     val events: List<SosEvent> = emptyList(),
 ) {
     val active get() = state == "active"
@@ -124,8 +144,11 @@ object SosEngine {
             id = id, trigger = trigger, source = source, startedAt = System.currentTimeMillis(), test = s.testMode,
             lat = fix?.lat, lng = fix?.lng, acc = fix?.acc, fixAt = fix?.at,
             events = listOf(SosEvent(System.currentTimeMillis(), "SOS started ($how)")),
-        )
+        ).let { val t = Live.newTopic(); it.copy(liveTopic = t, liveUrl = Live.url(t)) }
         persist()
+        Locator.start(app, "sos")
+        if (!Locator.enabled(app)) log("Location is switched off on this phone. Turn it on so your contacts can see where you are.", "fail")
+        AppLog.info("SOS", "SOS started ($how), Test Mode ${if (s.testMode) "on" else "off"}")
         runCatching { ContextCompat.startForegroundService(app, Intent(app, SosService::class.java)) }
             .onFailure { log("Background service blocked; running in app only", "fail") }
         jobs += scope.launch { pipeline(s) }
@@ -136,7 +159,22 @@ object SosEngine {
         // 1. Location: last known now, a fresh GPS fix as soon as it lands
         if (inc.lat == null) lastFix()?.let { setFix(it, "Last known location") }
         jobs += scope.launch {
-            withTimeoutOrNull(20_000) { freshFix() }?.let { setFix(it, "Location fixed"); followUpLocation(s) }
+            withTimeoutOrNull(20_000) { freshFix() }?.let { setFix(it, "Location fixed"); followUpLocation(s); publishLive() }
+        }
+        // Live location: first post right away, then every 20 s until she's safe
+        jobs += scope.launch {
+            publishLive(first = true)
+            var lastText = System.currentTimeMillis()
+            while (true) {
+                delay(20_000)
+                if (_current.value?.active != true) break
+                Locator.fresh(app, waitMs = 8_000)?.let { setFix(it, null); pushLocation(it) }
+                publishLive()
+                if (Settings.load(app).smsUpdates && System.currentTimeMillis() - lastText > 5 * 60_000) {
+                    lastText = System.currentTimeMillis()
+                    textUpdate()
+                }
+            }
         }
         // 2. Server (share link)
         jobs += scope.launch { serverUpsert() }
@@ -147,13 +185,27 @@ object SosEngine {
         sendSos(s)
         // 4. Countdown call
         jobs += scope.launch { countdownCall(s) }
-        // 5. Location updates every 30 s
-        jobs += scope.launch {
-            while (true) {
-                delay(30_000)
-                if (_current.value?.active != true) break
-                freshFix()?.let { setFix(it, null); pushLocation(it) }
-            }
+    }
+
+    private suspend fun publishLive(first: Boolean = false) {
+        val inc = _current.value ?: return
+        val topic = inc.liveTopic ?: return
+        val name = userName()
+        val time = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(inc.fixAt ?: System.currentTimeMillis()))
+        val msg = if (inc.lat != null && inc.lng != null) {
+            "%.6f, %.6f, accurate to %s m, at %s".format(Locale.US, inc.lat, inc.lng, inc.acc?.toInt() ?: "?", time)
+        } else "Location not found yet. Updates follow."
+        val ok = Live.publish(
+            topic, if (first) "SOS: $name may be in danger" else "$name's live location", msg,
+            inc.lat?.let { mapsLink(it, inc.lng!!) }, if (first) listOf("rotating_light") else listOf("round_pushpin"), if (first) 5 else 3,
+        )
+        val was = _current.value ?: return
+        if (ok) {
+            update { it.copy(livePushes = it.livePushes + 1, liveFailing = false) }
+            if (was.livePushes == 0) log("Live location is on", "ok")
+        } else if (!was.liveFailing) {
+            update { it.copy(liveFailing = true) }
+            log("Live location can't reach the internet, retrying", "fail")
         }
     }
 
@@ -165,7 +217,7 @@ object SosEngine {
                 val token = Backend.upsertIncident(inc.id, inc.trigger, inc.source, inc.lat, inc.lng, inc.acc, inc.test)
                 val url = BuildConfig.TRACK_BASE_URL.ifBlank { "https://sanskar-dwivedi.github.io/Safe4Her/" } + "?k=" + token
                 update { it.copy(server = "ok", shareUrl = url) }
-                log(if (Backend.mock) "Demo mode: no live link, texts carry a Google Maps link" else "Server accepted · live link ready", if (Backend.mock) "info" else "ok")
+                if (!Backend.mock) log("Server accepted the SOS", "ok")
                 return
             } catch (e: Exception) {
                 Log.w(TAG, "upsert_incident failed", e)
@@ -199,7 +251,7 @@ object SosEngine {
 
     private fun mapsLink(lat: Double, lng: Double) = "https://maps.google.com/?q=%.6f,%.6f".format(Locale.US, lat, lng)
 
-    /** The SOS message, shared by SMS and WhatsApp. */
+    /** The SOS message. */
     fun sosText(): String = smsBody(Settings.load(app))
 
     private fun smsBody(s: Settings): String {
@@ -207,11 +259,11 @@ object SosEngine {
         val name = userName()
         return buildString {
             append("SOS from $name. I may be in danger.")
-            if (!Backend.mock) inc.shareUrl?.let { append(" Live location: $it") }
+            inc.liveUrl?.let { append(" Live location: $it") }
             if (inc.lat != null && inc.lng != null) {
                 append(" My location: ${mapsLink(inc.lat, inc.lng)}")
                 val time = SimpleDateFormat("HH:mm", Locale.US).format(Date(inc.fixAt ?: System.currentTimeMillis()))
-                append(" (±${inc.acc?.toInt() ?: "?"}m, $time)")
+                append(" (accuracy ${inc.acc?.toInt() ?: "?"}m, $time)")
             } else append(" Location not available yet.")
             if (s.testMode) append(" [TEST]")
         }
@@ -243,6 +295,19 @@ object SosEngine {
         )
     }
 
+    /** Every 5 minutes during an SOS: the newest location by text, so contacts without internet can follow too. */
+    private fun textUpdate() {
+        val inc = _current.value ?: return
+        if (!inc.active || inc.lat == null || inc.lng == null) return
+        val to = inc.recipients.filter { it.state != "failed" }
+        if (to.isEmpty()) return
+        val time = SimpleDateFormat("HH:mm", Locale.US).format(Date(inc.fixAt ?: System.currentTimeMillis()))
+        val body = "Update from ${userName()}: ${mapsLink(inc.lat, inc.lng)} (accuracy ${inc.acc?.toInt() ?: "?"}m, $time)" +
+            (inc.liveUrl?.let { " Live: $it" } ?: "") + if (inc.test) " [TEST]" else ""
+        to.forEach { sendSms(it.phone, body, inc.id) }
+        log("Location update texted to ${to.size}", "ok")
+    }
+
     private fun hasFreshFix(): Boolean {
         val at = _current.value?.fixAt ?: return false
         return System.currentTimeMillis() - at < 2 * 60_000
@@ -253,7 +318,7 @@ object SosEngine {
         val inc = _current.value ?: return
         if (!inc.active || !inc.smsNeedsLocation || inc.lat == null || inc.lng == null) return
         update { it.copy(smsNeedsLocation = false) }
-        val body = "Location of ${userName()}: ${mapsLink(inc.lat, inc.lng)} (±${inc.acc?.toInt() ?: "?"}m)" + if (s.testMode) " [TEST]" else ""
+        val body = "Location of ${userName()}: ${mapsLink(inc.lat, inc.lng)} (accuracy ${inc.acc?.toInt() ?: "?"}m)" + if (s.testMode) " [TEST]" else ""
         val to = inc.recipients.filter { it.state != "failed" }
         to.forEach { sendSms(it.phone, body, inc.id) }
         if (to.isNotEmpty()) log("Location texted to ${to.size}", "ok")
@@ -271,15 +336,13 @@ object SosEngine {
             pushLocation(f)
             val inc = _current.value ?: return@launch
             val s = Settings.load(app)
-            val body = "Update from ${userName()}: ${mapsLink(f.lat, f.lng)} (±${f.acc?.toInt() ?: "?"}m)" + if (s.testMode) " [TEST]" else ""
+            val body = "Update from ${userName()}: ${mapsLink(f.lat, f.lng)} (accuracy ${f.acc?.toInt() ?: "?"}m)" + if (s.testMode) " [TEST]" else ""
             inc.recipients.forEach { sendSms(it.phone, body, inc.id) }
             log("Location update texted to ${inc.recipients.size}", "ok")
         }
     }
 
-    fun markWhatsappOpened() = update { it.copy(whatsappOpened = true) }
 
-    fun logWhatsapp(name: String) = log("WhatsApp opened for $name. Tap send there.")
 
     private suspend fun countdownCall(s: Settings) {
         val number = if (s.testMode) s.demoNumber else s.autoCallNumber.ifBlank {
@@ -339,7 +402,8 @@ object SosEngine {
         update { it.copy(state = status, call = if (it.call == "waiting") "cancelled" else it.call) }
         log(if (status == "resolved") "Marked safe" else "SOS cancelled", "ok")
         scope.launch {
-            runCatching { Backend.endIncident(inc.id, status) }.onFailure { Log.w(TAG, "end_incident failed", it) }
+            inc.liveTopic?.let { Live.publish(it, "${userName()} is safe now", "Live location sharing has stopped.", null, listOf("white_check_mark"), 4) }
+            runCatching { Backend.endIncident(inc.id, status) }.onFailure { AppLog.warn("SOS", "Server didn't record the end of the SOS", it) }
             val told = inc.recipients.filter { it.state == "sent" || it.state == "delivered" }
             if (told.isNotEmpty()) {
                 val name = runCatching { Backend.profile().displayName }.getOrNull() ?: "She"
@@ -348,6 +412,7 @@ object SosEngine {
             }
         }
         app.stopService(Intent(app, SosService::class.java))
+        Locator.stop(app, "sos")
     }
 
     fun dismiss() {
@@ -369,28 +434,17 @@ object SosEngine {
         runCatching { Backend.addLocation(inc.id, f.lat, f.lng, f.acc, Instant.ofEpochMilli(f.at).toString()) }
     }
 
-    @SuppressLint("MissingPermission")
-    private suspend fun lastFix(): Fix? = runCatching {
-        if (!hasLocation()) return null
-        LocationServices.getFusedLocationProviderClient(app).lastLocation.await()
-            ?.let { Fix(it.latitude, it.longitude, it.accuracy, it.time) }
-    }.getOrNull()
+    private suspend fun lastFix(): Fix? = Locator.last(app)
 
-    @SuppressLint("MissingPermission")
-    private suspend fun freshFix(): Fix? = runCatching {
-        if (!hasLocation()) return null
-        LocationServices.getFusedLocationProviderClient(app).getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).await()
-            ?.let { Fix(it.latitude, it.longitude, it.accuracy, System.currentTimeMillis()) }
-    }.getOrNull()
-
-    private fun hasLocation() =
-        ContextCompat.checkSelfPermission(app, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    private suspend fun freshFix(): Fix? = Locator.fresh(app)
 
     private fun setRecipient(phone: String, state: String, error: String? = null) =
         update { inc -> inc.copy(recipients = inc.recipients.map { if (it.phone == phone) it.copy(state = state, error = error) else it }) }
 
-    private fun log(text: String, kind: String = "info") =
+    private fun log(text: String, kind: String = "info") {
+        when (kind) { "ok" -> AppLog.ok("SOS", text); "fail" -> AppLog.warn("SOS", text); else -> AppLog.info("SOS", text) }
         update { it.copy(events = it.events + SosEvent(System.currentTimeMillis(), text, kind)) }
+    }
 
     @Synchronized
     private fun update(f: (Incident) -> Incident) {
@@ -424,7 +478,11 @@ object WearBridge {
         val token = Backend.registerWatch()
         val link = DeviceLink(p.id, p.displayName.orEmpty(), token, Settings.load(ctx).testMode)
         put(ctx, Paths.DEVICE, S4hJson.encodeToString(DeviceLink.serializer(), link))
-    }.onFailure { Log.w(TAG, "linkWatch failed", it) }
+    }.onSuccess { AppLog.ok("Watch", "Account details sent to the watch") }
+        .onFailure {
+            if ("API_UNAVAILABLE" in it.message.orEmpty()) AppLog.info("Watch", "No Wear OS companion on this phone, so no watch to link")
+            else AppLog.warn("Watch", "Couldn't link the watch", it)
+        }
 
     suspend fun watchReachable(ctx: Context): Boolean = runCatching {
         Wearable.getCapabilityClient(ctx).getCapability(Paths.CAP_WATCH, CapabilityClient.FILTER_REACHABLE).await().nodes.isNotEmpty()
@@ -480,6 +538,7 @@ class SosReceiver : BroadcastReceiver() {
                 else SosEngine.onSmsResult(id, intent.getStringExtra("phone").orEmpty(), intent.action!!, ok, resultCode)
             }
             CANCEL_CALL -> SosEngine.cancelCall()
+            STOP_LIVE -> LiveShare.stop(context, "Stopped from the notification")
         }
     }
 
@@ -487,6 +546,7 @@ class SosReceiver : BroadcastReceiver() {
         const val SENT = "in.security4her.app.SMS_SENT"
         const val DELIVERED = "in.security4her.app.SMS_DELIVERED"
         const val CANCEL_CALL = "in.security4her.app.CANCEL_CALL"
+        const val STOP_LIVE = "in.security4her.app.STOP_LIVE"
     }
 }
 
@@ -529,7 +589,7 @@ class SosService : Service() {
                 ctx, 1, Intent(Intent.ACTION_DIAL, Uri.parse("tel:112")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE,
             )
             val b = NotificationCompat.Builder(ctx, CHANNEL)
-                .setSmallIcon(R.drawable.ic_shield)
+                .setSmallIcon(R.drawable.ic_notif_cat)
                 .setContentTitle("SOS active — tap to open")
                 .setContentText(
                     when (inc?.call) {
@@ -617,7 +677,11 @@ object Sms {
 
     fun sendTest(ctx: Context, phone: String) {
         _test.value = "Sending a test text to $phone"
-        send(ctx, phone, "Security4Her test: if you got this, SOS texts from this phone work.", TEST_ID)?.let { _test.value = "Failed: $it" }
+        AppLog.info("SMS", "Test text to $phone")
+        send(ctx, phone, "Security4Her test: if you got this, SOS texts from this phone work.", TEST_ID)?.let {
+            _test.value = "Failed: $it"
+            AppLog.error("SMS", "Test text failed: $it")
+        }
     }
 
     fun onTestResult(action: String, ok: Boolean, code: Int) {
@@ -627,44 +691,271 @@ object Sms {
             ok -> "Sent. Waiting for the delivery report."
             else -> "Failed: ${reason(code)}"
         }
+        if (ok) AppLog.ok("SMS", "Test text ${if (action == SosReceiver.DELIVERED) "delivered" else "sent"}")
+        else AppLog.error("SMS", "Test text failed: ${reason(code)}")
+    }
+}
+
+/** The phone's normal share sheet (Messages, Gmail, Telegram, anything). */
+object ShareSheet {
+    fun text(ctx: Context, text: String, title: String = "Share"): Boolean = runCatching {
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+        ctx.startActivity(Intent.createChooser(send, title).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }.isSuccess
+}
+
+/**
+ * Location for SOS and live sharing. While either is on, location runs continuously: Google's fused provider
+ * plus Android's own GPS and network providers (the fallback for phones without Google services).
+ * Callers read the newest fix; one-shot requests are only used when nothing is tracking.
+ */
+object Locator {
+    private val _latest = MutableStateFlow<Fix?>(null)
+    val latest: StateFlow<Fix?> = _latest.asStateFlow()
+    private val users = mutableSetOf<String>()
+    private var fusedCb: LocationCallback? = null
+    private var lmListener: LocationListener? = null
+
+    fun allowed(ctx: Context) =
+        ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    /** False when location is switched off in quick settings. */
+    fun enabled(ctx: Context): Boolean =
+        runCatching { LocationManagerCompat.isLocationEnabled(ctx.getSystemService(LocationManager::class.java)) }.getOrDefault(true)
+
+    @Synchronized
+    private fun offer(l: Location, source: String) {
+        val f = Fix(l.latitude, l.longitude, if (l.hasAccuracy()) l.accuracy else null, System.currentTimeMillis())
+        val cur = _latest.value
+        // A fresh fix wins, unless a much more accurate one arrived in the last 15 s.
+        if (cur != null && f.at - cur.at < 15_000 && (f.acc ?: 999f) > (cur.acc ?: 999f) * 2) return
+        if (cur == null || f.at - cur.at > 120_000) AppLog.ok("Location", "Fix from $source, accurate to ${f.acc?.toInt() ?: "?"} m")
+        _latest.value = f
+    }
+
+    @SuppressLint("MissingPermission")
+    @Synchronized
+    fun start(ctx: Context, who: String) {
+        val app = ctx.applicationContext
+        users += who
+        if (fusedCb != null || lmListener != null) return
+        if (!allowed(app)) {
+            AppLog.error("Location", "Location permission is off. Allow it in Settings → Apps → Security4Her → Permissions.")
+            return
+        }
+        if (!enabled(app)) AppLog.error("Location", "Location is switched off on this phone. Turn it on in quick settings.")
+        runCatching {
+            val cb = object : LocationCallback() {
+                override fun onLocationResult(r: LocationResult) { r.lastLocation?.let { offer(it, "Google location") } }
+            }
+            LocationServices.getFusedLocationProviderClient(app).requestLocationUpdates(
+                LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10_000).setMinUpdateIntervalMillis(4_000).build(),
+                cb, Looper.getMainLooper(),
+            )
+            fusedCb = cb
+        }.onFailure { AppLog.warn("Location", "Google location unavailable, using the phone's GPS directly", it) }
+        runCatching {
+            val lm = app.getSystemService(LocationManager::class.java)
+            val l = LocationListener { offer(it, if (it.provider == LocationManager.GPS_PROVIDER) "GPS" else "mobile network") }
+            val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER).filter { lm.isProviderEnabled(it) }
+            providers.forEach { lm.requestLocationUpdates(it, 10_000L, 0f, l, Looper.getMainLooper()) }
+            lmListener = l
+        }.onFailure { AppLog.warn("Location", "Phone GPS unavailable", it) }
+        AppLog.info("Location", "Tracking on for $who")
+    }
+
+    @Synchronized
+    fun stop(ctx: Context, who: String) {
+        users -= who
+        if (users.isNotEmpty()) return
+        val app = ctx.applicationContext
+        fusedCb?.let { cb -> runCatching { LocationServices.getFusedLocationProviderClient(app).removeLocationUpdates(cb) } }
+        lmListener?.let { l -> runCatching { app.getSystemService(LocationManager::class.java).removeUpdates(l) } }
+        if (fusedCb != null || lmListener != null) AppLog.info("Location", "Tracking off")
+        fusedCb = null
+        lmListener = null
+    }
+
+    /** Newest fix no older than [maxAgeMs], waiting up to [waitMs] for one to arrive. */
+    @SuppressLint("MissingPermission")
+    suspend fun fresh(ctx: Context, waitMs: Long = 12_000, maxAgeMs: Long = 60_000): Fix? {
+        if (!allowed(ctx)) return null.also { AppLog.warn("Location", "Location permission is off") }
+        fun recent() = _latest.value?.takeIf { System.currentTimeMillis() - it.at < maxAgeMs }
+        recent()?.let { return it }
+        val got = withTimeoutOrNull(waitMs) {
+            runCatching {
+                LocationServices.getFusedLocationProviderClient(ctx).getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).await()
+            }.getOrNull()?.let { offer(it, "Google location") }
+            recent() ?: _latest.first { it != null && System.currentTimeMillis() - it.at < maxAgeMs }
+        }
+        return got ?: recent().also {
+            if (it == null) AppLog.warn("Location", if (!enabled(ctx)) "No fix: location is switched off on this phone" else "No fix yet. Indoors or weak GPS?")
+        }
+    }
+
+    /** Best available old fix: tracked, then Google's last known, then the phone's own providers. */
+    @SuppressLint("MissingPermission")
+    suspend fun last(ctx: Context): Fix? {
+        _latest.value?.let { return it }
+        if (!allowed(ctx)) return null
+        runCatching { LocationServices.getFusedLocationProviderClient(ctx).lastLocation.await() }.getOrNull()
+            ?.let { return Fix(it.latitude, it.longitude, it.accuracy, it.time) }
+        val lm = ctx.getSystemService(LocationManager::class.java)
+        return listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER)
+            .mapNotNull { p -> runCatching { lm.getLastKnownLocation(p) }.getOrNull() }
+            .maxByOrNull { it.time }
+            ?.let { Fix(it.latitude, it.longitude, it.accuracy, it.time) }
     }
 }
 
 /**
- * WhatsApp can't be sent silently by another app, so we open it with the SOS message typed in:
- * straight to one contact's chat, or to WhatsApp's chat picker (a family group, or several chats).
+ * Live location over ntfy.sh: a free relay that needs no account or key. Each SOS or live share gets a
+ * random, unguessable topic; the link opens a page that shows every update as it arrives.
  */
-object WhatsApp {
-    private val packages = listOf("com.whatsapp", "com.whatsapp.w4b")
+object Live {
+    private const val SERVER = "https://ntfy.sh"
 
-    fun pkg(ctx: Context): String? = packages.firstOrNull {
-        runCatching { ctx.packageManager.getPackageInfo(it, 0) }.isSuccess
+    fun newTopic(): String {
+        val chars = "abcdefghijkmnpqrstuvwxyz23456789"
+        val r = java.security.SecureRandom()
+        return "s4h-" + (1..22).map { chars[r.nextInt(chars.length)] }.joinToString("")
     }
 
-    /** Digits with country code, as WhatsApp wants them. 10-digit numbers are treated as Indian (+91). */
-    fun intl(phone: String): String {
-        val d = phone.filter(Char::isDigit)
-        return when {
-            phone.trim().startsWith("+") -> d
-            d.length == 11 && d.startsWith("0") -> "91" + d.drop(1)
-            d.length == 10 -> "91$d"
-            else -> d
+    /** Our own map page when it's hosted (LIVE_PAGE_URL), otherwise ntfy's page for the topic. */
+    fun url(topic: String) = BuildConfig.LIVE_PAGE_URL.takeIf { it.isNotBlank() }?.let { "$it?t=$topic" } ?: "$SERVER/$topic"
+
+    fun publish(topic: String, title: String, message: String, click: String?, tags: List<String>, priority: Int): Boolean = try {
+        val body = buildJsonObject {
+            put("topic", topic)
+            put("title", title)
+            put("message", message)
+            put("priority", priority)
+            putJsonArray("tags") { tags.forEach { add(it) } }
+            if (click != null) {
+                put("click", click)
+                putJsonArray("actions") {
+                    addJsonObject { put("action", "view"); put("label", "Open in Google Maps"); put("url", click) }
+                }
+            }
+        }.toString()
+        val c = (URL(SERVER).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            connectTimeout = 10_000
+            readTimeout = 10_000
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
         }
+        c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+        val code = c.responseCode
+        c.disconnect()
+        if (code != 200) error("HTTP $code")
+        AppLog.ok("Live", "Posted: $message")
+        true
+    } catch (e: Exception) {
+        AppLog.warn("Live", "Couldn't post live location", e)
+        false
+    }
+}
+
+data class LiveSession(val topic: String, val url: String, val startedAt: Long, val until: Long, val pushes: Int = 0, val lastAt: Long? = null, val failing: Boolean = false)
+
+/** "Share live location" without an SOS, e.g. while walking home. Posts every 20 s until stopped or the time runs out. */
+object LiveShare {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val _session = MutableStateFlow<LiveSession?>(null)
+    val session: StateFlow<LiveSession?> = _session.asStateFlow()
+    private var job: Job? = null
+
+    fun start(ctx: Context, minutes: Int = 60): LiveSession {
+        _session.value?.let { return it }
+        val app = ctx.applicationContext
+        val topic = Live.newTopic()
+        val now = System.currentTimeMillis()
+        val s = LiveSession(topic, Live.url(topic), now, now + minutes * 60_000L)
+        _session.value = s
+        AppLog.ok("Live", "Sharing live location for $minutes min: ${s.url}")
+        Locator.start(app, "live")
+        runCatching { ContextCompat.startForegroundService(app, Intent(app, LiveService::class.java)) }
+            .onFailure { AppLog.warn("Live", "Background service blocked; sharing only while the app is open", it) }
+        job = scope.launch {
+            val name = runCatching { Backend.profile().displayName }.getOrNull() ?: "Your contact"
+            var first = true
+            while (true) {
+                val cur = _session.value ?: break
+                if (System.currentTimeMillis() > cur.until) {
+                    stop(app, "Time's up")
+                    break
+                }
+                val f = Locator.fresh(app, waitMs = 10_000) ?: Locator.last(app)
+                val ok = if (f != null) {
+                    Live.publish(
+                        topic, if (first) "$name is sharing live location" else "$name's live location",
+                        "%.6f, %.6f, accurate to %s m, at %s".format(Locale.US, f.lat, f.lng, f.acc?.toInt() ?: "?", SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(f.at))),
+                        "https://maps.google.com/?q=%.6f,%.6f".format(Locale.US, f.lat, f.lng), listOf("round_pushpin"), if (first) 4 else 2,
+                    )
+                } else false
+                _session.value = _session.value?.let { it.copy(pushes = it.pushes + if (ok) 1 else 0, lastAt = if (ok) System.currentTimeMillis() else it.lastAt, failing = !ok) }
+                first = false
+                LiveService.refresh(app)
+                delay(20_000)
+            }
+        }
+        return s
     }
 
-    fun openChat(ctx: Context, phone: String, text: String): Boolean {
-        val uri = Uri.parse("https://api.whatsapp.com/send?phone=${intl(phone)}&text=${Uri.encode(text)}")
-        val i = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        pkg(ctx)?.let { i.setPackage(it) }
-        return runCatching { ctx.startActivity(i) }.isSuccess
+    fun stop(ctx: Context, why: String = "Stopped") {
+        val s = _session.value ?: return
+        _session.value = null
+        job?.cancel()
+        AppLog.info("Live", "Live sharing ended: $why")
+        scope.launch { Live.publish(s.topic, "Live location sharing ended", why, null, listOf("white_check_mark"), 3) }
+        ctx.applicationContext.stopService(Intent(ctx.applicationContext, LiveService::class.java))
+        Locator.stop(ctx, "live")
+    }
+}
+
+/** Keeps live sharing running with the screen off, with a Stop button in the notification. */
+class LiveService : Service() {
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        try {
+            if (Build.VERSION.SDK_INT >= 29) startForeground(ID, build(this), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            else startForeground(ID, build(this))
+        } catch (e: Exception) {
+            AppLog.warn("Live", "Couldn't keep sharing in the background", e)
+            stopSelf()
+        }
+        return START_NOT_STICKY
     }
 
-    fun share(ctx: Context, text: String): Boolean {
-        val i = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
-        val p = pkg(ctx)
-        return runCatching {
-            if (p != null) ctx.startActivity(i.setPackage(p).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            else ctx.startActivity(Intent.createChooser(i, "Share location").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }.isSuccess
+    companion object {
+        private const val ID = 113
+        private const val CHANNEL = "live"
+
+        fun refresh(ctx: Context) {
+            if (LiveShare.session.value == null) return
+            runCatching { ctx.getSystemService(NotificationManager::class.java).notify(ID, build(ctx)) }
+        }
+
+        private fun build(ctx: Context): Notification {
+            val nm = ctx.getSystemService(NotificationManager::class.java)
+            if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL) == null) {
+                nm.createNotificationChannel(NotificationChannel(CHANNEL, "Live location", NotificationManager.IMPORTANCE_LOW))
+            }
+            val s = LiveShare.session.value
+            val open = PendingIntent.getActivity(ctx, 10, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
+            val stop = PendingIntent.getBroadcast(ctx, 11, Intent(ctx, SosReceiver::class.java).setAction(SosReceiver.STOP_LIVE), PendingIntent.FLAG_IMMUTABLE)
+            return NotificationCompat.Builder(ctx, CHANNEL)
+                .setSmallIcon(R.drawable.ic_notif_cat)
+                .setContentTitle("Sharing your live location")
+                .setContentText(if (s == null) "" else "${s.pushes} ${if (s.pushes == 1) "update" else "updates"} sent" + if (s.failing) ", no internet right now" else "")
+                .setOngoing(true)
+                .setContentIntent(open)
+                .addAction(0, "Stop sharing", stop)
+                .apply { if (s != null) setWhen(s.until).setUsesChronometer(true).setChronometerCountDown(true) }
+                .build()
+        }
     }
 }

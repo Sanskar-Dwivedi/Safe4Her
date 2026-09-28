@@ -302,8 +302,11 @@ fun SafeMapScreen() {
         map.controller.animateTo(center, 15.0, 700L)
         places = null
         places = try {
-            Places.near(center.latitude, center.longitude)
+            Places.near(center.latitude, center.longitude).also {
+                `in`.security4her.app.core.AppLog.info("Map", "Loaded ${it.size} safe places near %.4f, %.4f".format(Locale.US, center.latitude, center.longitude))
+            }
         } catch (e: Exception) {
+            `in`.security4her.app.core.AppLog.warn("Map", "Couldn't load safe places", e)
             error = "Couldn't load places. Check your internet and tap Refresh."
             emptyList()
         }

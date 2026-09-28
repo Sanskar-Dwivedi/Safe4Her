@@ -110,7 +110,7 @@ data class Settings(
     val autoCallNumber: String,
     val countdownSec: Int,
     val pin: String,
-    val autoWhatsapp: Boolean,
+    val smsUpdates: Boolean,
 ) {
     companion object {
         fun load(ctx: Context): Settings = with(Store.prefs(ctx)) {
@@ -121,7 +121,7 @@ data class Settings(
                 autoCallNumber = getString("auto_call_number", "")!!,
                 countdownSec = getInt("countdown_sec", 10),
                 pin = getString("pin", "")!!,
-                autoWhatsapp = getBoolean("auto_whatsapp", true),
+                smsUpdates = getBoolean("sms_updates", true),
             )
         }
     }
@@ -133,7 +133,7 @@ data class Settings(
         .putString("auto_call_number", autoCallNumber.trim())
         .putInt("countdown_sec", countdownSec.coerceIn(3, 60))
         .putString("pin", pin)
-        .putBoolean("auto_whatsapp", autoWhatsapp)
+        .putBoolean("sms_updates", smsUpdates)
         .apply()
 }
 
@@ -315,5 +315,61 @@ fun Throwable.friendly(): String {
         "not verified" in m -> "Verify your account first."
         "Not signed in" in m -> "Sign in again."
         else -> "Couldn't reach the server. Check your connection and try again."
+    }
+}
+
+// ---- Activity log: every SOS step, text, location fix, live update and error, kept on the phone ----
+
+@Serializable
+data class LogEntry(val at: Long, val level: String, val tag: String, val msg: String) // level: info | ok | warn | error
+
+object AppLog {
+    private const val MAX = 1500
+    private var file: java.io.File? = null
+    private val _entries = kotlinx.coroutines.flow.MutableStateFlow<List<LogEntry>>(emptyList())
+    val entries: kotlinx.coroutines.flow.StateFlow<List<LogEntry>> = _entries
+
+    fun init(ctx: Context) {
+        val f = java.io.File(ctx.filesDir, "activity-log.jsonl")
+        file = f
+        _entries.value = runCatching {
+            f.takeIf { it.exists() }?.readLines()?.takeLast(MAX)?.mapNotNull { line ->
+                runCatching { S4hJson.decodeFromString(LogEntry.serializer(), line) }.getOrNull()
+            }
+        }.getOrNull().orEmpty()
+    }
+
+    fun info(tag: String, msg: String) = add("info", tag, msg)
+    fun ok(tag: String, msg: String) = add("ok", tag, msg)
+    fun warn(tag: String, msg: String, t: Throwable? = null) = add("warn", tag, msg + (t?.let { " (${it.javaClass.simpleName}: ${it.message?.take(120)})" } ?: ""))
+    fun error(tag: String, msg: String, t: Throwable? = null) = add("error", tag, msg + (t?.let { " (${it.javaClass.simpleName}: ${it.message?.take(120)})" } ?: ""))
+
+    @Synchronized
+    private fun add(level: String, tag: String, msg: String) {
+        val e = LogEntry(System.currentTimeMillis(), level, tag, msg)
+        android.util.Log.println(if (level == "error") android.util.Log.ERROR else if (level == "warn") android.util.Log.WARN else android.util.Log.INFO, "S4h/$tag", msg)
+        val next = _entries.value + e
+        _entries.value = if (next.size > MAX) next.takeLast(MAX) else next
+        runCatching {
+            val f = file ?: return
+            f.appendText(S4hJson.encodeToString(LogEntry.serializer(), e) + "\n")
+            if (f.length() > 600_000) f.writeText(_entries.value.joinToString("\n", postfix = "\n") { S4hJson.encodeToString(LogEntry.serializer(), it) })
+        }
+    }
+
+    @Synchronized
+    fun clear() {
+        _entries.value = emptyList()
+        runCatching { file?.writeText("") }
+        info("App", "Log cleared")
+    }
+
+    /** Plain-text export for sharing with the team. */
+    fun export(list: List<LogEntry> = _entries.value): String {
+        val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+        return buildString {
+            appendLine("Security4Her activity log · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE}")
+            list.forEach { appendLine("${fmt.format(java.util.Date(it.at))}  ${it.level.uppercase().padEnd(5)}  [${it.tag}] ${it.msg}") }
+        }
     }
 }

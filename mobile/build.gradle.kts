@@ -25,6 +25,8 @@ android {
         buildConfigField("String", "SUPABASE_URL", cfg("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", cfg("SUPABASE_ANON_KEY"))
         buildConfigField("String", "TRACK_BASE_URL", cfg("TRACK_BASE_URL"))
+        // Live map page (github.com/AtharvaLakhe/s4h-live); blank in local.properties falls back to ntfy.sh's own page.
+        buildConfigField("String", "LIVE_PAGE_URL", "\"${localProps.getProperty("LIVE_PAGE_URL", "https://atharvalakhe.github.io/s4h-live/")}\"")
         manifestPlaceholders["MAPS_API_KEY"] = localProps.getProperty("MAPS_API_KEY", "")
         buildConfigField("boolean", "HAS_MAPS_KEY", localProps.getProperty("MAPS_API_KEY", "").isNotBlank().toString())
     }
