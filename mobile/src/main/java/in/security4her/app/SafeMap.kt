@@ -10,6 +10,24 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
+import android.graphics.DashPathEffect
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import `in`.security4her.app.core.AppLog
+import `in`.security4her.app.core.Community
+import `in`.security4her.app.core.CommunityData
+import `in`.security4her.app.core.CommunityReport
+import `in`.security4her.app.core.Hotspot
+import kotlinx.coroutines.delay
+import org.osmdroid.events.MapListener
+import org.osmdroid.events.ScrollEvent
+import org.osmdroid.events.ZoomEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -18,6 +36,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -89,6 +108,7 @@ private val kindColor = mapOf(
     "clinic" to Color(0xFF5EE0A0),
     "pharmacy" to Color(0xFFFFD166),
     "fire_station" to Color(0xFFFF9E64),
+    "community" to Color(0xFFC49BFF),
 )
 
 private fun kindLabel(k: String) = when (k) {
@@ -97,6 +117,7 @@ private fun kindLabel(k: String) = when (k) {
     "clinic" -> "Clinic"
     "pharmacy" -> "Pharmacy"
     "fire_station" -> "Fire station"
+    "community" -> "Added by women nearby"
     else -> "Safe place"
 }
 
@@ -212,7 +233,7 @@ object Places {
         }.distinctBy { it.name + it.kind }.sortedBy { it.distanceM }.take(40)
 }
 
-private fun dot(ctx: Context, color: Color, sizeDp: Int, ring: Color = Color.White, halo: Boolean = false): BitmapDrawable {
+internal fun dot(ctx: Context, color: Color, sizeDp: Int, ring: Color = Color.White, halo: Boolean = false): BitmapDrawable {
     val d = ctx.resources.displayMetrics.density
     val px = (sizeDp * d).toInt()
     val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
@@ -231,7 +252,7 @@ private fun dot(ctx: Context, color: Color, sizeDp: Int, ring: Color = Color.Whi
     return BitmapDrawable(ctx.resources, bmp)
 }
 
-private fun darkTiles(): ColorMatrixColorFilter {
+internal fun darkTiles(): ColorMatrixColorFilter {
     val m = ColorMatrix(floatArrayOf(-1f, 0f, 0f, 0f, 255f, 0f, -1f, 0f, 0f, 255f, 0f, 0f, -1f, 0f, 255f, 0f, 0f, 0f, 1f, 0f))
     m.postConcat(ColorMatrix(floatArrayOf(-0.574f, 1.43f, 0.144f, 0f, 0f, 0.426f, 0.43f, 0.144f, 0f, 0f, 0.426f, 1.43f, -0.856f, 0f, 0f, 0f, 0f, 0f, 1f, 0f)))
     m.postConcat(ColorMatrix(floatArrayOf(0.8f, 0f, 0f, 0f, 8f, 0f, 0.72f, 0f, 0f, 4f, 0f, 0f, 0.9f, 0f, 14f, 0f, 0f, 0f, 1f, 0f)))
@@ -246,6 +267,40 @@ private suspend fun locate(ctx: Context): GeoPoint? = runCatching {
     loc?.let { GeoPoint(it.latitude, it.longitude) }
 }.getOrNull()
 
+private sealed interface MapSel {
+    data class Official(val place: Place) : MapSel
+    data class Report(val report: CommunityReport) : MapSel
+    data class Spot(val hotspot: Hotspot) : MapSel
+}
+
+private val MapRed = Color(0xFFFF4D5E)
+private val MapGreen = Color(0xFF5EE0A0)
+private val MapLilac = Color(0xFFC49BFF)
+private val MapAmber = Color(0xFFFFB547)
+private val MapInk = Color(0xFFF3EDF7)
+private val MapMuted = Color(0xFFA99BB8)
+private val MapSurface = Color(0xFF221A2C)
+private val MapSurface2 = Color(0xFF2E2439)
+private val MapLine = Color(0xFF3D3149)
+
+private fun ago(t: Long): String {
+    val m = (System.currentTimeMillis() - t) / 60_000
+    return when {
+        m < 60 -> "${m.coerceAtLeast(1)} min ago"
+        m < 24 * 60 -> "${m / 60} h ago"
+        m < 48 * 60 -> "yesterday"
+        else -> "${m / (24 * 60)} days ago"
+    }
+}
+
+private fun navigateTo(ctx: Context, lat: Double, lng: Double) {
+    val nav = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$lat,$lng&mode=w")).setPackage("com.google.android.apps.maps")
+    runCatching { ctx.startActivity(nav) }.onFailure {
+        runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=walking"))) }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SafeMapScreen() {
     val ctx = LocalContext.current
@@ -255,11 +310,16 @@ fun SafeMapScreen() {
     var me by remember { mutableStateOf<GeoPoint?>(null) }
     var places by remember { mutableStateOf<List<Place>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var selected by remember { mutableStateOf<Place?>(null) }
-    var cells by remember { mutableStateOf<List<`in`.security4her.app.map.DangerCell>>(emptyList()) }
-    var reportAt by remember { mutableStateOf<GeoPoint?>(null) }
+    var selected by remember { mutableStateOf<MapSel?>(null) }
     var note by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableIntStateOf(0) }
+    var showSafe by rememberSaveable { mutableStateOf(true) }
+    var showDanger by rememberSaveable { mutableStateOf(true) }
+    var showHot by rememberSaveable { mutableStateOf(true) }
+    var adding by remember { mutableStateOf<String?>(null) } // danger | safe_area | safe_place while adding
+    var addRadius by remember { mutableIntStateOf(250) }
+    var center by remember { mutableStateOf(NAGPUR) }
+    val cd by Community.data.collectAsStateWithLifecycle()
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { hasLocation = granted() }
 
     val map = remember {
@@ -281,6 +341,22 @@ fun SafeMapScreen() {
             controller.setZoom(14.5)
             controller.setCenter(NAGPUR)
             setBackgroundColor(0xFF16101E.toInt())
+            addMapListener(object : MapListener {
+                override fun onScroll(event: ScrollEvent?): Boolean {
+                    mapCenter.let { center = GeoPoint(it.latitude, it.longitude) }
+                    return false
+                }
+                override fun onZoom(event: ZoomEvent?): Boolean = false
+            })
+        }
+    }
+    // Live preview of the area being added.
+    val preview = remember {
+        Polygon(map).apply {
+            outlinePaint.color = MapLilac.toArgb()
+            outlinePaint.strokeWidth = 4f
+            outlinePaint.pathEffect = DashPathEffect(floatArrayOf(18f, 12f), 0f)
+            fillPaint.color = MapLilac.copy(alpha = 0.12f).toArgb()
         }
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -298,75 +374,142 @@ fun SafeMapScreen() {
         error = null
         val here = if (hasLocation) locate(ctx) else null
         me = here
-        val center = here ?: NAGPUR
-        map.controller.animateTo(center, 15.0, 700L)
+        val c = here ?: NAGPUR
+        map.controller.animateTo(c, 15.0, 700L)
         places = null
         places = try {
-            Places.near(center.latitude, center.longitude).also {
-                `in`.security4her.app.core.AppLog.info("Map", "Loaded ${it.size} safe places near %.4f, %.4f".format(Locale.US, center.latitude, center.longitude))
+            Places.near(c.latitude, c.longitude).also {
+                AppLog.info("Map", "Loaded ${it.size} safe places near %.4f, %.4f".format(Locale.US, c.latitude, c.longitude))
             }
         } catch (e: Exception) {
-            `in`.security4her.app.core.AppLog.warn("Map", "Couldn't load safe places", e)
-            error = "Couldn't load places. Check your internet and tap Refresh."
+            AppLog.warn("Map", "Couldn't load safe places", e)
+            error = "Couldn't load hospitals and police stations. Check your internet and tap Refresh."
             emptyList()
         }
-        if (!Backend.mock) cells = runCatching {
-            MapRepository(Backend.client).dangerCells(center.latitude - 0.05, center.longitude - 0.05, center.latitude + 0.05, center.longitude + 0.05)
-        }.getOrDefault(emptyList())
+    }
+    // Community reports: now, then every minute while the map is open.
+    LaunchedEffect(Unit) {
+        while (true) {
+            Community.flush()
+            Community.sync()
+            delay(60_000)
+        }
     }
 
-    // Keep the overlays in step with state.
-    LaunchedEffect(me, places, cells, selected) {
+    // Everything that counts as "somewhere safe to go": hospitals, police, pharmacies and places women added.
+    val here = me ?: NAGPUR
+    val safePlaces = remember(places, cd, me) {
+        val community = cd.reports.filter { it.kind == "safe_place" }.map { r ->
+            Place(
+                id = r.id, name = r.name ?: Community.label(r.kind, r.category), kind = "community",
+                lat = r.lat, lng = r.lng, phone = null, distanceM = meters(here.latitude, here.longitude, r.lat, r.lng),
+            )
+        }
+        (places.orEmpty() + community).sortedBy { it.distanceM }
+    }
+    val hotspots = remember(cd) { Community.hotspots(cd) }
+    val danger = remember(me, cd) { me?.let { Community.dangerAt(it.latitude, it.longitude, cd) } }
+
+    LaunchedEffect(me, places, cd, selected, showSafe, showDanger, showHot, adding) {
         map.overlays.clear()
         map.overlays += MapEventsOverlay(object : MapEventsReceiver {
             override fun singleTapConfirmedHelper(p: GeoPoint?) = false.also { selected = null }
             override fun longPressHelper(p: GeoPoint?): Boolean {
-                if (Backend.mock) note = "Reporting unsafe spots needs the Security4Her server." else reportAt = p
+                if (p != null && adding == null) {
+                    selected = null
+                    adding = "danger"
+                    map.controller.animateTo(p)
+                }
                 return true
             }
         })
-        cells.forEach { c ->
+        fun circle(lat: Double, lng: Double, radius: Double, fill: Color, stroke: Color, width: Float, dashed: Boolean, onTap: () -> Unit) {
             map.overlays += Polygon(map).apply {
-                points = Polygon.pointsAsCircle(GeoPoint(c.lat, c.lng), 150.0)
-                fillPaint.color = Color(0x55FF4D5E).toArgb()
-                outlinePaint.color = Color(0xAAFF4D5E).toArgb()
-                outlinePaint.strokeWidth = 2f
-                setOnClickListener { _, _, _ -> true }
+                points = Polygon.pointsAsCircle(GeoPoint(lat, lng), radius)
+                fillPaint.color = fill.toArgb()
+                outlinePaint.color = stroke.toArgb()
+                outlinePaint.strokeWidth = width
+                if (dashed) outlinePaint.pathEffect = DashPathEffect(floatArrayOf(16f, 10f), 0f)
+                infoWindow = null
+                setOnClickListener { _, _, _ -> if (adding == null) onTap(); adding == null }
             }
         }
-        places.orEmpty().forEach { p ->
-            map.overlays += Marker(map).apply {
-                position = GeoPoint(p.lat, p.lng)
-                icon = dot(ctx, kindColor[p.kind] ?: Color(0xFFC49BFF), if (selected?.id == p.id) 30 else 20)
-                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                infoWindow = null
-                setOnMarkerClickListener { _, _ -> selected = p; true }
+        if (showSafe) cd.reports.filter { it.kind == "safe_area" }.forEach { r ->
+            val n = Community.people(r, cd).coerceAtMost(4)
+            circle(r.lat, r.lng, r.radiusM.toDouble(), MapGreen.copy(alpha = 0.08f + 0.04f * n), MapGreen.copy(alpha = 0.7f), 2.5f, false) { selected = MapSel.Report(r) }
+        }
+        if (showDanger) cd.reports.filter { it.kind == "danger" }.forEach { r ->
+            val n = Community.people(r, cd).coerceAtMost(4)
+            circle(r.lat, r.lng, r.radiusM.toDouble(), MapRed.copy(alpha = 0.08f + 0.05f * n), MapRed.copy(alpha = 0.75f), 2.5f, false) { selected = MapSel.Report(r) }
+        }
+        if (showHot) hotspots.forEach { h ->
+            circle(h.lat, h.lng, h.radiusM.toDouble(), MapRed.copy(alpha = 0.28f), MapRed, 4f, true) { selected = MapSel.Spot(h) }
+        }
+        if (showSafe) {
+            places.orEmpty().forEach { p ->
+                val sel = (selected as? MapSel.Official)?.place?.id == p.id
+                map.overlays += Marker(map).apply {
+                    position = GeoPoint(p.lat, p.lng)
+                    icon = dot(ctx, kindColor[p.kind] ?: MapLilac, if (sel) 30 else 20)
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    infoWindow = null
+                    setOnMarkerClickListener { _, _ -> if (adding == null) selected = MapSel.Official(p); true }
+                }
+            }
+            cd.reports.filter { it.kind == "safe_place" }.forEach { r ->
+                val sel = (selected as? MapSel.Report)?.report?.id == r.id
+                map.overlays += Marker(map).apply {
+                    position = GeoPoint(r.lat, r.lng)
+                    icon = dot(ctx, MapLilac, if (sel) 32 else 24)
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    infoWindow = null
+                    setOnMarkerClickListener { _, _ -> if (adding == null) selected = MapSel.Report(r); true }
+                }
             }
         }
         me?.let {
             map.overlays += Marker(map).apply {
                 position = it
-                icon = dot(ctx, Color(0xFFFF4D5E), 44, halo = true)
+                icon = dot(ctx, MapRed, 44, halo = true)
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                 infoWindow = null
             }
         }
+        if (adding == "danger" || adding == "safe_area") map.overlays += preview
         map.invalidate()
+    }
+    LaunchedEffect(adding, center, addRadius) {
+        if (adding == "danger" || adding == "safe_area") {
+            val c = if (adding == "danger") MapRed else MapGreen
+            preview.points = Polygon.pointsAsCircle(center, addRadius.toDouble())
+            preview.outlinePaint.color = c.toArgb()
+            preview.fillPaint.color = c.copy(alpha = 0.14f).toArgb()
+            map.invalidate()
+        }
     }
 
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
             AndroidView(factory = { map }, modifier = Modifier.fillMaxSize().clipToBounds())
-            Row(Modifier.align(Alignment.TopStart).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("police", "hospital", "pharmacy").forEach { k ->
-                    Row(
-                        Modifier.clip(RoundedCornerShape(20.dp)).background(Color(0xE6221A2C)).padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(kindColor[k]!!))
-                        Spacer(Modifier.width(6.dp))
-                        Text(kindLabel(k), fontSize = 12.sp, color = Color(0xFFF3EDF7))
-                    }
+            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (danger != null && adding == null) DangerBanner(danger, safePlaces.firstOrNull()) { p ->
+                    navigateTo(ctx, p.lat, p.lng)
+                }
+                if (adding == null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LayerChip("Safe", MapGreen, showSafe) { showSafe = !showSafe }
+                    LayerChip("Danger", MapRed, showDanger) { showDanger = !showDanger }
+                    LayerChip("SOS hotspots", MapRed, showHot, dashed = true) { showHot = !showHot }
+                } else Box(Modifier.clip(RoundedCornerShape(20.dp)).background(Color(0xF0221A2C)).padding(horizontal = 14.dp, vertical = 9.dp)) {
+                    Text("Drag the map to put the pin on the spot", fontSize = 13.sp, color = MapInk)
+                }
+            }
+            if (adding != null) {
+                Canvas(Modifier.align(Alignment.Center).offset(y = (-21).dp).size(width = 30.dp, height = 42.dp)) {
+                    val r = size.width / 2
+                    val c = when (adding) { "danger" -> MapRed; "safe_area" -> MapGreen; else -> MapLilac }
+                    drawLine(c, Offset(r, r * 1.6f), Offset(r, size.height - 2.dp.toPx()), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
+                    drawCircle(c, radius = r, center = Offset(r, r))
+                    drawCircle(Color(0xFF16101E), radius = r * 0.38f, center = Offset(r, r))
                 }
             }
             Column(Modifier.align(Alignment.BottomEnd).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -374,59 +517,268 @@ fun SafeMapScreen() {
                 MapButton("−") { map.controller.zoomOut() }
                 MapButton("◎") { (me ?: NAGPUR).let { map.controller.animateTo(it, 16.0, 500L) } }
             }
+            if (adding == null) Box(
+                Modifier.align(Alignment.BottomStart).padding(12.dp).clip(RoundedCornerShape(24.dp)).background(MapLilac)
+                    .clickable { selected = null; adding = "danger"; addRadius = 250 }.padding(horizontal = 18.dp, vertical = 12.dp),
+            ) { Text("+  Add to map", color = Color(0xFF1E0E33), fontWeight = FontWeight.SemiBold) }
             Text(
                 "© OpenStreetMap contributors", fontSize = 10.sp, color = Color(0xB3A99BB8),
-                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(4.dp),
             )
-            if (places == null) CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color(0xFFC49BFF))
+            if (places == null) CircularProgressIndicator(Modifier.align(Alignment.Center), color = MapLilac)
         }
 
-        Column(Modifier.fillMaxWidth().heightIn(max = 330.dp).background(Color(0xFF221A2C)).padding(top = 14.dp)) {
-            Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Nearest safe places", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        when {
-                            !hasLocation -> "Showing Nagpur. Allow location to see places near you."
-                            me == null && places != null -> "Couldn't find you yet. Showing Nagpur."
-                            else -> "Within 5 km of you, from OpenStreetMap"
-                        },
-                        fontSize = 12.sp, color = Color(0xFFA99BB8),
-                    )
+        val panel = Modifier.fillMaxWidth().background(MapSurface)
+        val sel = selected
+        when {
+            adding != null -> AddPanel(
+                kind = adding!!, radius = addRadius, onKind = { adding = it }, onRadius = { addRadius = it },
+                onCancel = { adding = null },
+                onSubmit = { kind, cat, name, text ->
+                    val at = center
+                    adding = null
+                    scope.launch {
+                        val shared = Community.add(ctx, kind, at.latitude, at.longitude, if (kind == "safe_place") 0 else addRadius, cat, name, text)
+                        note = if (shared) "Added. Other women will see it on their map." else "Saved on your phone. It'll be shared when you're back online."
+                    }
+                },
+                modifier = panel,
+            )
+            sel is MapSel.Report -> ReportPanel(sel.report, cd, here, onClose = { selected = null }, modifier = panel) {
+                scope.launch { Community.confirm(ctx, sel.report) }
+            }
+            sel is MapSel.Spot -> HotspotPanel(sel.hotspot, onClose = { selected = null }, modifier = panel)
+            else -> Column(panel.heightIn(max = 330.dp).padding(top = 14.dp)) {
+                Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Nearest safe places", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            when {
+                                !hasLocation -> "Showing Nagpur. Allow location to see places near you."
+                                me == null && places != null -> "Couldn't find you yet. Showing Nagpur."
+                                else -> "Hospitals, police and places women added"
+                            },
+                            fontSize = 12.sp, color = MapMuted,
+                        )
+                    }
+                    if (!hasLocation) TextButton(onClick = {
+                        ask.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                    }) { Text("Allow", color = MapLilac) }
+                    else TextButton(onClick = { reload++ }) { Text("Refresh", color = MapLilac) }
                 }
-                if (!hasLocation) TextButton(onClick = {
-                    ask.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-                }) { Text("Allow", color = Color(0xFFC49BFF)) }
-                else TextButton(onClick = { reload++ }) { Text("Refresh", color = Color(0xFFC49BFF)) }
-            }
-            (note ?: error)?.let { Text(it, fontSize = 13.sp, color = Color(0xFFFFB547), modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
-            val list = places.orEmpty().let { l -> selected?.let { s -> listOf(s) + l.filter { it.id != s.id } } ?: l }
-            if (places != null && list.isEmpty() && error == null) {
-                Text("No police stations, hospitals or pharmacies mapped within 5 km.", color = Color(0xFFA99BB8), modifier = Modifier.padding(20.dp))
-            }
-            LazyColumn(contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 12.dp)) {
-                itemsIndexed(list.take(15), key = { _, p -> p.id }) { _, p ->
-                    PlaceRow(p, selected?.id == p.id, onFocus = {
-                        selected = p
-                        map.controller.animateTo(GeoPoint(p.lat, p.lng), 16.5, 500L)
-                    })
+                (note ?: error)?.let { Text(it, fontSize = 13.sp, color = MapAmber, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
+                val focus = (sel as? MapSel.Official)?.place
+                val list = focus?.let { f -> listOf(f) + safePlaces.filter { it.id != f.id } } ?: safePlaces
+                if (places != null && list.isEmpty() && error == null) {
+                    Text("No police stations, hospitals or pharmacies mapped within 5 km.", color = MapMuted, modifier = Modifier.padding(20.dp))
+                }
+                val listState = rememberLazyListState()
+                LaunchedEffect(list.firstOrNull()?.id) { listState.scrollToItem(0) }
+                LazyColumn(state = listState, contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 12.dp)) {
+                    itemsIndexed(list.take(20), key = { _, p -> p.id }) { _, p ->
+                        val report = if (p.kind == "community") cd.reports.firstOrNull { it.id == p.id } else null
+                        PlaceRow(
+                            p, focus?.id == p.id,
+                            sub = report?.let { val n = Community.people(it, cd); "${Community.label(it.kind, it.category)} · $n " + (if (n == 1) "woman recommends" else "women recommend") },
+                            onFocus = {
+                                selected = report?.let { MapSel.Report(it) } ?: MapSel.Official(p)
+                                map.controller.animateTo(GeoPoint(p.lat, p.lng), 16.5, 500L)
+                            },
+                        )
+                    }
                 }
             }
         }
     }
+}
 
-    reportAt?.let { at ->
-        ReportSpotDialog(onDismiss = { reportAt = null }) { cat, text ->
-            reportAt = null
-            scope.launch {
-                note = try {
-                    MapRepository(Backend.client).reportUnsafe(at.latitude, at.longitude, cat, text)
-                    "Report saved. An area turns red once 3 women report it."
-                } catch (e: Exception) {
-                    "Couldn't save the report. Try again."
+@Composable
+private fun LayerChip(label: String, color: Color, on: Boolean, dashed: Boolean = false, onClick: () -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(20.dp)).background(if (on) Color(0xF02E2439) else Color(0xB3221A2C))
+            .border(1.dp, if (on) color.copy(alpha = 0.7f) else MapLine, RoundedCornerShape(20.dp)).clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(10.dp).clip(CircleShape).background(if (on) color.copy(alpha = if (dashed) 0.45f else 1f) else MapLine)
+                .then(if (dashed && on) Modifier.border(1.5.dp, color, CircleShape) else Modifier),
+        )
+        Spacer(Modifier.width(7.dp))
+        Text(label, fontSize = 12.sp, color = if (on) MapInk else MapMuted, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun DangerBanner(d: Pair<CommunityReport?, Hotspot?>, nearest: Place?, onGo: (Place) -> Unit) {
+    val (r, h) = d
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xF22A1520)).border(1.dp, MapRed.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Text("You're in an area marked unsafe", color = MapRed, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        Text(
+            listOfNotNull(
+                r?.let { val n = Community.people(it); "${Community.label(it.kind, it.category)}, reported by $n ${if (n == 1) "woman" else "women"}" },
+                h?.let { "${it.count} SOS alerts raised here recently" },
+            ).joinToString(". ") + ".",
+            color = MapInk, fontSize = 12.5.sp,
+        )
+        nearest?.let { p ->
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Nearest safe place: ${p.name}, ${distanceText(p.distanceM)}", color = MapMuted, fontSize = 12.sp,
+                    modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Box(Modifier.clip(RoundedCornerShape(12.dp)).background(MapLilac).clickable { onGo(p) }.padding(horizontal = 14.dp, vertical = 7.dp)) {
+                    Text("Go", color = Color(0xFF1E0E33), fontWeight = FontWeight.SemiBold)
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AddPanel(
+    kind: String, radius: Int, onKind: (String) -> Unit, onRadius: (Int) -> Unit, onCancel: () -> Unit,
+    onSubmit: (kind: String, category: String, name: String?, note: String?) -> Unit, modifier: Modifier,
+) {
+    var category by remember(kind) { mutableStateOf<String?>(null) }
+    var name by remember(kind) { mutableStateOf("") }
+    var text by remember { mutableStateOf("") }
+    val kindColor = when (kind) { "danger" -> MapRed; "safe_area" -> MapGreen; else -> MapLilac }
+    Column(modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()).padding(18.dp)) {
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MapSurface2).padding(4.dp)) {
+            listOf("danger" to "Danger zone", "safe_area" to "Safe area", "safe_place" to "Safe place").forEach { (k, l) ->
+                val sel = k == kind
+                val c = when (k) { "danger" -> MapRed; "safe_area" -> MapGreen; else -> MapLilac }
+                Box(
+                    Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(if (sel) c.copy(alpha = 0.22f) else Color.Transparent)
+                        .clickable { onKind(k) }.padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) { Text(l, color = if (sel) c else MapMuted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            when (kind) {
+                "danger" -> "What makes this area feel unsafe?"
+                "safe_area" -> "Why does this area feel safe?"
+                else -> "What kind of place is it?"
+            },
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Spacer(Modifier.height(8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Community.categories(kind).forEach { c ->
+                val sel = c.key == category
+                Box(
+                    Modifier.clip(RoundedCornerShape(18.dp)).background(if (sel) kindColor else MapSurface2).clickable { category = c.key }
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                ) { Text(c.label, color = if (sel) Color(0xFF16101E) else MapInk, fontSize = 13.sp) }
+            }
+        }
+        if (kind != "safe_place") {
+            Spacer(Modifier.height(14.dp))
+            Text("How big is the area?", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(100 to "A street", 250 to "A block", 500 to "A neighbourhood").forEach { (m, l) ->
+                    val sel = m == radius
+                    Column(
+                        Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(if (sel) kindColor.copy(alpha = 0.22f) else MapSurface2)
+                            .clickable { onRadius(m) }.padding(vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(l, color = if (sel) kindColor else MapInk, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text("$m m", color = MapMuted, fontSize = 11.sp)
+                    }
+                }
+            }
+        } else {
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                name, { if (it.length <= 60) name = it }, label = { Text("Name of the place") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MapLilac, unfocusedBorderColor = MapLine, focusedLabelColor = MapLilac, cursorColor = MapLilac),
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(
+            text, { if (it.length <= 200) text = it }, label = { Text("Anything others should know? (optional)") }, modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MapLilac, unfocusedBorderColor = MapLine, focusedLabelColor = MapLilac, cursorColor = MapLilac),
+        )
+        Text(
+            "Shared anonymously. Your name and number are never attached.",
+            color = MapMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onCancel) { Text("Cancel", color = MapMuted) }
+            Spacer(Modifier.weight(1f))
+            val ready = category != null && (kind != "safe_place" || name.isNotBlank())
+            Button(
+                onClick = { onSubmit(kind, category!!, name.ifBlank { null }, text.ifBlank { null }) }, enabled = ready,
+                colors = ButtonDefaults.buttonColors(containerColor = MapLilac, contentColor = Color(0xFF1E0E33), disabledContainerColor = MapSurface2, disabledContentColor = MapMuted),
+                shape = RoundedCornerShape(14.dp),
+            ) { Text("Add to map", fontWeight = FontWeight.SemiBold) }
+        }
+    }
+}
+
+@Composable
+private fun ReportPanel(r: CommunityReport, cd: CommunityData, here: GeoPoint, onClose: () -> Unit, modifier: Modifier, onConfirm: () -> Unit) {
+    val ctx = LocalContext.current
+    val people = Community.people(r, cd)
+    val mine = Community.confirmedByMe(ctx, r)
+    val color = when (r.kind) { "danger" -> MapRed; "safe_area" -> MapGreen; else -> MapLilac }
+    Column(modifier.padding(18.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(color))
+            Spacer(Modifier.width(8.dp))
+            Text(Community.kindLabel(r.kind), color = color, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            if (r.sample) Box(Modifier.clip(RoundedCornerShape(10.dp)).border(1.dp, MapLine, RoundedCornerShape(10.dp)).padding(horizontal = 8.dp, vertical = 2.dp)) {
+                Text("Sample", color = MapMuted, fontSize = 11.sp)
+            }
+            TextButton(onClick = onClose) { Text("Close", color = MapMuted) }
+        }
+        Text(r.name ?: Community.label(r.kind, r.category), style = MaterialTheme.typography.titleMedium)
+        if (r.name != null) Text(Community.label(r.kind, r.category), color = MapMuted, fontSize = 13.sp)
+        Text(
+            "${if (r.kind == "safe_place") "Recommended" else "Reported"} by $people ${if (people == 1) "woman" else "women"} · ${ago(r.at)} · " +
+                distanceText(meters(here.latitude, here.longitude, r.lat, r.lng)) + " away",
+            color = MapMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp),
+        )
+        r.note?.let { Text("“$it”", color = MapInk, fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp)) }
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (mine) Text(if (r.by == Community.me(ctx)) "You added this" else "You confirmed this", color = MapMuted, fontSize = 13.sp)
+            else OutlinedButton(onClick = onConfirm, border = BorderStroke(1.dp, color), shape = RoundedCornerShape(14.dp)) {
+                Text(if (r.kind == "safe_place") "I recommend it too" else "I agree", color = color)
+            }
+            if (r.kind == "safe_place") Button(
+                onClick = { navigateTo(ctx, r.lat, r.lng) },
+                colors = ButtonDefaults.buttonColors(containerColor = MapLilac, contentColor = Color(0xFF1E0E33)), shape = RoundedCornerShape(14.dp),
+            ) { Text("Go", fontWeight = FontWeight.SemiBold) }
+        }
+    }
+}
+
+@Composable
+private fun HotspotPanel(h: Hotspot, onClose: () -> Unit, modifier: Modifier) {
+    Column(modifier.padding(18.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(MapRed.copy(alpha = 0.45f)).border(1.5.dp, MapRed, CircleShape))
+            Spacer(Modifier.width(8.dp))
+            Text("SOS hotspot", color = MapRed, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            TextButton(onClick = onClose) { Text("Close", color = MapMuted) }
+        }
+        Text("${h.count} SOS alerts were raised here", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Marked red automatically because SOS keeps being used in this area (last one ${ago(h.lastAt)}). Stay on busy, lit roads here, or go around it.",
+            color = MapMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }
 
@@ -439,18 +791,21 @@ private fun MapButton(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PlaceRow(p: Place, selected: Boolean, onFocus: () -> Unit) {
+private fun PlaceRow(p: Place, selected: Boolean, sub: String? = null, onFocus: () -> Unit) {
     val ctx = LocalContext.current
     Row(
         Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(14.dp))
             .background(if (selected) Color(0xFF3A2D4A) else Color(0xFF2E2439)).clickable(onClick = onFocus).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(kindColor[p.kind] ?: Color(0xFFC49BFF)))
+        Box(Modifier.size(10.dp).clip(CircleShape).background(kindColor[p.kind] ?: MapLilac))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(p.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${kindLabel(p.kind)}, ${distanceText(p.distanceM)}", fontSize = 12.sp, color = Color(0xFFA99BB8))
+            Text(
+                (sub ?: kindLabel(p.kind)) + ", ${distanceText(p.distanceM)}",
+                fontSize = 12.sp, color = if (sub != null) MapLilac else Color(0xFFA99BB8), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
         }
         val phone = p.phone ?: if (p.kind == "police") "112" else null
         phone?.let { n ->
@@ -458,41 +813,6 @@ private fun PlaceRow(p: Place, selected: Boolean, onFocus: () -> Unit) {
                 runCatching { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + n.filter { it.isDigit() || it == '+' }))) }
             }) { Text("Call", color = Color(0xFFF3EDF7)) }
         }
-        TextButton(onClick = {
-            val nav = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=${p.lat},${p.lng}&mode=w")).setPackage("com.google.android.apps.maps")
-            runCatching { ctx.startActivity(nav) }.onFailure {
-                runCatching {
-                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=walking")))
-                }
-            }
-        }) { Text("Go", color = Color(0xFFC49BFF), fontWeight = FontWeight.SemiBold) }
+        TextButton(onClick = { navigateTo(ctx, p.lat, p.lng) }) { Text("Go", color = MapLilac, fontWeight = FontWeight.SemiBold) }
     }
-}
-
-@Composable
-private fun ReportSpotDialog(onDismiss: () -> Unit, onSubmit: (ReportCategory, String?) -> Unit) {
-    var cat by remember { mutableStateOf(ReportCategory.POOR_LIGHTING) }
-    var text by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF221A2C),
-        title = { Text("Report this spot") },
-        text = {
-            Column {
-                ReportCategory.entries.forEach { c ->
-                    Row(
-                        Modifier.fillMaxWidth().selectable(c == cat, onClick = { cat = c }, role = Role.RadioButton).padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = c == cat, onClick = null, colors = RadioButtonDefaults.colors(selectedColor = Color(0xFFC49BFF)))
-                        Spacer(Modifier.width(8.dp))
-                        Text(c.label)
-                    }
-                }
-                OutlinedTextField(text, { if (it.length <= 280) text = it }, label = { Text("What happened? (optional)") }, modifier = Modifier.fillMaxWidth())
-            }
-        },
-        confirmButton = { TextButton(onClick = { onSubmit(cat, text.trim().ifBlank { null }) }) { Text("Report", color = Color(0xFFC49BFF)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Color(0xFFA99BB8)) } },
-    )
 }

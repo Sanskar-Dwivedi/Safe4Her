@@ -116,8 +116,10 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         AppLog.init(this)
+        `in`.security4her.app.core.Community.init(this)
         Backend.init(this)
         SosEngine.init(this)
+        `in`.security4her.app.sos.Journey.init(this)
         fun has(p: String) = if (ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED) "on" else "off"
         AppLog.info(
             "App",
@@ -128,21 +130,21 @@ class App : Application() {
 }
 
 // ---- Tokens: aubergine night, one lilac accent; red is reserved for SOS, amber for Test Mode ----
-private val Night = Color(0xFF16101E)
-private val Surface1 = Color(0xFF221A2C)
-private val Surface2 = Color(0xFF2E2439)
-private val Line = Color(0xFF3D3149)
-private val Ink = Color(0xFFF3EDF7)
-private val Muted = Color(0xFFA99BB8)
-private val Lilac = Color(0xFFC49BFF)
-private val OnLilac = Color(0xFF1E0E33)
-private val SosRed = Color(0xFFFF4D5E)
-private val Amber = Color(0xFFFFB547)
-private val LiveGreen = Color(0xFF5EE0A0) // only for "live location is on"
+internal val Night = Color(0xFF16101E)
+internal val Surface1 = Color(0xFF221A2C)
+internal val Surface2 = Color(0xFF2E2439)
+internal val Line = Color(0xFF3D3149)
+internal val Ink = Color(0xFFF3EDF7)
+internal val Muted = Color(0xFFA99BB8)
+internal val Lilac = Color(0xFFC49BFF)
+internal val OnLilac = Color(0xFF1E0E33)
+internal val SosRed = Color(0xFFFF4D5E)
+internal val Amber = Color(0xFFFFB547)
+internal val LiveGreen = Color(0xFF5EE0A0) // only for "live location is on"
 
 @OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
 private fun instrument(w: Int) = Font(R.font.instrument_sans, FontWeight(w), variationSettings = FontVariation.Settings(FontVariation.weight(w)))
-private val Instrument = FontFamily(instrument(400), instrument(500), instrument(600), instrument(700))
+internal val Instrument = FontFamily(instrument(400), instrument(500), instrument(600), instrument(700))
 
 @Composable
 private fun S4hTheme(content: @Composable () -> Unit) {
@@ -192,6 +194,7 @@ private fun Root() {
     var profile by remember { mutableStateOf<Profile?>(null) }
     var stage by remember { mutableStateOf(Stage.Loading) }
     val incident by SosEngine.current.collectAsStateWithLifecycle()
+    val journey by `in`.security4her.app.sos.Journey.state.collectAsStateWithLifecycle()
 
     fun route(p: Profile?) {
         profile = p
@@ -210,6 +213,7 @@ private fun Root() {
         val inc = incident
         when {
             inc != null && stage == Stage.Main -> ActiveSosScreen(inc)
+            journey?.status == "checking" && stage == Stage.Main -> CheckInScreen(journey!!)
             stage == Stage.Loading -> Loading()
             stage == Stage.Auth -> AuthScreen(onDone = ::route)
             stage == Stage.Verify -> VerifyScreen(profile!!, onDone = ::route)
@@ -234,7 +238,7 @@ private fun Loading() {
 }
 
 @Composable
-private fun Logo(size: androidx.compose.ui.unit.Dp) {
+internal fun Logo(size: androidx.compose.ui.unit.Dp) {
     Image(painterResource(R.drawable.logo_cat), contentDescription = "Security4Her", modifier = Modifier.size(size))
 }
 
@@ -478,12 +482,18 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
         LogScreen { showLog = false }
         return
     }
+    var showJourney by rememberSaveable { mutableStateOf(false) }
+    if (showJourney) {
+        BackHandler { showJourney = false }
+        JourneySetupScreen(onClose = { showJourney = false })
+        return
+    }
 
     Column(Modifier.fillMaxSize()) {
         if (settings.testMode) TestBanner(settings.demoNumber.isBlank()) { tab = Tab.Settings }
         Box(Modifier.weight(1f)) {
             when (tab) {
-                Tab.Home -> HomeScreen(profile, contacts, settings, onTab = { tab = it })
+                Tab.Home -> HomeScreen(profile, contacts, settings, onTab = { tab = it }, onJourney = { showJourney = true })
                 Tab.Contacts -> ContactsScreen(contacts, contactsError) { reload++ }
                 Tab.Map -> SafeMapScreen()
                 Tab.Settings -> SettingsScreen(profile, settings, onChange = { settings = it }, onSignedOut = onSignedOut, onOpenLog = { showLog = true })
@@ -546,7 +556,7 @@ private fun greeting(): String {
 }
 
 @Composable
-private fun HomeScreen(profile: Profile, contacts: List<Contact>?, settings: Settings, onTab: (Tab) -> Unit) {
+private fun HomeScreen(profile: Profile, contacts: List<Contact>?, settings: Settings, onTab: (Tab) -> Unit, onJourney: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var watch by remember { mutableStateOf<Boolean?>(null) }
@@ -589,6 +599,8 @@ private fun HomeScreen(profile: Profile, contacts: List<Contact>?, settings: Set
         Spacer(Modifier.height(24.dp))
         val live by LiveShare.session.collectAsStateWithLifecycle()
         fun sendLink(url: String) = ShareSheet.text(ctx, "Follow my live location: $url (updates every 20 s). $name, via Security4Her", "Send live link")
+        JourneyHomeCard(onStart = onJourney)
+        Spacer(Modifier.height(12.dp))
         live?.let { s ->
             LiveCard(s, onSend = { sendLink(s.url) }, onStop = { LiveShare.stop(ctx) })
             Spacer(Modifier.height(12.dp))
@@ -753,7 +765,7 @@ private fun SosHoldButton(onFire: () -> Unit) {
 }
 
 @Composable
-private fun Avatar(name: String, size: androidx.compose.ui.unit.Dp) {
+internal fun Avatar(name: String, size: androidx.compose.ui.unit.Dp) {
     Box(
         Modifier.size(size).clip(CircleShape).background(Surface2).border(2.dp, Night, CircleShape),
         contentAlignment = Alignment.Center,
@@ -958,6 +970,7 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
                 style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp),
             )
         }
+        SafeJourneySection()
         Section("Location updates") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -1028,7 +1041,7 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
 }
 
 @Composable
-private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
+internal fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
     Text(title, color = Muted, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Surface1).padding(16.dp), content = content)
     Spacer(Modifier.height(22.dp))
@@ -1219,7 +1232,7 @@ private fun ActiveSosScreen(inc: Incident) {
 }
 
 @Composable
-private fun Card(content: @Composable ColumnScope.() -> Unit) {
+internal fun Card(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Surface1).padding(18.dp), content = content)
 }
 
@@ -1324,7 +1337,7 @@ private fun LogScreen(onBack: () -> Unit) {
 // ---------------------------------------------------------------- Shared bits
 
 @Composable
-private fun Field(value: String, onChange: (String) -> Unit, label: String, type: KeyboardType = KeyboardType.Text, secret: Boolean = false) {
+internal fun Field(value: String, onChange: (String) -> Unit, label: String, type: KeyboardType = KeyboardType.Text, secret: Boolean = false) {
     OutlinedTextField(
         value = value, onValueChange = onChange, label = { Text(label) }, singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = type),
@@ -1339,7 +1352,7 @@ private fun Field(value: String, onChange: (String) -> Unit, label: String, type
 }
 
 @Composable
-private fun PrimaryButton(text: String, busy: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun PrimaryButton(text: String, busy: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
     Button(
         onClick = onClick, enabled = enabled && !busy,
         modifier = Modifier.fillMaxWidth().height(54.dp),
@@ -1351,7 +1364,7 @@ private fun PrimaryButton(text: String, busy: Boolean = false, enabled: Boolean 
 }
 
 @Composable
-private fun Note(text: String) {
+internal fun Note(text: String) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).border(1.dp, Line, RoundedCornerShape(12.dp)).padding(14.dp)) {
         Text(text, color = Muted, style = MaterialTheme.typography.bodySmall)
     }

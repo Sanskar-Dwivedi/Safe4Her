@@ -111,6 +111,7 @@ data class Incident(
     val liveUrl: String? = null,
     val livePushes: Int = 0,
     val liveFailing: Boolean = false,
+    val reason: String? = null, // set when the SOS was raised automatically (Safe Journey)
     val events: List<SosEvent> = emptyList(),
 ) {
     val active get() = state == "active"
@@ -135,15 +136,18 @@ object SosEngine {
     }
 
     @Synchronized
-    fun start(ctx: Context, id: String = UUID.randomUUID().toString(), trigger: String, source: String, fix: Fix? = null) {
+    fun start(ctx: Context, id: String = UUID.randomUUID().toString(), trigger: String, source: String, fix: Fix? = null, reason: String? = null) {
         val live = _current.value
         if (live != null && live.active) return // one SOS at a time; the watch and phone dedupe on id
         val s = Settings.load(ctx)
-        val how = when (trigger) { "knock" -> "Knock Knock on watch"; "shake" -> "shake on watch"; else -> "SOS button" }
+        val how = when (trigger) {
+            "knock" -> "Knock Knock on watch"; "shake" -> "shake on watch"; "journey" -> "Safe Journey: no answer to a check-in"; else -> "SOS button"
+        }
         _current.value = Incident(
             id = id, trigger = trigger, source = source, startedAt = System.currentTimeMillis(), test = s.testMode,
             lat = fix?.lat, lng = fix?.lng, acc = fix?.acc, fixAt = fix?.at,
-            events = listOf(SosEvent(System.currentTimeMillis(), "SOS started ($how)")),
+            events = listOfNotNull(SosEvent(System.currentTimeMillis(), "SOS started ($how)"), reason?.let { SosEvent(System.currentTimeMillis(), it, "fail") }),
+            reason = reason,
         ).let { val t = Live.newTopic(); it.copy(liveTopic = t, liveUrl = Live.url(t)) }
         persist()
         Locator.start(app, "sos")
@@ -181,6 +185,8 @@ object SosEngine {
         // Give GPS up to 8 s so the first text carries a location; a follow-up text goes out otherwise.
         withTimeoutOrNull(8_000) { while (!hasFreshFix()) delay(200) }
         if (!Backend.mock) withTimeoutOrNull(2_000) { while (_current.value?.shareUrl == null && _current.value?.server != "failed") delay(200) }
+        // Anonymous, rounded location for the community SOS-hotspot map.
+        _current.value?.let { inc -> if (inc.lat != null && inc.lng != null) `in`.security4her.app.core.Community.recordSos(inc.lat, inc.lng, inc.test) }
         // 3. SMS
         sendSos(s)
         // 4. Countdown call
@@ -258,7 +264,8 @@ object SosEngine {
         val inc = _current.value!!
         val name = userName()
         return buildString {
-            append("SOS from $name. I may be in danger.")
+            if (inc.reason != null) append("Automatic SOS for $name from Security4Her. ${inc.reason}")
+            else append("SOS from $name. I may be in danger.")
             inc.liveUrl?.let { append(" Live location: $it") }
             if (inc.lat != null && inc.lng != null) {
                 append(" My location: ${mapsLink(inc.lat, inc.lng)}")
@@ -539,6 +546,10 @@ class SosReceiver : BroadcastReceiver() {
             }
             CANCEL_CALL -> SosEngine.cancelCall()
             STOP_LIVE -> LiveShare.stop(context, "Stopped from the notification")
+            JOURNEY_OK -> Journey.respondOk(context)
+            JOURNEY_SOS -> Journey.alert(now = true)
+            JOURNEY_ARRIVED -> Journey.arrived(context)
+            JOURNEY_END -> Journey.end(context)
         }
     }
 
@@ -547,6 +558,10 @@ class SosReceiver : BroadcastReceiver() {
         const val DELIVERED = "in.security4her.app.SMS_DELIVERED"
         const val CANCEL_CALL = "in.security4her.app.CANCEL_CALL"
         const val STOP_LIVE = "in.security4her.app.STOP_LIVE"
+        const val JOURNEY_OK = "in.security4her.app.JOURNEY_OK"
+        const val JOURNEY_SOS = "in.security4her.app.JOURNEY_SOS"
+        const val JOURNEY_ARRIVED = "in.security4her.app.JOURNEY_ARRIVED"
+        const val JOURNEY_END = "in.security4her.app.JOURNEY_END"
     }
 }
 

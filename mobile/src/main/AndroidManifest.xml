@@ -55,6 +55,11 @@
             android:foregroundServiceType="location" />
 
         <service
+            android:name=".sos.JourneyService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <service
             android:name=".sos.LiveService"
             android:exported="false"
             android:foregroundServiceType="location" />
