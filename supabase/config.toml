@@ -1,0 +1,16 @@
+# Only the settings this project depends on. `supabase link` + `supabase db push` + `supabase functions deploy`.
+project_id = "security4her"
+
+# These functions authenticate callers themselves (device token / Telegram secret / OAuth state),
+# so the gateway must not require a user JWT.
+[functions.watch-sos]
+verify_jwt = false
+
+[functions.telegram-webhook]
+verify_jwt = false
+
+[functions.digilocker-start]
+verify_jwt = false
+
+[functions.digilocker-callback]
+verify_jwt = false
