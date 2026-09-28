@@ -1,0 +1,8 @@
+{"elements":[
+ {"type":"node","id":101,"lat":28.6316,"lon":77.2091,"tags":{"amenity":"police","name":"Connaught Place Police Station","phone":"+91-11-23361231"}},
+ {"type":"way","id":202,"center":{"lat":28.6358,"lon":77.2245},"tags":{"amenity":"hospital","name":"Lok Nayak Hospital","addr:street":"Jawaharlal Nehru Marg"}},
+ {"type":"node","id":303,"lat":28.6330,"lon":77.2190,"tags":{"amenity":"pharmacy","name":"Apollo Pharmacy's CP"}},
+ {"type":"node","id":404,"lat":28.6300,"lon":77.2150,"tags":{"amenity":"clinic"}},
+ {"type":"node","id":505,"lat":28.6400,"lon":77.2100,"tags":{"amenity":"cafe","name":"Not a safe-place category"}},
+ {"type":"node","id":101,"lat":28.6316,"lon":77.2091,"tags":{"amenity":"police","name":"duplicate"}}
+]}

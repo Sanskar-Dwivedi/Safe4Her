@@ -1,0 +1,40 @@
+# Publishes web-track/ (the live-location page linked in SOS messages) to GitHub Pages.
+# Setup: Settings → Pages → Source: GitHub Actions. Settings → Secrets and variables → Actions → Variables:
+#   SUPABASE_URL, SUPABASE_ANON_KEY  (the anon key is public by design; RLS + track() protect data)
+name: Deploy live-track page
+on:
+  push:
+    branches: [main]
+    paths: ["web-track/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inject Supabase config
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: |
+          test -n "$SUPABASE_URL" && test -n "$SUPABASE_ANON_KEY" || { echo "Set repo variables SUPABASE_URL and SUPABASE_ANON_KEY"; exit 1; }
+          sed -i "s|__SUPABASE_URL__|${SUPABASE_URL}|; s|__SUPABASE_ANON_KEY__|${SUPABASE_ANON_KEY}|" web-track/config.js
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web-track
+      - id: deployment
+        uses: actions/deploy-pages@v4
