@@ -73,7 +73,7 @@ Times are epoch milliseconds. Lat/lng are doubles and accuracy is a float in met
 | watch → phone | Message | `/s4h/link/request` | `{}`: asks the phone to (re)write `/s4h/device` |
 | phone → watch | Message | `/s4h/sos/ack` | `{"incidentId"}`, sent **immediately** on receiving start, before any SMS/network work |
 | phone → watch | DataItem | `/s4h/status` | key `json` → `{"incidentId","state":"active"\|"cancelled"\|"resolved","smsSent":2,"smsFailed":0,"serverAccepted":true,"callPlaced":false,"shareUrl":"https://…","updatedAt":1727}` |
-| phone → watch | DataItem | `/s4h/device` | key `json` → `{"userId","displayName","deviceToken"}`, written after login + `register_watch()` |
+| phone → watch | DataItem | `/s4h/device` | key `json` → `{"userId","displayName","deviceToken","testMode":true}`, written after login + `register_watch()` and whenever Test Mode changes |
 
 DataItems must be put with `setUrgent()`. The phone also writes `/s4h/status` for SOS started on the phone.
 
@@ -113,7 +113,7 @@ cloud project. All RPCs are called via PostgREST `rpc/<name>` with named paramet
 ### Edge Functions (`https://<project>.supabase.co/functions/v1/...`)
 | Function | Caller | Contract |
 |---|---|---|
-| `watch-sos` | **watch**, Wi‑Fi path | `POST` with headers `apikey: <anon>`, `Authorization: Bearer <anon>`, `x-device-token: <token>`; body `{"action":"start"\|"location"\|"cancel","incidentId","trigger","lat","lng","accuracyM","fixAt"}` → `200 {"ok":true,"created":bool,"shareUrl":"…","telegramSent":n}`; `401` for a bad token. On a first `start` it sends a Telegram alert to linked contacts |
+| `watch-sos` | **watch**, Wi‑Fi path | `POST` with headers `apikey: <anon>`, `Authorization: Bearer <anon>`, `x-device-token: <token>`; body `{"action":"start"\|"location"\|"cancel","incidentId","trigger","lat","lng","accuracyM","fixAt","test":true}` → `200 {"ok":true,"created":bool,"shareUrl":"…","telegramSent":n}`; `401` for a bad token. On a first `start` it sends a Telegram alert to linked contacts |
 | `telegram-webhook` | Telegram | Links a contact when they send `/start <telegram_link_code>` to the bot |
 | `digilocker-start?access_token=<user JWT>` | phone Custom Tab | Redirects to DigiLocker OAuth; the callback ends at `security4her://verified?ok=1\|0&reason=…`. Real flow needs `DIGILOCKER_CLIENT_ID/SECRET`; until then use `mock_verify_female()` |
 
