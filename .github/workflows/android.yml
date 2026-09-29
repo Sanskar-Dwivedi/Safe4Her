@@ -1,0 +1,62 @@
+# Builds the phone and watch apps, runs their unit tests and lint on every push and pull request.
+name: Android
+
+on:
+  push:
+    branches: [main]
+    paths: ["mobile/**", "wear/**", "gradle/**", "*.gradle.kts", "gradle.properties", ".github/workflows/android.yml"]
+  pull_request:
+    paths: ["mobile/**", "wear/**", "gradle/**", "*.gradle.kts", "gradle.properties", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Supabase and Maps keys are optional; without them the phone builds in demo mode.
+      - name: Write local.properties
+        run: |
+          chmod +x gradlew
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: Unit tests
+        run: ./gradlew :mobile:testDebugUnitTest :wear:testDebugUnitTest --console=plain
+
+      - name: Lint
+        run: ./gradlew :mobile:lintDebug :wear:lintDebug --console=plain
+
+      - name: Build APKs
+        run: ./gradlew :mobile:assembleDebug :wear:assembleDebug --console=plain
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reports
+          path: |
+            mobile/build/reports/
+            wear/build/reports/
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apks
+          path: |
+            mobile/build/outputs/apk/debug/*.apk
+            wear/build/outputs/apk/debug/*.apk

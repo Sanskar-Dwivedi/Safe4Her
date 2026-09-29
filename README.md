@@ -1,129 +1,145 @@
-# Security4Her
+<p align="center">
+  <img src="web-install/logo.png" alt="Security4Her logo" width="96">
+</p>
 
-A women's safety system: a **Wear OS watch app** + an **Android phone app** + a **Supabase backend**.
+<h1 align="center">Security4Her</h1>
 
-A gesture on the watch (Samsung Knock Knock, or shaking the wrist in Safety Mode) starts a 5-second
-cancellable SOS. The phone then sends an SMS with her location to selected family members and to the
-police number, places a call after a countdown, and shares a live-tracking link. If the phone isn't
-reachable, the watch reports the SOS straight to the server over Wi-Fi, and linked contacts get a
-Telegram alert. The phone app also has a safety map with the nearest police stations, hospitals and
-pharmacies, and community-reported danger zones. Login is women-only (DigiLocker verification;
-a mock mode is available for the demo).
+<p align="center">
+  <b>Help is one long press away.</b><br>
+  A women's safety app for Android and Wear OS that alerts, tracks and records the moment she needs it, even without internet.
+</p>
 
-> **Hackathon build — not an emergency service.** It has not been tested for reliability, battery life
-> or long-running use. Keep **Test Mode** on (the default): SOS messages and calls meant for police then
-> go to your demo number, never to 112.
+<p align="center">
+  <a href="https://security4her.vercel.app"><b>Install</b></a> ·
+  <a href="#features">Features</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#building">Building</a> ·
+  <a href="docs/RELEASING.md">Releasing</a> ·
+  <a href="docs/DEMO.md">Demo script</a>
+</p>
 
-## Repository layout and ownership
+<p align="center">
+  <img src="docs/screenshots/home.png" alt="Home screen with the SOS button" width="200">
+  <img src="docs/screenshots/sos-active.png" alt="Active SOS with timer, evidence recording and live link" width="200">
+  <img src="docs/screenshots/pocket-countdown.png" alt="Pocket SOS countdown over the lock screen" width="200">
+  <img src="docs/screenshots/safety-map.png" alt="Community safety map" width="200">
+</p>
 
-| Path | What | Owner |
-|---|---|---|
-| `CONTRACT.md` | **The integration contract.** Read this first. | Claude |
-| `wear/` | Wear OS watch app | Claude |
-| `mobile/` | Android phone app | Codex (except `mobile/.../map/`, Claude) |
-| `supabase/` | SQL migrations, pgTAP tests, Edge Functions | Claude |
-| `web-track/` | Live-location page for family (GitHub Pages) | Claude |
-| `scripts/` | DB test runner, city seed script | Claude |
-| `docs/` | Plans, Codex brief, demo script | — |
+> **Hackathon project, not an emergency service.** It has not been certified or tested at scale.
+> Keep **Test Mode** on while trying it: texts and calls meant for the police go to your own demo number.
 
-## How it works
+---
+
+## Features
+
+**Raising the alarm**
+- **Hold SOS** for 1.5 seconds on the home screen; a filling ring prevents accidental presses.
+- **From the watch** (Wear OS): SOS button, a configured gesture, or shaking the wrist in Safety Mode.
+- **Pocket SOS**: knock three times on the phone through a pocket or bag, screen off. It learns each user's knock, vibrates when armed and counts down 5 seconds so a false alarm can be cancelled.
+- **Safe Journey**: pick a destination; if she is late, stops too long or goes the wrong way and doesn't answer a check-in, an SOS goes out by itself.
+
+**When an SOS starts**
+- SMS to trusted contacts with her location and a live-map link (works without mobile data).
+- A live map, updated every 20 seconds, that anyone can open in a browser.
+- Audio and video evidence recording from the first second; the watch records audio too.
+- An automatic call to a chosen number after an adjustable countdown (3–60 s).
+- A fresh location text every 5 minutes for contacts without internet.
+
+**Around it**
+- **Community safety map**: hospitals, police and places women recommend; red zones from reports and repeated SOS alerts.
+- **Tamper-evident evidence**: every recording piece gets a chained SHA-256 fingerprint, is kept out of the gallery, is locked from deletion for 24 hours and exports as one zip with a manifest.
+- **Women-only community**: accounts are verified once through DigiLocker (demo sign-in in this build).
+- **Ask Security4Her**: an offline in-app assistant for "how does this work?" questions.
+- **In-app updates** for phone and watch, fingerprint-checked before install.
+- Five colour themes, all keeping SOS red as the one loud colour.
+
+## Architecture
 
 ```
-Knock Knock / shake ─► watch: 5 s countdown ─► incident UUID saved on watch
-        ├─ Data Layer ─► phone ─► SMS (family + police/demo no.) ─► countdown call ─► live link
-        │                  └────► Supabase upsert_incident (same UUID, deduplicated)
-        └─ HTTPS (Wi-Fi) ─► Edge Function watch-sos ─► Supabase + Telegram alert to linked contacts
-Family opens SMS link ─► web-track page ─► track(token) ─► live map (stops when she marks herself safe)
+ Wear OS watch ──Data Layer──► Android phone ──► SMS network        alerts with no data
+ (SOS, shake,   (messages +    (Compose UI,  ──► ntfy.sh stream ──► live map page (GitHub Pages)
+  audio)         file channel)  services,    ──► OpenStreetMap      maps, routing, places
+                                CameraX)     ──► Supabase           accounts, contacts, incidents
+                                                                    (local demo mode when unset)
 ```
 
-## Setup (about 30 minutes)
+No paid APIs: maps and routing come from OpenStreetMap, live location streams through ntfy.sh, and the
+phone runs in a self-contained demo mode when no Supabase project is configured.
 
-### 1. Supabase
-1. Create a free project at supabase.com.
-2. Under **Auth → Providers → Email**, turn **off** "Confirm email".
-3. Push the schema and deploy the functions:
-   ```bash
-   npx supabase login
-   npx supabase link --project-ref <your-project-ref>
-   npx supabase db push                       # applies supabase/migrations/*
-   npx supabase functions deploy watch-sos telegram-webhook digilocker-start digilocker-callback
-   npx supabase secrets set TRACK_BASE_URL=https://<github-user>.github.io/Safe4Her/ \
-       TELEGRAM_BOT_TOKEN=<from @BotFather> TELEGRAM_WEBHOOK_SECRET=<any long random string>
-   ```
-4. Point the Telegram bot at the webhook:
-   ```bash
-   curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<ref>.supabase.co/functions/v1/telegram-webhook&secret_token=<TELEGRAM_WEBHOOK_SECRET>"
-   ```
-5. Seed safe places for **Nagpur** (the demo city). Run this on your PC; it needs OpenStreetMap access.
-   ```bash
-   node scripts/seed_city.mjs --preset nagpur                    # writes supabase/seed/nagpur.sql (10 km around the centre)
-   # any other city: node scripts/seed_city.mjs "Pune, India" --radius-km 8
-   # optional curated hotspots: copy supabase/seed/known_hotspots.example.csv → known_hotspots.csv, then add
-   #   --hotspots supabase/seed/known_hotspots.csv
-   ```
-   Paste the generated SQL into the Supabase SQL editor and run it. Places are updated by OSM id when
-   re-run; hotspot rows are appended, so load each hotspot file only once.
-6. DigiLocker stays in **mock** mode (`app_config.digilocker_mode = 'mock'`) until you have Requester
-   credentials. To switch to the real flow:
-   - set `DIGILOCKER_MODE=digilocker`, `DIGILOCKER_CLIENT_ID`, `DIGILOCKER_CLIENT_SECRET`,
-     `DIGILOCKER_REDIRECT_URI` (`…/functions/v1/digilocker-callback`) and `DIGILOCKER_STATE_SECRET` as
-     function secrets;
-   - confirm the endpoint URLs in `supabase/functions/_shared/digilocker.ts` against your partner docs;
-   - then `update app_config set value='digilocker' where key='digilocker_mode'`.
+## Repository layout
 
-### 2. Live-tracking page (GitHub Pages)
-1. **Settings → Pages → Source: GitHub Actions.**
-2. **Settings → Secrets and variables → Actions → Variables:** add `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
-3. Merge to `main`. The `Deploy live-track page` workflow publishes `web-track/`.
+| Path | What |
+|---|---|
+| [`mobile/`](mobile) | Android phone app (Kotlin, Jetpack Compose) |
+| [`wear/`](wear) | Wear OS watch app (Kotlin, Compose for Wear OS) |
+| [`web-install/`](web-install) | Install website, `version.json` for in-app updates, `publish.sh` |
+| [`web-track/`](web-track) | Live-location page linked from SOS texts |
+| [`supabase/`](supabase) | Postgres migrations, pgTAP tests, Edge Functions |
+| [`scripts/`](scripts) | Database test runner, city seed script |
+| [`docs/`](docs) | Demo script, release guide, integration contract, archived plans |
+| [`keystore/`](keystore) | The shared **debug** keystore, so phone and watch builds can talk |
 
-### 3. Android apps
-1. Copy `local.properties.example` to `local.properties` and fill in the SDK path, Supabase URL, anon key,
-   `TRACK_BASE_URL` and `MAPS_API_KEY`.
-   - The Maps key must be an Android key restricted to package `in.security4her.app` and SHA‑1
-     `65:C4:9B:AA:AB:62:FC:17:2F:D2:D4:1F:10:87:21:C6:DA:8D:15:11`, which is the shared debug keystore in `keystore/`.
-2. Build and install:
-   ```bash
-   ./gradlew :wear:assembleDebug :mobile:assembleDebug
-   adb devices                                   # use -s <serial>: the watch often appears twice (IP + mDNS)
-   adb -s <watch-serial> install -r wear/build/outputs/apk/debug/wear-debug.apk
-   adb -s <phone-serial> install -r mobile/build/outputs/apk/debug/mobile-debug.apk
-   ```
-   Both apps **must** have the same package name and signing key, or the watch and phone can't talk.
-   Installing over the old `com.safecircle.wear` demo is fine; it is a different app.
-3. On the watch, open **Settings → Advanced features → Gestures → Knock Knock** and choose
-   **Security4Her**. Menu names vary with watch software.
-4. On the phone, sign up, verify (mock), grant all permissions, add contacts, and set Test Mode's
-   **demo number** to a teammate's phone. The watch links automatically, showing **Account: <name>** on
-   the watch home screen.
+## Building
 
-## Tests
+**Requirements:** JDK 17, Android SDK 36, a phone on Android 8+ and optionally a Wear OS 3+ watch.
 
-| What | Command | Status |
-|---|---|---|
-| DB schema, RLS, RPCs (pgTAP, 39 tests) | `scripts/test_db.sh` (local Postgres 16 + PostGIS + pgTAP) | passing |
-| Edge Functions (10 tests, mocked fetch) | `node --experimental-strip-types --test supabase/functions/tests/functions.test.ts` | passing |
-| Edge Functions type-check | `npx -p typescript@5 tsc -p supabase/functions` | clean |
-| Watch JVM tests (shake logic, contract wire format) | `./gradlew :wear:testDebugUnitTest` | 9 passing (compiled with kotlinc 2.3.21) |
-| Live-track page | Chromium smoke test against a mock `track()` | passing |
-| Android apps | `./gradlew :wear:assembleDebug :wear:lintDebug` | **not yet built.** The authoring environment couldn't reach Google Maven. Build on a PC first. |
+```bash
+cp local.properties.example local.properties   # set sdk.dir; Supabase keys are optional
+./gradlew :mobile:assembleDebug :wear:assembleDebug
+adb -s <phone-serial> install -r mobile/build/outputs/apk/debug/mobile-debug.apk
+adb -s <watch-serial> install -r wear/build/outputs/apk/debug/wear-debug.apk
+```
 
-The on-device test matrix is in [`docs/DEMO.md`](docs/DEMO.md).
+Both apps share one package name and signing key; the watch and phone can only talk to each other when
+they match. Leaving `SUPABASE_URL` empty runs the phone in demo mode with accounts and contacts stored
+on the device.
 
-## Known limitations (say these at the demo)
-- **Android doesn't allow apps to auto-call 112.** After the countdown the phone calls your configured
-  number and shows a one-tap **Call 112**. SMS to 112 isn't accepted in every state.
-- **SMS and calls need the phone's SIM.** With no phone, the watch can only reach the server over
-  Wi-Fi, which sends a Telegram alert to linked contacts. With no phone and no Wi-Fi, the watch shows
-  **NOT SENT – retrying** and sends once a connection returns.
-- **Knock Knock can't be told apart from tapping the app icon.** After setup, opening the watch app
-  always starts the 5 s countdown.
-- DigiLocker is mocked until Requester credentials exist.
-- Danger zones are community reports plus curated data. They are **not** official crime statistics,
-  and a cell appears only after 3 different women report it.
-- Battery life, Doze behaviour, reboot recovery and long-running reliability are untested.
+**On first launch:** create an account, verify with the demo DigiLocker account (Aadhaar `2345 6789 4821`,
+OTP `123456`), grant permissions, add a trusted contact and set a demo number in Test Mode.
+
+**Sideloaded installs** need SMS allowed once: Settings → Apps → Security4Her → ⋮ → *Allow restricted
+settings* → Permissions → SMS → Allow. The app walks through this on the Home screen.
+
+## Testing
+
+| What | Command |
+|---|---|
+| Phone unit tests (knock detector and more) | `./gradlew :mobile:testDebugUnitTest` |
+| Watch unit tests (shake logic, wire format) | `./gradlew :wear:testDebugUnitTest` |
+| Lint, both apps | `./gradlew :mobile:lintDebug :wear:lintDebug` |
+| Database schema, RLS and RPCs (pgTAP) | `scripts/test_db.sh` |
+| Edge Functions | `node --experimental-strip-types --test supabase/functions/tests/functions.test.ts` |
+
+CI runs the Android builds, unit tests and lint on every push ([`android.yml`](.github/workflows/android.yml)).
+A manual device checklist is in [`docs/DEMO.md`](docs/DEMO.md).
+
+## Releasing
+
+Bump `versionCode`/`versionName` in `mobile/build.gradle.kts` and/or `wear/build.gradle.kts`, then:
+
+```bash
+bash web-install/publish.sh "What's new, in one sentence"
+```
+
+This builds both apps, publishes them with `version.json` to the install site, and installed apps offer
+the update on their next launch. Details: [`docs/RELEASING.md`](docs/RELEASING.md).
+
+## Known limitations
+
+- **Android does not let apps dial 112 automatically.** The countdown calls the configured number and shows a one-tap *Call 112*.
+- **SMS needs the phone's SIM.** Without the phone, the watch can only reach the server over Wi-Fi.
+- **Sideloaded apps** need SMS allowed once (above); a Play Store release removes this step.
+- **DigiLocker, the assistant and Supabase** run as local demos unless credentials are configured.
+- **Battery life, Doze behaviour and long-running reliability** have not been measured.
+- **Community reports** are user-submitted, not official crime data.
 
 ## Docs
-- [`CONTRACT.md`](CONTRACT.md): package, versions, Data Layer paths, RPCs, SMS format.
-- [`docs/HACKATHON_PLAN.md`](docs/HACKATHON_PLAN.md): the 15-hour two-builder plan.
-- [`docs/CODEX_BRIEF.md`](docs/CODEX_BRIEF.md): the phone-app brief for Codex.
-- [`docs/PLAN.md`](docs/PLAN.md): the full long-term roadmap and trade-offs.
+
+- [`docs/DEMO.md`](docs/DEMO.md): the 5-minute demo script and device test matrix.
+- [`docs/RELEASING.md`](docs/RELEASING.md): publishing a new version.
+- [`CONTRACT.md`](CONTRACT.md): package, versions, Data Layer paths, RPCs and SMS format.
+- [`docs/archive/`](docs/archive): the original hackathon plans.
+
+## Team
+
+[Team name]: [member names]. Built at [Hackathon name].

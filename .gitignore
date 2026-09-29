@@ -1,5 +1,6 @@
 # Gradle / Android
 .gradle/
+.kotlin/
 build/
 local.properties
 captures/
@@ -21,3 +22,7 @@ supabase/.branches/
 # The shared DEBUG keystore is committed on purpose (keystore/debug.keystore).
 # Never commit a release keystore.
 keystore/release*
+# Tool output and local deploy state
+.playwright-mcp/
+.vercel/
+*.log
