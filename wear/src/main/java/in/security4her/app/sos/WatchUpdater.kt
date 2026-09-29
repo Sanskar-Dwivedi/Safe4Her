@@ -142,7 +142,7 @@ object WatchUpdater {
             else -> {
                 Log.w(TAG, "install failed: $status ${intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)}")
                 _state.value = State.Failed(
-                    if (status == PackageInstaller.STATUS_FAILURE_ABORTED) "Update cancelled." else "This watch couldn't install it. Update it from a computer.",
+                    if (status == PackageInstaller.STATUS_FAILURE_ABORTED) "Update cancelled." else "Update it from your phone: Security4Her → Me → Watch.",
                     r,
                 )
             }

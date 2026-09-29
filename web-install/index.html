@@ -125,6 +125,7 @@ p{margin:0}
 .cred{display:grid;grid-template-columns:auto 1fr auto;gap:6px 14px;align-items:center;margin:14px 0 0;padding:14px 16px;border-radius:16px;background:var(--plum);font-size:15px}
 .cred dt{color:var(--muted)}
 .cred dd{margin:0;color:var(--ink);font-weight:600;letter-spacing:.02em}
+details.alt{margin-top:14px;padding:12px 14px;border-radius:14px;background:var(--plum)}details.alt summary{cursor:pointer;color:var(--muted);font-weight:600}details.alt p{margin:10px 0 0}
 .copy-btn{background:var(--plum2);border:0;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:600;color:var(--ink);flex:none}
 .copy-btn.ok{background:var(--lilac);color:var(--on-lilac)}
 
@@ -616,11 +617,12 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
       <h1 class="hero-title">SOS on your wrist.</h1>
       <p class="lede">Press and hold on your Wear OS watch to raise the alarm, even when your phone is deep in a bag. The watch records audio from your wrist and sends it to your phone as evidence.</p>
       <div class="cta">
-        <a class="btn" href="Security4Her-watch.apk" download data-action="watch-download">
+        <a class="btn" href="#phone">Get the phone app first</a>
+        <a class="btn btn-ghost" href="Security4Her-watch.apk" download data-action="watch-download">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
-          Download the watch app <span class="meta">67.3 MB</span>
+          Watch APK <span class="meta">67.3 MB</span>
         </a>
-        <p class="cta-note">Wear OS 3 or newer. Watches can't install from a browser, so this goes on from a computer over Wi-Fi.</p>
+        <p class="cta-note">Wear OS 3 or newer. Watches can't install from a browser, so your phone installs it for you over Wi-Fi. No computer needed, and after that the watch updates itself.</p>
       </div>
     </div>
 
@@ -663,7 +665,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
               </div>
               <div class="scr winst" data-s="5">
                 <svg class="ring" viewBox="0 0 280 280"><circle class="track" cx="140" cy="140" r="132"/><circle class="prog" cx="140" cy="140" r="132"/></svg>
-                <div class="w-a"><svg class="logo"><use href="#logo"/></svg><b>Installing</b><span class="wlabel" style="margin-top:4px">from your computer</span></div>
+                <div class="w-a"><svg class="logo"><use href="#logo"/></svg><b>Installing</b><span class="wlabel" style="margin-top:4px">from your phone</span></div>
                 <div class="w-b"><svg class="logo"><use href="#logo"/></svg><b>Installed</b><span class="wlabel" style="margin-top:4px">Success</span></div>
               </div>
               <div class="scr" data-s="6">
@@ -679,14 +681,14 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
     </div>
 
     <div class="steps-col">
-      <div class="steps-head"><h2>Install in six steps</h2><span class="eta">About five minutes</span></div>
+      <div class="steps-head"><h2>Install from your phone</h2><span class="eta">About three minutes</span></div>
       <div class="meter" aria-hidden="true"><i></i></div>
       <ol class="steps">
         <li class="step" data-step="1">
-          <button class="step-head" type="button"><span class="num"><span>1</span><svg><use href="#i-check"/></svg></span><span class="step-title">Get the files on your computer</span></button>
+          <button class="step-head" type="button"><span class="num"><span>1</span><svg><use href="#i-check"/></svg></span><span class="step-title">Have the phone app ready</span></button>
           <div class="step-body"><div><div class="step-inner">
-            <p>Download the watch app to your computer. You also need <a href="https://developer.android.com/tools/releases/platform-tools" target="_blank" rel="noopener">Android platform tools</a>, which gives you the <strong>adb</strong> command. Put the watch app in the platform tools folder to keep things simple.</p>
-            <div class="step-actions"><a class="btn btn-sm" href="Security4Her-watch.apk" download data-action="watch-download">Download watch app</a><button class="link" type="button" data-next>I have both</button></div>
+            <p>The phone app installs the watch app for you. If Security4Her isn't on your phone yet, <a href="#phone">install it first</a>, then come back here.</p>
+            <div class="step-actions"><button class="btn btn-sm" type="button" data-next>It's on my phone</button></div>
           </div></div></div>
         </li>
         <li class="step" data-step="2">
@@ -699,36 +701,40 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
         <li class="step" data-step="3">
           <button class="step-head" type="button"><span class="num"><span>3</span><svg><use href="#i-check"/></svg></span><span class="step-title">Turn on wireless debugging</span></button>
           <div class="step-body"><div><div class="step-inner">
-            <p>Go back to Settings and open <strong>Developer options</strong>. Turn on <strong>ADB debugging</strong> and <strong>Debug over Wi-Fi</strong>, then open <strong>Wireless debugging</strong>. Keep the watch and computer on the same Wi-Fi.</p>
+            <p>Go back to Settings and open <strong>Developer options</strong>. Turn on <strong>ADB debugging</strong> and <strong>Debug over Wi-Fi</strong>, then open <strong>Wireless debugging</strong>. Keep the watch and phone on the same Wi-Fi.</p>
             <div class="step-actions"><button class="btn btn-sm" type="button" data-next>It's on</button></div>
           </div></div></div>
         </li>
         <li class="step" data-step="4">
-          <button class="step-head" type="button"><span class="num"><span>4</span><svg><use href="#i-check"/></svg></span><span class="step-title">Pair the computer</span></button>
+          <button class="step-head" type="button"><span class="num"><span>4</span><svg><use href="#i-check"/></svg></span><span class="step-title">Pair your phone</span></button>
           <div class="step-body"><div><div class="step-inner">
-            <p>Tap <strong>Pair new device</strong> on the watch and type what it shows. Then run the command and enter the six-digit code.</p>
+            <p>On your phone open Security4Her, then <strong>Me</strong>, then <strong>Install or update the watch app</strong>. On the watch tap <strong>Pair new device</strong>. The phone finds the watch by itself: type the six-digit code the watch shows and tap <strong>Pair and install</strong>.</p>
+            <div class="step-actions"><button class="btn btn-sm" type="button" data-next>It's installing</button></div>
+            <details class="alt"><summary>Prefer a computer? Install with adb</summary>
+            <p>Get <a href="https://developer.android.com/tools/releases/platform-tools" target="_blank" rel="noopener">Android platform tools</a> and the <a href="Security4Her-watch.apk" download>watch APK</a>. Type what the watch's Pair new device screen shows and run the command:</p>
             <div class="fields">
               <label>Watch IP address<input id="w-ip" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="192.168.1.23"></label>
               <label>Pairing port<input id="w-pp" inputmode="numeric" autocomplete="off" placeholder="37119"></label>
             </div>
             <div class="cmd"><code id="c1"></code><button class="copy-btn" type="button" data-copy-from="c1">Copy</button></div>
-            <div class="step-actions"><button class="btn btn-sm" type="button" data-next>It says paired</button></div>
-          </div></div></div>
-        </li>
-        <li class="step" data-step="5">
-          <button class="step-head" type="button"><span class="num"><span>5</span><svg><use href="#i-check"/></svg></span><span class="step-title">Connect and install</span></button>
-          <div class="step-body"><div><div class="step-inner">
-            <p>Back on the Wireless debugging screen, the watch shows its address with a different port. Type that port, then run both commands from the folder with the watch app.</p>
+            <p>Then type the port under IP address &amp; Port on the Wireless debugging screen and run both commands:</p>
             <div class="fields"><label>Debug port<input id="w-cp" inputmode="numeric" autocomplete="off" placeholder="41857"></label></div>
             <div class="cmd"><code id="c2"></code><button class="copy-btn" type="button" data-copy-from="c2">Copy</button></div>
             <div class="cmd"><code id="c3">adb install Security4Her-watch.apk</code><button class="copy-btn" type="button" data-copy-from="c3">Copy</button></div>
-            <div class="step-actions"><button class="btn btn-sm" type="button" data-next>It says Success</button></div>
+            </details>
+          </div></div></div>
+        </li>
+        <li class="step" data-step="5">
+          <button class="step-head" type="button"><span class="num"><span>5</span><svg><use href="#i-check"/></svg></span><span class="step-title">Let the phone install it</span></button>
+          <div class="step-body"><div><div class="step-inner">
+            <p>The phone downloads the watch app, checks its fingerprint and installs it on the watch. It takes about a minute; keep the watch awake until the phone shows four ticks.</p>
+            <div class="step-actions"><button class="btn btn-sm" type="button" data-next>All four ticked</button></div>
           </div></div></div>
         </li>
         <li class="step" data-step="6">
           <button class="step-head" type="button"><span class="num"><span>6</span><svg><use href="#i-check"/></svg></span><span class="step-title">Open it on the watch</span></button>
           <div class="step-body"><div><div class="step-inner">
-            <p>Open the phone app first, then Security4Her on the watch. They find each other on their own, and the phone shows <strong>Watch linked</strong>. You can turn wireless debugging off again.</p>
+            <p>Open the phone app first, then Security4Her on the watch. They find each other on their own, and the phone shows <strong>Watch linked</strong>. You can turn wireless debugging off again: from now on the watch installs its own updates.</p>
             <div class="step-actions"><button class="btn btn-sm" type="button" data-finish>It's linked</button></div>
           </div></div></div>
         </li>
@@ -780,7 +786,8 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
       <div class="faq-group">
         <h3>Watch</h3>
         <details><summary>adb says "command not found"</summary><p class="ans">Run the commands from inside the platform tools folder. On Windows use <code>.\adb</code> in PowerShell; on Mac or Linux use <code>./adb</code>.</p></details>
-        <details><summary>Pairing fails or times out</summary><p class="ans">The pairing code and port change every time you open Pair new device, so type the ones showing right now. The watch and computer must be on the same Wi-Fi, and some guest or office networks block this.</p></details>
+        <details><summary>The phone can't find my watch</summary><p class="ans">Keep the watch's Pair new device screen open while the phone looks; the code changes every time you open it. The watch and phone must be on the same Wi-Fi, and some guest or office networks block this. Still stuck? Tap <strong>Watch not found? Enter its address</strong> in the phone app and type the IP address and ports the watch shows.</p></details>
+        <details><summary>How does the watch get updates?</summary><p class="ans">After the first install from your phone, the watch checks for new versions by itself and asks you once on the watch before updating. If an update ever can't install, open the phone app, then Me, then <strong>Install or update the watch app</strong>.</p></details>
         <details><summary>The phone never shows Watch linked</summary><p class="ans">The watch must be paired with the phone in the Wear OS or Galaxy Wearable app first. Open the Security4Her phone app, then the watch app, and give it a few seconds.</p></details>
       </div>
       <div class="faq-group">

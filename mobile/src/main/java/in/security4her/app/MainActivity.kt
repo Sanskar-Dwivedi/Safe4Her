@@ -654,6 +654,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
     var sheet by rememberSaveable { mutableStateOf<String?>(null) }
     var showChat by rememberSaveable { mutableStateOf(false) }
     var showPractice by rememberSaveable { mutableStateOf(false) }
+    var showWatchInstall by rememberSaveable { mutableStateOf(false) }
 
     fun open(step: SetupStep) {
         when (step.key) {
@@ -671,6 +672,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
         perms -> { PermissionsScreen(onDone = { perms = false; resumed++ }); return }
         showChat -> { ChatScreen(onClose = { showChat = false }); return }
         showPractice -> { PocketPracticeScreen(onClose = { showPractice = false }); return }
+        showWatchInstall -> { WatchInstallScreen(onClose = { showWatchInstall = false }); return }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -694,7 +696,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
                         Tab.Me -> SettingsScreen(
                             profile, settings,
                             onChange = { settings = it }, onSignedOut = onSignedOut, onOpenLog = { showLog = true }, onOpenLocker = { showLocker = true },
-                            onOpenChat = { showChat = true }, onPractice = { showPractice = true },
+                            onOpenChat = { showChat = true }, onPractice = { showPractice = true }, onWatchInstall = { showWatchInstall = true },
                         )
                     }
                 }
@@ -1329,7 +1331,7 @@ private fun ContactDialog(c: Contact, onDismiss: () -> Unit, onSave: (Contact) -
 // ---------------------------------------------------------------- Settings
 
 @Composable
-private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit, onOpenLocker: () -> Unit, onOpenChat: () -> Unit, onPractice: () -> Unit) {
+private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit, onOpenLocker: () -> Unit, onOpenChat: () -> Unit, onPractice: () -> Unit, onWatchInstall: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var linkMsg by remember { mutableStateOf<String?>(null) }
@@ -1459,6 +1461,8 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
         }
         Section("During SOS") { DuringSosEditor(settings) { set(it) } }
         Section("Watch") {
+            ChunkyButton("Install or update the watch app", tone = Tone.Plain, onClick = onWatchInstall)
+            Spacer(Modifier.height(14.dp))
             Text("Your watch links to this account automatically. Re-link if it shows the wrong name.", color = Muted, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(10.dp))
             OutlinedButton(onClick = {

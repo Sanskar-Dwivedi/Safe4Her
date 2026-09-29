@@ -83,6 +83,9 @@ private val TOPICS = listOf(
     Topic(listOf("contact", "contacts", "people", "family", "friend", "who", "add")) {
         "Add trusted contacts in the People tab, from your phone book or by typing a number. They're texted in the order shown, and you can switch anyone off without deleting them."
     },
+    Topic(listOf("install watch", "watch app", "install on watch", "update watch", "watch update", "put on watch")) {
+        "Your phone installs the watch app for you, no computer needed. On the watch turn on Developer options, then Wireless debugging, and tap Pair new device. Then open Me → Install or update the watch app here, type the 6-digit code and tap Pair and install. After that the watch updates itself."
+    },
     Topic(listOf("watch", "wear", "wrist", "smartwatch")) {
         "With the Wear OS app, press and hold SOS on your watch even when your phone is in a bag. The watch also records audio from your wrist. It links to your phone on its own once both apps are open."
     },

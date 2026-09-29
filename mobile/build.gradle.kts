@@ -21,8 +21,8 @@ android {
         minSdk = 26
         targetSdk = 35
         // Bump both for every release; the in-app updater compares versionCode with web-install/version.json.
-        versionCode = 8
-        versionName = "0.3.4"
+        versionCode = 9
+        versionName = "0.3.5"
         buildConfigField("String", "SUPABASE_URL", cfg("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", cfg("SUPABASE_ANON_KEY"))
         buildConfigField("String", "TRACK_BASE_URL", cfg("TRACK_BASE_URL"))
@@ -54,6 +54,11 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+    // Compress code and native libraries inside the APK so the download is smaller.
+    packaging {
+        jniLibs { useLegacyPackaging = true }
+        dex { useLegacyPackaging = true }
     }
     buildFeatures {
         compose = true
@@ -93,6 +98,10 @@ dependencies {
     implementation("io.github.jan-tennert.supabase:auth-kt")
     implementation("io.github.jan-tennert.supabase:postgrest-kt")
     implementation("io.ktor:ktor-client-okhttp:3.4.3")
+    // Installs the watch app from the phone over Wi-Fi (wireless debugging), no computer needed
+    implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
+    implementation("org.conscrypt:conscrypt-android:2.5.3") // TLS 1.3 for adb pairing on every phone
+    implementation("org.bouncycastle:bcpkix-jdk15to18:1.81") // the phone's adb certificate
     constraints {
         implementation("androidx.fragment:fragment:1.8.9") {
             because("old transitive Fragment breaks Activity Result lint checks")
