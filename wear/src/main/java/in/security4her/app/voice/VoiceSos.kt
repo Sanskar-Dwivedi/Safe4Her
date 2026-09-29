@@ -243,18 +243,18 @@ class VoiceListener(
         private const val RATE = 16_000
         private const val FRAME = 320 // 20 ms
         private const val PRE_ROLL_FRAMES = 25 // 0.5 s
-        private const val WAKE_DB = 9f // wake the recogniser this far above the background
-        private const val QUIET_DB = 5f
-        private const val LOUD_DB = 10f // a "help" must peak this far above the background
-        private const val MIN_SPEECH_DB = -50f // ignore anything this faint however quiet the room is
-        private const val SLEEP_AFTER_MS = 1_200L
+        private const val WAKE_DB = 6f // wake the recogniser this far above the background
+        private const val QUIET_DB = 4f
+        private const val LOUD_DB = 6f // a "help" must peak this far above the background
+        private const val MIN_SPEECH_DB = -60f // ignore anything this faint however quiet the room is
+        private const val SLEEP_AFTER_MS = 1_800L
         private const val MAX_SESSION_MS = 12_000L
         /**
-         * What the recogniser may hear. Besides "help" it knows a few words that sound like it, so "hello hello
-         * hello" or "hey hey hey" come out as themselves instead of being forced into "help". Tested on 78
-         * recordings (two voices, clean and in street noise): every "HELP HELP HELP" caught, no false triggers.
-         * Adding more near-words (health, hell, held…) made it miss real helps in noise, so the list stays short.
+         * What the recogniser may hear. Besides "help" (and "me", for "help me") it knows a few words that sound
+         * like it, so "hello hello hello" or "hey hey hey" come out as themselves instead of being forced into
+         * "help". Adding more near-words (health, hell, held…) made it miss real helps in noise, so the list stays
+         * short. See VoicePhraseLogic for how it was tested.
          */
-        private const val GRAMMAR = "[\"help\", \"hello\", \"hey\", \"hi\", \"yelp\", \"kelp\", \"well\", \"yell\", \"[unk]\"]"
+        private const val GRAMMAR = "[\"help\", \"me\", \"hello\", \"hey\", \"hi\", \"yelp\", \"kelp\", \"well\", \"yell\", \"[unk]\"]"
     }
 }

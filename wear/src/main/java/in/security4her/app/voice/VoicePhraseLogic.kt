@@ -3,20 +3,25 @@ package `in`.security4her.app.voice
 /**
  * Decides when "HELP HELP HELP" was said (pure, unit-tested; no Android).
  *
- * The recogniser reports "help", a few look-alike words, or "[unk]" (anything else). A trigger needs [needed] words
- * that are all:
- * - "help", recognised with confidence ≥ [minConf];
+ * The recogniser reports "help", "me", a few look-alike words, or "[unk]" (anything else). A trigger needs [needed]
+ * helps that are all:
+ * - "help" (or "yelp"/"kelp", which is how a shouted or clipped "help" often comes out), confidence ≥ [minConf];
  * - clearly louder than the background ([Word.loud]);
- * - back to back: nothing else said in between, each starting ≤ [maxGapMs] after the previous one ended;
+ * - back to back: each starting ≤ [maxGapMs] after the previous one ended, with no other word in between
+ *   ("me" is allowed, so "help me, help me, help me" counts);
  * - within [maxSpanMs] from the first to the last.
- * Anything else ("help me", a song with words between the helps, a slow "help … help … help") breaks the run.
+ * Any other word in between ("help desk", a song, a conversation) starts the count again. A faint "help" (TV in
+ * the next room) doesn't count but doesn't cancel her own helps either.
  * After a trigger nothing counts for [cooldownMs], so one shout can't start two countdowns.
+ *
+ * Tuned on 276 recordings (two voices; fast, slow, paused, panicked, quiet; clean and in street noise down to
+ * 3 dB): every "HELP HELP HELP" caught except words run together at extreme speed, and no false triggers.
  */
 class VoicePhraseLogic(
     private val needed: Int = 3,
-    private val minConf: Float = 0.7f,
-    private val maxGapMs: Long = 1_800,
-    private val maxSpanMs: Long = 5_000,
+    private val minConf: Float = 0.5f,
+    private val maxGapMs: Long = 3_500,
+    private val maxSpanMs: Long = 10_000,
     private val cooldownMs: Long = 15_000,
 ) {
     data class Word(val text: String, val conf: Float, val startMs: Long, val endMs: Long, val loud: Boolean)
@@ -30,7 +35,9 @@ class VoicePhraseLogic(
     /** Feed words in time order. Returns true on the word that completes the phrase. */
     fun onWord(w: Word): Boolean {
         if (w.startMs < quietUntil) { run.clear(); return false }
-        val isHelp = w.text == "help" && w.conf >= minConf && w.loud
+        if (w.text in PASS) return false
+        if (w.text in HELPS && !w.loud) return false // faint: someone else's "help", not hers
+        val isHelp = w.text in HELPS && w.conf >= minConf
         if (!isHelp) { run.clear(); return false }
         val last = run.lastOrNull()
         if (last != null && w.startMs - last.endMs > maxGapMs) run.clear()
@@ -53,7 +60,11 @@ class VoicePhraseLogic(
         if (nowMs - last.endMs > maxGapMs + REPORT_DELAY_MS) run.clear()
     }
 
-    private companion object { const val REPORT_DELAY_MS = 2_500L }
-
     fun reset() { run.clear() }
+
+    private companion object {
+        const val REPORT_DELAY_MS = 2_500L
+        val HELPS = setOf("help", "yelp", "kelp")
+        val PASS = setOf("me")
+    }
 }

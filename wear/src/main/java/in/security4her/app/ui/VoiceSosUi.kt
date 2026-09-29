@@ -108,7 +108,7 @@ fun VoiceSosScreen(on: Boolean, onToggle: (Boolean) -> Unit, onBack: () -> Unit)
         )
         if (on) HelpDots(heard)
         Pill(if (on) "Voice SOS: ON" else "Voice SOS: OFF", if (on) Purple else Off) { onToggle(!on) }
-        T("Say HELP HELP HELP clearly, one after another. The watch vibrates and gives you 5 seconds to cancel, then sends the SOS.", Grey, 11.sp)
+        T("Say HELP HELP HELP, with short pauses if you like. The watch vibrates and gives you 5 seconds to cancel, then sends the SOS.", Grey, 11.sp)
         Pill("Practise", Off) { practising = true }
         T("Listens only while on. Nothing is recorded or sent. Uses extra battery.", Grey, 10.sp)
         Pill("Back", Off, onBack)
@@ -143,7 +143,7 @@ private fun VoicePracticeScreen(onBack: () -> Unit) {
             },
             color = if (hits > 0) Green else Grey, size = 13.sp, bold = hits > 0,
         )
-        T("Tip: say each HELP on its own, loud and clear. \"Help me\" or other words in between won't count.", Grey, 10.sp)
+        T("Tip: say HELP three times, loud and clear. \"Help me\" works too; other words in between start the count again.", Grey, 10.sp)
         Pill("Done", Off, onBack)
     }
 }
