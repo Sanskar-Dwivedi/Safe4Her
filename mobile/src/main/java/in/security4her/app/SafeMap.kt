@@ -102,13 +102,13 @@ private val NAGPUR = GeoPoint(21.1458, 79.0882) // demo city, used until we know
 
 data class Place(val id: String, val name: String, val kind: String, val lat: Double, val lng: Double, val phone: String?, val distanceM: Double)
 
-private val kindColor = mapOf(
+private val kindColor get() = mapOf(
     "police" to Color(0xFF7FB2FF),
     "hospital" to Color(0xFF5EE0A0),
     "clinic" to Color(0xFF5EE0A0),
     "pharmacy" to Color(0xFFFFD166),
     "fire_station" to Color(0xFFFF9E64),
-    "community" to Color(0xFFC49BFF),
+    "community" to Lilac,
 )
 
 private fun kindLabel(k: String) = when (k) {
@@ -255,7 +255,7 @@ internal fun dot(ctx: Context, color: Color, sizeDp: Int, ring: Color = Color.Wh
 internal fun darkTiles(): ColorMatrixColorFilter {
     val m = ColorMatrix(floatArrayOf(-1f, 0f, 0f, 0f, 255f, 0f, -1f, 0f, 0f, 255f, 0f, 0f, -1f, 0f, 255f, 0f, 0f, 0f, 1f, 0f))
     m.postConcat(ColorMatrix(floatArrayOf(-0.574f, 1.43f, 0.144f, 0f, 0f, 0.426f, 0.43f, 0.144f, 0f, 0f, 0.426f, 1.43f, -0.856f, 0f, 0f, 0f, 0f, 0f, 1f, 0f)))
-    m.postConcat(ColorMatrix(floatArrayOf(0.8f, 0f, 0f, 0f, 8f, 0f, 0.72f, 0f, 0f, 4f, 0f, 0f, 0.9f, 0f, 14f, 0f, 0f, 0f, 1f, 0f)))
+    m.postConcat(ColorMatrix(floatArrayOf(0.78f, 0f, 0f, 0f, 4f, 0f, 0.78f, 0f, 0f, 4f, 0f, 0f, 0.8f, 0f, 6f, 0f, 0f, 0f, 1f, 0f))) // neutral, so it sits on any theme
     return ColorMatrixColorFilter(m)
 }
 
@@ -274,14 +274,14 @@ private sealed interface MapSel {
 }
 
 private val MapRed = Color(0xFFFF4D5E)
-private val MapGreen = Color(0xFF5EE0A0)
-private val MapLilac = Color(0xFFC49BFF)
-private val MapAmber = Color(0xFFFFB547)
-private val MapInk = Color(0xFFF3EDF7)
-private val MapMuted = Color(0xFFA99BB8)
-private val MapSurface = Color(0xFF221A2C)
-private val MapSurface2 = Color(0xFF2E2439)
-private val MapLine = Color(0xFF3D3149)
+private val MapGreen get() = LiveGreen
+private val MapLilac get() = Lilac
+private val MapAmber get() = Amber
+private val MapInk get() = Ink
+private val MapMuted get() = Muted
+private val MapSurface get() = Surface1
+private val MapSurface2 get() = Surface2
+private val MapLine get() = Line
 
 private fun ago(t: Long): String {
     val m = (System.currentTimeMillis() - t) / 60_000
@@ -340,7 +340,7 @@ fun SafeMapScreen() {
             minZoomLevel = 4.0
             controller.setZoom(14.5)
             controller.setCenter(NAGPUR)
-            setBackgroundColor(0xFF16101E.toInt())
+            setBackgroundColor(Night.toArgb())
             addMapListener(object : MapListener {
                 override fun onScroll(event: ScrollEvent?): Boolean {
                     mapCenter.let { center = GeoPoint(it.latitude, it.longitude) }
@@ -499,7 +499,7 @@ fun SafeMapScreen() {
                     LayerChip("Safe", MapGreen, showSafe) { showSafe = !showSafe }
                     LayerChip("Danger", MapRed, showDanger) { showDanger = !showDanger }
                     LayerChip("SOS hotspots", MapRed, showHot, dashed = true) { showHot = !showHot }
-                } else Box(Modifier.clip(RoundedCornerShape(20.dp)).background(Color(0xF0221A2C)).padding(horizontal = 14.dp, vertical = 9.dp)) {
+                } else Box(Modifier.clip(RoundedCornerShape(20.dp)).background(Surface1.copy(alpha = 0.94f)).padding(horizontal = 14.dp, vertical = 9.dp)) {
                     Text("Drag the map to put the pin on the spot", fontSize = 13.sp, color = MapInk)
                 }
             }
@@ -509,7 +509,7 @@ fun SafeMapScreen() {
                     val c = when (adding) { "danger" -> MapRed; "safe_area" -> MapGreen; else -> MapLilac }
                     drawLine(c, Offset(r, r * 1.6f), Offset(r, size.height - 2.dp.toPx()), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
                     drawCircle(c, radius = r, center = Offset(r, r))
-                    drawCircle(Color(0xFF16101E), radius = r * 0.38f, center = Offset(r, r))
+                    drawCircle(Night, radius = r * 0.38f, center = Offset(r, r))
                 }
             }
             Column(Modifier.align(Alignment.BottomEnd).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -520,9 +520,9 @@ fun SafeMapScreen() {
             if (adding == null) Box(
                 Modifier.align(Alignment.BottomStart).padding(12.dp).clip(RoundedCornerShape(24.dp)).background(MapLilac)
                     .clickable { selected = null; adding = "danger"; addRadius = 250 }.padding(horizontal = 18.dp, vertical = 12.dp),
-            ) { Text("+  Add to map", color = Color(0xFF1E0E33), fontWeight = FontWeight.SemiBold) }
+            ) { Text("+  Add to map", color = OnLilac, fontWeight = FontWeight.SemiBold) }
             Text(
-                "© OpenStreetMap contributors", fontSize = 10.sp, color = Color(0xB3A99BB8),
+                "© OpenStreetMap contributors", fontSize = 10.sp, color = Muted.copy(alpha = 0.7f),
                 modifier = Modifier.align(Alignment.BottomCenter).padding(4.dp),
             )
             if (places == null) CircularProgressIndicator(Modifier.align(Alignment.Center), color = MapLilac)
@@ -595,7 +595,7 @@ fun SafeMapScreen() {
 @Composable
 private fun LayerChip(label: String, color: Color, on: Boolean, dashed: Boolean = false, onClick: () -> Unit) {
     Row(
-        Modifier.clip(RoundedCornerShape(20.dp)).background(if (on) Color(0xF02E2439) else Color(0xB3221A2C))
+        Modifier.clip(RoundedCornerShape(20.dp)).background(if (on) Surface2.copy(alpha = 0.94f) else Surface1.copy(alpha = 0.72f))
             .border(1.dp, if (on) color.copy(alpha = 0.7f) else MapLine, RoundedCornerShape(20.dp)).clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -613,7 +613,7 @@ private fun LayerChip(label: String, color: Color, on: Boolean, dashed: Boolean 
 private fun DangerBanner(d: Pair<CommunityReport?, Hotspot?>, nearest: Place?, onGo: (Place) -> Unit) {
     val (r, h) = d
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xF22A1520)).border(1.dp, MapRed.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Surface1.copy(alpha = 0.96f)).border(1.dp, MapRed.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Text("You're in an area marked unsafe", color = MapRed, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
@@ -632,7 +632,7 @@ private fun DangerBanner(d: Pair<CommunityReport?, Hotspot?>, nearest: Place?, o
                     modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 Box(Modifier.clip(RoundedCornerShape(12.dp)).background(MapLilac).clickable { onGo(p) }.padding(horizontal = 14.dp, vertical = 7.dp)) {
-                    Text("Go", color = Color(0xFF1E0E33), fontWeight = FontWeight.SemiBold)
+                    Text("Go", color = OnLilac, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -677,7 +677,7 @@ private fun AddPanel(
                 Box(
                     Modifier.clip(RoundedCornerShape(18.dp)).background(if (sel) kindColor else MapSurface2).clickable { category = c.key }
                         .padding(horizontal = 12.dp, vertical = 7.dp),
-                ) { Text(c.label, color = if (sel) Color(0xFF16101E) else MapInk, fontSize = 13.sp) }
+                ) { Text(c.label, color = if (sel) OnLilac else MapInk, fontSize = 13.sp) }
             }
         }
         if (kind != "safe_place") {
@@ -720,7 +720,7 @@ private fun AddPanel(
             val ready = category != null && (kind != "safe_place" || name.isNotBlank())
             Button(
                 onClick = { onSubmit(kind, category!!, name.ifBlank { null }, text.ifBlank { null }) }, enabled = ready,
-                colors = ButtonDefaults.buttonColors(containerColor = MapLilac, contentColor = Color(0xFF1E0E33), disabledContainerColor = MapSurface2, disabledContentColor = MapMuted),
+                colors = ButtonDefaults.buttonColors(containerColor = MapLilac, contentColor = OnLilac, disabledContainerColor = MapSurface2, disabledContentColor = MapMuted),
                 shape = RoundedCornerShape(14.dp),
             ) { Text("Add to map", fontWeight = FontWeight.SemiBold) }
         }
@@ -759,7 +759,7 @@ private fun ReportPanel(r: CommunityReport, cd: CommunityData, here: GeoPoint, o
             }
             if (r.kind == "safe_place") Button(
                 onClick = { navigateTo(ctx, r.lat, r.lng) },
-                colors = ButtonDefaults.buttonColors(containerColor = MapLilac, contentColor = Color(0xFF1E0E33)), shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MapLilac, contentColor = OnLilac), shape = RoundedCornerShape(14.dp),
             ) { Text("Go", fontWeight = FontWeight.SemiBold) }
         }
     }
@@ -785,9 +785,9 @@ private fun HotspotPanel(h: Hotspot, onClose: () -> Unit, modifier: Modifier) {
 @Composable
 private fun MapButton(label: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(44.dp).clip(CircleShape).background(Color(0xF0221A2C)).border(1.dp, Color(0xFF3D3149), CircleShape).clickable(onClick = onClick),
+        Modifier.size(44.dp).clip(CircleShape).background(Surface1.copy(alpha = 0.94f)).border(1.dp, Line, CircleShape).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Text(label, color = Color(0xFFF3EDF7), fontSize = 20.sp) }
+    ) { Text(label, color = Ink, fontSize = 20.sp) }
 }
 
 @Composable
@@ -795,7 +795,7 @@ private fun PlaceRow(p: Place, selected: Boolean, sub: String? = null, onFocus: 
     val ctx = LocalContext.current
     Row(
         Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(14.dp))
-            .background(if (selected) Color(0xFF3A2D4A) else Color(0xFF2E2439)).clickable(onClick = onFocus).padding(horizontal = 14.dp, vertical = 10.dp),
+            .background(if (selected) Surface2 else Surface1).clickable(onClick = onFocus).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(kindColor[p.kind] ?: MapLilac))
@@ -804,14 +804,14 @@ private fun PlaceRow(p: Place, selected: Boolean, sub: String? = null, onFocus: 
             Text(p.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 (sub ?: kindLabel(p.kind)) + ", ${distanceText(p.distanceM)}",
-                fontSize = 12.sp, color = if (sub != null) MapLilac else Color(0xFFA99BB8), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                fontSize = 12.sp, color = if (sub != null) MapLilac else Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
         val phone = p.phone ?: if (p.kind == "police") "112" else null
         phone?.let { n ->
             TextButton(onClick = {
                 runCatching { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + n.filter { it.isDigit() || it == '+' }))) }
-            }) { Text("Call", color = Color(0xFFF3EDF7)) }
+            }) { Text("Call", color = Ink) }
         }
         TextButton(onClick = { navigateTo(ctx, p.lat, p.lng) }) { Text("Go", color = MapLilac, fontWeight = FontWeight.SemiBold) }
     }

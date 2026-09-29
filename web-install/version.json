@@ -1,0 +1,15 @@
+{
+  "versionCode": 3,
+  "versionName": "0.2.1",
+  "apk": "Security4Her-phone.apk",
+  "sha256": "0fb08c72708a297dbff4e5f569451e258af537cbdf420b281053e1e4f13364bf",
+  "bytes": 19911101,
+  "notes": "Faster updates and a cleaner Safety map.",
+  "watch": {
+    "versionCode": 5,
+    "versionName": "0.3.1",
+    "apk": "Security4Her-watch.apk",
+    "sha256": "d52e9922284c244674ec813e7efa6baa02efd520c0d5222afc23468083219b7c",
+    "bytes": 33865488
+  }
+}

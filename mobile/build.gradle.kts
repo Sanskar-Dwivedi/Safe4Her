@@ -20,11 +20,14 @@ android {
         applicationId = "in.security4her.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-phone"
+        // Bump both for every release; the in-app updater compares versionCode with web-install/version.json.
+        versionCode = 3
+        versionName = "0.2.1"
         buildConfigField("String", "SUPABASE_URL", cfg("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", cfg("SUPABASE_ANON_KEY"))
         buildConfigField("String", "TRACK_BASE_URL", cfg("TRACK_BASE_URL"))
+        // Where the app looks for new versions (published with web-install/publish.sh).
+        buildConfigField("String", "UPDATE_URL", "\"${localProps.getProperty("UPDATE_URL", "https://security4her.vercel.app/version.json")}\"")
         // Live map page (github.com/AtharvaLakhe/s4h-live); blank in local.properties falls back to ntfy.sh's own page.
         buildConfigField("String", "LIVE_PAGE_URL", "\"${localProps.getProperty("LIVE_PAGE_URL", "https://atharvalakhe.github.io/s4h-live/")}\"")
         manifestPlaceholders["MAPS_API_KEY"] = localProps.getProperty("MAPS_API_KEY", "")

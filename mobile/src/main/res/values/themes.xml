@@ -2,7 +2,7 @@
 <resources>
     <color name="brand_purple">#5B2A86</color>
     <color name="brand_cream">#FEF7F6</color>
-    <color name="night">#16101E</color>
+    <color name="night">#050505</color>
     <style name="Theme.S4h" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/night</item>
         <item name="android:statusBarColor">@color/night</item>

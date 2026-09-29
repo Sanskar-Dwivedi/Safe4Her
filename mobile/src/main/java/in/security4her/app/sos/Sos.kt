@@ -69,6 +69,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
@@ -141,7 +142,7 @@ object SosEngine {
         if (live != null && live.active) return // one SOS at a time; the watch and phone dedupe on id
         val s = Settings.load(ctx)
         val how = when (trigger) {
-            "knock" -> "Knock Knock on watch"; "shake" -> "shake on watch"; "journey" -> "Safe Journey: no answer to a check-in"; else -> "SOS button"
+            "knock" -> "Knock Knock on watch"; "pocket" -> "three knocks on the phone"; "shake" -> "shake on watch"; "journey" -> "Safe Journey: no answer to a check-in"; else -> "SOS button"
         }
         _current.value = Incident(
             id = id, trigger = trigger, source = source, startedAt = System.currentTimeMillis(), test = s.testMode,
@@ -247,10 +248,25 @@ object SosEngine {
             log("No one to text. Add trusted contacts.", "fail")
             return
         }
-        update { it.copy(recipients = list, smsNeedsLocation = it.lat == null) }
         val body = smsBody(s)
+        if (!Sms.allowed(app)) {
+            // Android blocks SMS for sideloaded apps until "restricted settings" are allowed; don't let that stop an SOS.
+            update { it.copy(recipients = list.map { r -> r.copy(state = "compose") }, smsNeedsLocation = it.lat == null) }
+            log("SMS permission is off, so the text opens in Messages ready to send", "fail")
+            composeAgain()
+            return
+        }
+        update { it.copy(recipients = list, smsNeedsLocation = it.lat == null) }
         log("Texting ${list.size} ${if (list.size == 1) "person" else "people"}")
         list.forEach { r -> sendSms(r.phone, body, inc.id) }
+    }
+
+    /** Opens Messages with every recipient and the SOS text filled in (used when SMS permission is off). */
+    fun composeAgain() {
+        val inc = _current.value ?: return
+        val to = inc.recipients.map { it.phone }
+        if (to.isEmpty()) return
+        if (!Sms.compose(app, to, smsBody(Settings.load(app)))) log("Couldn't open Messages", "fail")
     }
 
     private fun userName() = runCatching { runBlocking { Backend.profile().displayName } }.getOrNull() ?: "a Security4Her user"
@@ -306,6 +322,7 @@ object SosEngine {
     private fun textUpdate() {
         val inc = _current.value ?: return
         if (!inc.active || inc.lat == null || inc.lng == null) return
+        if (!Sms.allowed(app)) return
         val to = inc.recipients.filter { it.state != "failed" }
         if (to.isEmpty()) return
         val time = SimpleDateFormat("HH:mm", Locale.US).format(Date(inc.fixAt ?: System.currentTimeMillis()))
@@ -412,10 +429,15 @@ object SosEngine {
             inc.liveTopic?.let { Live.publish(it, "${userName()} is safe now", "Live location sharing has stopped.", null, listOf("white_check_mark"), 4) }
             runCatching { Backend.endIncident(inc.id, status) }.onFailure { AppLog.warn("SOS", "Server didn't record the end of the SOS", it) }
             val told = inc.recipients.filter { it.state == "sent" || it.state == "delivered" }
+            val name = runCatching { Backend.profile().displayName }.getOrNull() ?: "She"
             if (told.isNotEmpty()) {
-                val name = runCatching { Backend.profile().displayName }.getOrNull() ?: "She"
                 told.forEach { sendSms(it.phone, "$name is safe now. Thank you. (Security4Her)", inc.id) }
                 log("\"I'm safe\" text sent to ${told.size}", "ok")
+            }
+            // SOS went out through Messages: offer the "I'm safe" text the same way
+            val viaMessages = inc.recipients.filter { it.state == "compose" }
+            if (viaMessages.isNotEmpty()) withContext(Dispatchers.Main) {
+                Sms.compose(app, viaMessages.map { it.phone }, "$name is safe now. Thank you. (Security4Her)")
             }
         }
         app.stopService(Intent(app, SosService::class.java))
@@ -685,6 +707,21 @@ object Sms {
     val testStatus: StateFlow<String?> = _test.asStateFlow()
 
     fun clean(phone: String) = phone.filter { it.isDigit() || it == '+' }
+
+    fun allowed(ctx: Context) = ContextCompat.checkSelfPermission(ctx, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * Opens the Messages app with the numbers and text filled in, so one tap sends it. Works without SMS permission,
+     * which Android withholds from apps installed outside the Play Store until "restricted settings" are allowed.
+     */
+    fun compose(ctx: Context, phones: List<String>, body: String): Boolean = runCatching {
+        val to = phones.map(::clean).filter { it.count(Char::isDigit) >= 3 }.distinct().joinToString(";")
+        ctx.startActivity(
+            Intent(Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:$to")).putExtra("sms_body", body)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        AppLog.info("SMS", "Opened Messages with the text ready for ${phones.size} ${if (phones.size == 1) "number" else "numbers"}")
+    }.isSuccess
 
     @SuppressLint("MissingPermission")
     private fun manager(ctx: Context): SmsManager {

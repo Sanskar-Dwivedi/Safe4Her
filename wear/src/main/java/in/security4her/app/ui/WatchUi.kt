@@ -46,6 +46,7 @@ import `in`.security4her.app.data.PhoneStatus
 import `in`.security4her.app.data.WatchStore
 import `in`.security4her.app.sos.PhoneLink
 import `in`.security4her.app.sos.SosController
+import `in`.security4her.app.sos.WatchUpdater
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -213,6 +214,24 @@ private fun HomeScreen(link: DeviceLink?, phoneReachable: Boolean?, safety: Bool
             if (link != null) Tone.OK else Tone.WAIT,
         )
         if (link == null) Label("Open Security4Her on your phone and log in to link this watch.", color = C.grey, size = 11.sp)
+        UpdateBlock()
+    }
+}
+
+/** In-app update: shows the version, or a one-tap update when the website has a newer one. */
+@Composable
+private fun UpdateBlock() {
+    val ctx = LocalContext.current
+    val s by WatchUpdater.state.collectAsStateWithLifecycle()
+    when (val x = s) {
+        is WatchUpdater.State.Available -> PillButton("Update to ${x.r.name}", C.purple) { WatchUpdater.update(ctx, x.r) }
+        is WatchUpdater.State.Downloading -> Label("Updating… ${(x.progress * 100).toInt()}%", color = C.purpleLight, size = 12.sp)
+        is WatchUpdater.State.Installing -> Label("Confirm the update on screen", color = C.purpleLight, size = 12.sp)
+        is WatchUpdater.State.Failed -> {
+            Label(x.message, color = C.coral, size = 11.sp)
+            x.r?.let { r -> PillButton("Try again", Color(0xFF333333)) { WatchUpdater.update(ctx, r) } }
+        }
+        else -> Label("Version ${WatchUpdater.versionName}", color = C.grey, size = 11.sp)
     }
 }
 

@@ -79,6 +79,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         lifecycleScope.launch { PhoneLink.syncFromPhone(this@MainActivity) }
+        `in`.security4her.app.sos.WatchUpdater.check(this)
     }
 
     private fun handleEntry(intent: Intent) {

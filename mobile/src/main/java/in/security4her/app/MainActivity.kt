@@ -39,9 +39,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -51,6 +57,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -86,6 +93,14 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
@@ -129,38 +144,38 @@ class App : Application() {
     }
 }
 
-// ---- Tokens: aubergine night, one lilac accent; red is reserved for SOS, amber for Test Mode ----
-internal val Night = Color(0xFF16101E)
-internal val Surface1 = Color(0xFF221A2C)
-internal val Surface2 = Color(0xFF2E2439)
-internal val Line = Color(0xFF3D3149)
-internal val Ink = Color(0xFFF3EDF7)
-internal val Muted = Color(0xFFA99BB8)
-internal val Lilac = Color(0xFFC49BFF)
-internal val OnLilac = Color(0xFF1E0E33)
-internal val SosRed = Color(0xFFFF4D5E)
-internal val Amber = Color(0xFFFFB547)
-internal val LiveGreen = Color(0xFF5EE0A0) // only for "live location is on"
+// Colour tokens live in Theme.kt and follow the palette chosen in Me → Colours.
 
 @OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
 private fun instrument(w: Int) = Font(R.font.instrument_sans, FontWeight(w), variationSettings = FontVariation.Settings(FontVariation.weight(w)))
 internal val Instrument = FontFamily(instrument(400), instrument(500), instrument(600), instrument(700))
 
+@OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+private fun baloo(w: Int) = Font(R.font.baloo2, FontWeight(w), variationSettings = FontVariation.Settings(FontVariation.weight(w)))
+/** Rounded display face for headings and the SOS button; same family as the install site. */
+internal val Baloo = FontFamily(baloo(600), baloo(700), baloo(800))
+
 @Composable
 private fun S4hTheme(content: @Composable () -> Unit) {
-    val scheme = darkColorScheme(
+    val scheme = (if (Palettes.current.value.light) lightColorScheme(
         primary = Lilac, onPrimary = OnLilac, secondary = Lilac, onSecondary = OnLilac,
         background = Night, onBackground = Ink, surface = Surface1, onSurface = Ink,
         surfaceVariant = Surface2, onSurfaceVariant = Muted, surfaceContainer = Surface1,
         surfaceContainerHigh = Surface2, surfaceContainerHighest = Surface2, surfaceContainerLow = Surface1,
         outline = Line, outlineVariant = Line, error = SosRed, onError = Color.White,
-    )
+    ) else darkColorScheme(
+        primary = Lilac, onPrimary = OnLilac, secondary = Lilac, onSecondary = OnLilac,
+        background = Night, onBackground = Ink, surface = Surface1, onSurface = Ink,
+        surfaceVariant = Surface2, onSurfaceVariant = Muted, surfaceContainer = Surface1,
+        surfaceContainerHigh = Surface2, surfaceContainerHighest = Surface2, surfaceContainerLow = Surface1,
+        outline = Line, outlineVariant = Line, error = SosRed, onError = Color.White,
+    ))
     val f = Instrument
     val base = Typography()
     val type = base.copy(
-        displaySmall = TextStyle(fontFamily = f, fontSize = 38.sp, lineHeight = 42.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp),
-        headlineMedium = TextStyle(fontFamily = f, fontSize = 30.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp),
-        headlineSmall = TextStyle(fontFamily = f, fontSize = 25.sp, lineHeight = 31.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp),
+        displaySmall = TextStyle(fontFamily = Baloo, fontSize = 40.sp, lineHeight = 42.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.5).sp),
+        headlineMedium = TextStyle(fontFamily = Baloo, fontSize = 32.sp, lineHeight = 34.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.3).sp),
+        headlineSmall = TextStyle(fontFamily = Baloo, fontSize = 27.sp, lineHeight = 30.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.2).sp),
         titleMedium = TextStyle(fontFamily = f, fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold),
         titleSmall = TextStyle(fontFamily = f, fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
         bodyLarge = TextStyle(fontFamily = f, fontSize = 16.sp, lineHeight = 24.sp),
@@ -177,8 +192,16 @@ private fun S4hTheme(content: @Composable () -> Unit) {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge(SystemBarStyle.dark(android.graphics.Color.TRANSPARENT), SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
-        setContent { S4hTheme { Root() } }
+        Palettes.load(this)
+        setContent {
+            val light = Palettes.current.value.light
+            LaunchedEffect(light) {
+                val t = android.graphics.Color.TRANSPARENT
+                if (light) enableEdgeToEdge(SystemBarStyle.light(t, t), SystemBarStyle.light(t, t))
+                else enableEdgeToEdge(SystemBarStyle.dark(t), SystemBarStyle.dark(t))
+            }
+            S4hTheme { Root() }
+        }
         handleEvidence(intent)
     }
 
@@ -210,8 +233,9 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class Stage { Loading, Auth, Verify, Onboard, Main }
-private enum class Tab(val label: String, val icon: ImageVector) {
-    Home("Home", Icons.Filled.Home), Contacts("Contacts", Icons.Filled.Person), Map("Map", Icons.Filled.Place), Settings("Settings", Icons.Filled.SettingsIcon)
+private enum class Tab(val label: String, val icon: ImageVector? = null, val res: Int = 0) {
+    Home("Home", Icons.Filled.Home), Map("Map", Icons.Filled.Place),
+    People("People", Icons.Filled.Person), Me("Me", Icons.Filled.AccountCircle),
 }
 
 @Composable
@@ -270,7 +294,7 @@ internal fun Logo(size: androidx.compose.ui.unit.Dp) {
         Modifier
             .size(size)
             .clip(RoundedCornerShape(size * 0.16f))
-            .background(Color(0xFFFEF7F6)),
+            .background(Cream),
         contentAlignment = Alignment.Center,
     ) {
         Image(
@@ -298,16 +322,24 @@ private fun AuthScreen(onDone: (Profile) -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp, vertical = 40.dp)) {
-        Logo(84.dp)
-        Spacer(Modifier.height(28.dp))
-        Text("Security4Her", style = MaterialTheme.typography.displaySmall)
-        Spacer(Modifier.height(10.dp))
+    var welcome by rememberSaveable { mutableStateOf(true) }
+    if (welcome) {
+        WelcomeScreen(onStart = { creating = true; welcome = false }, onSignIn = { creating = false; welcome = false })
+        return
+    }
+    BackHandler { welcome = true }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 16.dp)) {
+        Box(Modifier.size(44.dp).clip(CircleShape).clickable(onClickLabel = "Back") { welcome = true }, contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.ArrowBack, "Back", tint = Muted)
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(if (creating) "Create your account" else "Welcome back", style = MaterialTheme.typography.headlineMedium)
+        Spacer(Modifier.height(6.dp))
         Text(
-            "Knock on your watch or hold one button. Your people get your live location in seconds.",
-            style = MaterialTheme.typography.bodyLarge, color = Muted,
+            if (creating) "It takes about a minute. Your details stay on this phone in demo mode." else "Sign in to pick up where you left off.",
+            color = Muted, style = MaterialTheme.typography.bodyLarge,
         )
-        Spacer(Modifier.height(36.dp))
+        Spacer(Modifier.height(28.dp))
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Surface1).padding(4.dp)) {
             listOf(true to "Create account", false to "Sign in").forEach { (c, label) ->
                 val sel = creating == c
@@ -382,12 +414,11 @@ private fun VerifyScreen(profile: Profile, onDone: (Profile) -> Unit) {
         return
     }
     Column(Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 40.dp)) {
-        Text("One check before you start", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(12.dp))
-        Text(
-            "Security4Her is only for women, which keeps the community map and alerts trustworthy. " +
+        Text("One quick check", style = MaterialTheme.typography.headlineMedium)
+        Spacer(Modifier.height(16.dp))
+        Tip(
+            "Security4Her is only for women, which keeps the map and alerts trustworthy. " +
                 "DigiLocker confirms it once. We keep the result, never your documents.",
-            style = MaterialTheme.typography.bodyLarge, color = Muted,
         )
         Spacer(Modifier.height(28.dp))
         Row(
@@ -468,45 +499,111 @@ private fun PermissionsScreen(onDone: () -> Unit) {
         })
     }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 28.dp)) {
-        Text("Let SOS work when it matters", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(8.dp))
-        Text("Each of these is used only during an SOS.", color = Muted, style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.height(20.dp))
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            key(tick) {
-                perms.forEach { p ->
-                    val ok = p.granted(ctx)
-                    val blocked = !ok && p.key in asked && p.key != "battery"
-                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Surface1).padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(p.title, style = MaterialTheme.typography.titleMedium)
-                                Text(p.why, color = Muted, style = MaterialTheme.typography.bodyMedium)
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            when {
-                                ok -> Text("Allowed", color = Lilac, style = MaterialTheme.typography.labelLarge)
-                                blocked -> OutlinedButton(onClick = {
-                                    ctx.startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")))
-                                }, border = androidx.compose.foundation.BorderStroke(1.dp, Amber)) { Text("Settings", color = Amber) }
-                                else -> OutlinedButton(onClick = p.ask, border = androidx.compose.foundation.BorderStroke(1.dp, Lilac)) { Text("Allow", color = Lilac) }
-                            }
-                        }
-                        if (blocked && p.key == "sms") {
-                            Spacer(Modifier.height(10.dp))
-                            Text(
-                                "Android blocks SMS for apps installed outside the Play Store. In Settings, tap ⋮ (top right) → " +
-                                    "Allow restricted settings, then Permissions → SMS → Allow.",
-                                color = Amber, style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
+    var idx by rememberSaveable { mutableIntStateOf(0) }
+    val p = perms[idx.coerceAtMost(perms.lastIndex)]
+    val ok = remember(tick, idx) { p.granted(ctx) }
+    val blocked = !ok && p.key in asked && p.key != "battery"
+    fun next() { if (idx < perms.lastIndex) idx++ else onDone() }
+    // Granted from the system dialog: celebrate briefly, then move on
+    LaunchedEffect(tick, idx) { if (p.key in asked && p.granted(ctx)) { delay(700); next() } }
+    BackHandler(idx > 0) { idx-- }
+
+    Column(Modifier.fillMaxSize()) {
+        LessonBar((idx + 1) / perms.size.toFloat(), onClose = onDone)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Step ${idx + 1} of ${perms.size}", color = Lilac, style = MaterialTheme.typography.labelLarge, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(36.dp))
+            Box(contentAlignment = Alignment.BottomEnd) {
+                Box(Modifier.size(150.dp).clip(CircleShape).background(Lilac.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                    Icon(permIcon(p.key), null, tint = Lilac, modifier = Modifier.size(70.dp))
+                }
+                androidx.compose.animation.AnimatedVisibility(ok, enter = androidx.compose.animation.scaleIn(androidx.compose.animation.core.spring(dampingRatio = 0.4f))) {
+                    Box(Modifier.size(48.dp).clip(CircleShape).background(Mint).border(4.dp, Night, CircleShape), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Filled.Check, "Allowed", tint = OnMint)
                     }
                 }
             }
+            Spacer(Modifier.height(28.dp))
+            Text(p.title, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(10.dp))
+            Text(p.why, color = Muted, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+            if (blocked && p.key == "sms") {
+                Spacer(Modifier.height(18.dp))
+                SmsUnlockSteps()
+            }
+            Spacer(Modifier.height(24.dp))
         }
-        Spacer(Modifier.height(16.dp))
-        PrimaryButton("Continue", onClick = onDone)
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+            when {
+                ok -> ChunkyButton(if (idx == perms.lastIndex) "All done" else "Continue", tone = Tone.Good) { next() }
+                blocked -> ChunkyButton("Open settings") {
+                    ctx.startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")))
+                }
+                else -> ChunkyButton("Allow") { p.ask() }
+            }
+            if (!ok) TextButton(onClick = { next() }, modifier = Modifier.fillMaxWidth()) { Text("Not now", color = Muted) }
+        }
+    }
+}
+
+/** How to lift Android's "restricted setting" block on SMS for an app installed from an APK. */
+@Composable
+internal fun SmsUnlockSteps() {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Surface1).padding(16.dp)) {
+        Text("Android blocked SMS for this app", style = MaterialTheme.typography.titleMedium, color = Amber)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "It does this for every app installed from a download. It takes 20 seconds to allow:",
+            color = Muted, style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.height(10.dp))
+        listOf(
+            "Tap Open settings below",
+            "Tap ⋮ at the top right, then Allow restricted settings, and confirm",
+            "Go back, open Permissions, then SMS, and choose Allow",
+        ).forEachIndexed { i, t ->
+            Row(Modifier.padding(vertical = 4.dp)) {
+                Text("${i + 1}", color = Lilac, fontFamily = Baloo, fontWeight = FontWeight.ExtraBold, modifier = Modifier.width(22.dp))
+                Text(t, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "No ⋮ menu? Open Security4Her once from the home screen, then try again. Until it's allowed, an SOS opens Messages with your text ready, so it's one tap to send.",
+            color = Muted, style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
+private fun permIcon(key: String): ImageVector = when (key) {
+    "loc", "bg" -> Icons.Filled.LocationOn
+    "sms" -> Icons.Filled.Email
+    "sim" -> Icons.Filled.Phone
+    "call" -> Icons.Filled.Call
+    "mic" -> ImageVector.vectorResource(R.drawable.ic_mic)
+    "cam" -> ImageVector.vectorResource(R.drawable.ic_cam)
+    "notif" -> Icons.Filled.Notifications
+    else -> ImageVector.vectorResource(R.drawable.ic_battery)
+}
+
+@Composable
+private fun WelcomeScreen(onStart: () -> Unit, onSignIn: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Spacer(Modifier.weight(1f))
+        BrandMark(128.dp)
+        Spacer(Modifier.height(28.dp))
+        Text("Security4Her", color = Lilac, style = MaterialTheme.typography.displaySmall)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Your safety, one press away. Free, and made for women.",
+            color = Muted, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 12.dp),
+        )
+        Spacer(Modifier.weight(1f))
+        ChunkyButton("Get started", onClick = onStart)
+        Spacer(Modifier.height(12.dp))
+        ChunkyButton("I already have an account", tone = Tone.Plain, onClick = onSignIn)
     }
 }
 
@@ -515,11 +612,16 @@ private fun PermissionsScreen(onDone: () -> Unit) {
 @Composable
 private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Profile) -> Unit) {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
     var settings by remember { mutableStateOf(Settings.load(ctx)) }
     var contacts by remember { mutableStateOf<List<Contact>?>(null) }
     var contactsError by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableIntStateOf(0) }
+    var watch by remember { mutableStateOf(false) }
+    var resumed by remember { mutableIntStateOf(0) }
+    val tick by Progress.tick.collectAsStateWithLifecycle()
+    val journey by `in`.security4her.app.sos.Journey.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(reload) {
         try {
@@ -530,69 +632,235 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
             if (contacts == null) contacts = emptyList()
         }
     }
-    var showLog by rememberSaveable { mutableStateOf(false) }
-    BackHandler(tab != Tab.Home && !showLog) { tab = Tab.Home }
-    if (showLog) {
-        LogScreen { showLog = false }
-        return
+    LaunchedEffect(Unit) {
+        while (true) { watch = WearBridge.watchReachable(ctx); delay(10_000) }
     }
-    var showLocker by rememberSaveable { mutableStateOf(false) }
-    if (showLocker) {
-        EvidenceLockerScreen(onClose = { showLocker = false })
-        return
-    }
-    var showJourney by rememberSaveable { mutableStateOf(false) }
-    if (showJourney) {
-        BackHandler { showJourney = false }
-        JourneySetupScreen(onClose = { showJourney = false })
-        return
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { resumed++; Updater.check(ctx) }
+    LaunchedEffect(journey) { if (journey != null) Progress.mark(ctx, "journey") }
+    val alerted = contacts?.filter { it.receivesSos }.orEmpty()
+    val facts = remember(contacts, settings, watch, resumed, tick) {
+        ReadyFacts(
+            hasContact = alerted.isNotEmpty(),
+            hasPerms = has(ctx, Manifest.permission.ACCESS_FINE_LOCATION) && has(ctx, Manifest.permission.SEND_SMS),
+            hasPin = settings.pin.length == 4, watch = watch,
+        )
     }
 
-    Column(Modifier.fillMaxSize()) {
-        if (settings.testMode) TestBanner(settings.demoNumber.isBlank()) { tab = Tab.Settings }
-        Box(Modifier.weight(1f)) {
-            when (tab) {
-                Tab.Home -> HomeScreen(profile, contacts, settings, onTab = { tab = it }, onJourney = { showJourney = true })
-                Tab.Contacts -> ContactsScreen(contacts, contactsError) { reload++ }
-                Tab.Map -> SafeMapScreen()
-                Tab.Settings -> SettingsScreen(profile, settings, onChange = { settings = it }, onSignedOut = onSignedOut, onOpenLog = { showLog = true }, onOpenLocker = { showLocker = true })
+    var showLog by rememberSaveable { mutableStateOf(false) }
+    var showLocker by rememberSaveable { mutableStateOf(false) }
+    var showJourney by rememberSaveable { mutableStateOf(false) }
+    var perms by rememberSaveable { mutableStateOf(false) }
+    var sheet by rememberSaveable { mutableStateOf<String?>(null) }
+    var showChat by rememberSaveable { mutableStateOf(false) }
+
+    fun open(step: SetupStep) {
+        when (step.key) {
+            "contact" -> tab = Tab.People
+            "perms" -> perms = true
+            else -> sheet = step.key
+        }
+    }
+
+    BackHandler(tab != Tab.Home) { tab = Tab.Home }
+    when {
+        showLog -> { LogScreen { showLog = false }; return }
+        showLocker -> { EvidenceLockerScreen(onClose = { showLocker = false }); return }
+        showJourney -> { BackHandler { showJourney = false }; JourneySetupScreen(onClose = { showJourney = false }); return }
+        perms -> { PermissionsScreen(onDone = { perms = false; resumed++ }); return }
+        showChat -> { ChatScreen(onClose = { showChat = false }); return }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f)) {
+                androidx.compose.animation.AnimatedContent(
+                    tab, label = "tab",
+                    transitionSpec = {
+                        val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                        (androidx.compose.animation.slideInHorizontally(tween(260)) { it / 6 * dir } + androidx.compose.animation.fadeIn(tween(260))) togetherWith
+                            androidx.compose.animation.fadeOut(tween(120))
+                    },
+                ) { t ->
+                    when (t) {
+                        Tab.Home -> HomeScreen(
+                            profile, contacts, settings, facts, watch, onTab = { tab = it }, onJourney = { showJourney = true },
+                            onStep = ::open, onChat = { showChat = true }, onFixSms = { sheet = "sms" },
+                        )
+                        Tab.Map -> SafeMapScreen()
+                        Tab.People -> ContactsScreen(contacts, contactsError) { reload++ }
+                        Tab.Me -> SettingsScreen(
+                            profile, settings,
+                            onChange = { settings = it }, onSignedOut = onSignedOut, onOpenLog = { showLog = true }, onOpenLocker = { showLocker = true },
+                            onOpenChat = { showChat = true },
+                        )
+                    }
+                }
+            }
+            TabBar(tab) { tab = it }
+        }
+        sheet?.let { key ->
+            ActionSheet(onDismiss = { sheet = null }) {
+                when (key) {
+                    "pin" -> PinStep(settings) { settings = it; it.save(ctx); sheet = null }
+                    "test_text" -> TestTextStep(settings, onChange = { settings = it; it.save(ctx) }) { sheet = null }
+                    "watch" -> WatchStep(watch) { sheet = null }
+                    "sms" -> {
+                        SmsUnlockSteps()
+                        Spacer(Modifier.height(14.dp))
+                        ChunkyButton("Open settings", tone = Tone.Danger) {
+                            runCatching { ctx.startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}"))) }
+                            sheet = null
+                        }
+                    }
+                }
             }
         }
-        TabBar(tab) { tab = it }
+    }
+}
+
+/** Scrim plus a card that slides up from the bottom. */
+@Composable
+private fun ActionSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    BackHandler(onBack = onDismiss)
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable(
+            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = onDismiss,
+        ))
+        androidx.compose.animation.AnimatedVisibility(
+            shown, modifier = Modifier.align(Alignment.BottomCenter),
+            enter = androidx.compose.animation.slideInVertically(tween(300)) { it },
+        ) {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)).background(Surface1)
+                    .padding(horizontal = 22.dp, vertical = 22.dp),
+                content = content,
+            )
+        }
     }
 }
 
 @Composable
-private fun TestBanner(noDemoNumber: Boolean, onFix: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().background(Amber.copy(alpha = 0.12f)).clickable(onClick = onFix).padding(horizontal = 20.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(7.dp).clip(CircleShape).background(Amber))
-        Spacer(Modifier.width(10.dp))
-        Text(
-            if (noDemoNumber) "Test Mode: set a demo number so police texts and calls reach a teammate."
-            else "Test Mode: police texts and calls go to your demo number, never 112.",
-            color = Amber, style = MaterialTheme.typography.bodySmall,
-        )
+private fun PinStep(settings: Settings, onSave: (Settings) -> Unit) {
+    val ctx = LocalContext.current
+    var pin by remember { mutableStateOf(settings.pin) }
+    Text("Set a safety PIN", style = MaterialTheme.typography.headlineSmall)
+    Text("Pick 4 digits only you know. They're needed before an SOS can be switched off.", color = Muted, style = MaterialTheme.typography.bodyMedium)
+    Spacer(Modifier.height(18.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally)) {
+        repeat(4) { i ->
+            val filled = i < pin.length
+            Box(
+                Modifier.size(58.dp).clip(RoundedCornerShape(16.dp)).background(if (filled) Lilac.copy(alpha = 0.16f) else Surface2)
+                    .border(2.dp, if (i == pin.length) Lilac else if (filled) Lilac.copy(alpha = 0.5f) else Line, RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center,
+            ) { if (filled) Box(Modifier.size(14.dp).clip(CircleShape).background(Lilac)) }
+        }
+    }
+    Spacer(Modifier.height(18.dp))
+    // Big chunky keypad
+    val keys = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫")
+    keys.chunked(3).forEach { row ->
+        Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            row.forEach { k ->
+                if (k.isEmpty()) Spacer(Modifier.weight(1f).height(56.dp))
+                else Chunky(
+                    onClick = { pin = if (k == "⌫") pin.dropLast(1) else (pin + k).take(4) },
+                    modifier = Modifier.weight(1f).height(58.dp), tone = Tone.Plain, depth = 3.dp,
+                ) { Text(k, fontFamily = Baloo, fontWeight = FontWeight.ExtraBold, fontSize = 24.sp) }
+            }
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    ChunkyButton("Save PIN", enabled = pin.length == 4) {
+        AppLog.ok("Settings", "Safety PIN set")
+        Toast.makeText(ctx, "PIN saved", Toast.LENGTH_SHORT).show()
+        onSave(settings.copy(pin = pin))
+    }
+}
+
+@Composable
+private fun TestTextStep(settings: Settings, onChange: (Settings) -> Unit, onDone: () -> Unit) {
+    val ctx = LocalContext.current
+    val status by Sms.testStatus.collectAsStateWithLifecycle()
+    Text("Send a test text", style = MaterialTheme.typography.headlineSmall)
+    Text("One practice text to a friend's phone. No SOS starts; it just proves texts work from here.", color = Muted, style = MaterialTheme.typography.bodyMedium)
+    Spacer(Modifier.height(16.dp))
+    Field(settings.demoNumber, { onChange(settings.copy(demoNumber = it)) }, "Friend's number", KeyboardType.Phone)
+    status?.let {
+        Spacer(Modifier.height(8.dp))
+        Text(it, color = when { it.startsWith("Failed") -> SosRed; it.startsWith("Delivered") || it.startsWith("Sent") -> Mint; else -> Muted },
+            style = MaterialTheme.typography.bodyMedium)
+    }
+    Spacer(Modifier.height(16.dp))
+    val canSms = Sms.allowed(ctx)
+    if (!canSms) { Spacer(Modifier.height(4.dp)); SmsUnlockSteps(); Spacer(Modifier.height(12.dp)) }
+    ChunkyButton(if (canSms) "Send test text" else "Send it from Messages", enabled = settings.demoNumber.count(Char::isDigit) >= 3) {
+        if (canSms) Sms.sendTest(ctx, settings.demoNumber)
+        else Sms.compose(ctx, listOf(settings.demoNumber), "Security4Her test: this phone can text you in an SOS. No action needed.")
+        Progress.mark(ctx, "test_text")
+    }
+    if (!canSms) TextButton(onClick = {
+        ctx.startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")))
+    }, modifier = Modifier.fillMaxWidth()) { Text("Open settings", color = Lilac) }
+    TextButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text("Close", color = Muted) }
+}
+
+@Composable
+private fun WatchStep(linked: Boolean, onDone: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var msg by remember { mutableStateOf<String?>(null) }
+    Text(if (linked) "Your watch is linked" else "Link your watch", style = MaterialTheme.typography.headlineSmall)
+    Text(
+        if (linked) "Press and hold SOS on it any time, even with your phone in a bag."
+        else "Install Security4Her on your Wear OS watch and open it. It links to this phone on its own.",
+        color = Muted, style = MaterialTheme.typography.bodyMedium,
+    )
+    msg?.let { Spacer(Modifier.height(10.dp)); Text(it, color = Muted, style = MaterialTheme.typography.bodyMedium) }
+    Spacer(Modifier.height(16.dp))
+    if (linked) ChunkyButton("Great", tone = Tone.Good) { Progress.mark(ctx, "watch"); onDone() }
+    else {
+        ChunkyButton("Check for my watch") {
+            msg = "Looking for your watch…"
+            scope.launch {
+                WearBridge.linkWatch(ctx)
+                val ok = WearBridge.watchReachable(ctx)
+                msg = if (ok) "Found it! Your watch is linked." else "No watch nearby yet. Open the app on the watch and try again."
+                if (ok) Progress.mark(ctx, "watch")
+            }
+        }
+        TextButton(onClick = { Progress.mark(ctx, "watch"); onDone() }, modifier = Modifier.fillMaxWidth()) { Text("I don't have a watch", color = Muted) }
     }
 }
 
 @Composable
 private fun TabBar(tab: Tab, onTab: (Tab) -> Unit) {
-    Row(Modifier.fillMaxWidth().background(Surface1).padding(horizontal = 8.dp, vertical = 6.dp)) {
+    val haptic = LocalHapticFeedback.current
+    Row(
+        Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 10.dp)
+            .clip(RoundedCornerShape(28.dp)).background(Surface1)
+            .padding(6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Tab.entries.forEach { t ->
             val sel = t == tab
-            Column(
-                Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).clickable { onTab(t) }.padding(vertical = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            val bg by androidx.compose.animation.animateColorAsState(if (sel) Lilac else Color.Transparent, tween(260), label = "tabBg")
+            val fg by androidx.compose.animation.animateColorAsState(if (sel) OnLilac else Muted, tween(260), label = "tabFg")
+            Row(
+                Modifier.clip(RoundedCornerShape(22.dp)).background(bg)
+                    .clickable(onClickLabel = t.label) { if (!sel) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onTab(t) }
+                    .animateContentSize(androidx.compose.animation.core.spring(dampingRatio = 0.75f, stiffness = 500f))
+                    .padding(horizontal = if (sel) 18.dp else 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    Modifier.clip(RoundedCornerShape(16.dp)).background(if (sel) Lilac.copy(alpha = 0.16f) else Color.Transparent)
-                        .padding(horizontal = 18.dp, vertical = 4.dp),
-                ) { Icon(t.icon, contentDescription = null, tint = if (sel) Lilac else Muted, modifier = Modifier.size(22.dp)) }
-                Spacer(Modifier.height(4.dp))
-                Text(t.label, color = if (sel) Ink else Muted, fontSize = 12.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal)
+                Icon(t.icon ?: ImageVector.vectorResource(t.res), contentDescription = if (sel) null else t.label, tint = fg, modifier = Modifier.size(22.dp))
+                if (sel) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(t.label, color = fg, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                }
             }
         }
     }
@@ -614,77 +882,130 @@ private fun greeting(): String {
     return when (h) { in 5..11 -> "Good morning"; in 12..16 -> "Good afternoon"; else -> "Good evening" }
 }
 
+private fun tipFor(s: SetupStep) = when (s.key) {
+    "contact" -> "Your SOS needs someone to reach. Add a trusted contact."
+    "perms" -> "Allow location and texts so your SOS can say where you are."
+    "pin" -> "Set a PIN so only you can switch an SOS off."
+    "test_text" -> "Send one test text to check this phone can reach people."
+    "watch" -> "Got a Wear OS watch? Link it for SOS from your wrist."
+    else -> s.title
+}
+
 @Composable
-private fun HomeScreen(profile: Profile, contacts: List<Contact>?, settings: Settings, onTab: (Tab) -> Unit, onJourney: () -> Unit) {
+private fun HomeScreen(
+    profile: Profile, contacts: List<Contact>?, settings: Settings, facts: ReadyFacts, watch: Boolean,
+    onTab: (Tab) -> Unit, onJourney: () -> Unit, onStep: (SetupStep) -> Unit, onChat: () -> Unit, onFixSms: () -> Unit,
+) {
     val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var watch by remember { mutableStateOf<Boolean?>(null) }
+    val tick by Progress.tick.collectAsStateWithLifecycle()
     var locOn by remember { mutableStateOf(has(ctx, Manifest.permission.ACCESS_FINE_LOCATION)) }
-    var sharing by remember { mutableStateOf(false) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { locOn = has(ctx, Manifest.permission.ACCESS_FINE_LOCATION) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            watch = WearBridge.watchReachable(ctx)
-            delay(10_000)
-        }
-    }
+    var smsOn by remember { mutableStateOf(Sms.allowed(ctx)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { locOn = has(ctx, Manifest.permission.ACCESS_FINE_LOCATION); smsOn = Sms.allowed(ctx) }
     val alerted = contacts?.filter { it.receivesSos }.orEmpty()
     val name = profile.displayName ?: "there"
+    val next = remember(tick, facts) { nextStep(ctx, facts) }
+    val journey by `in`.security4her.app.sos.Journey.state.collectAsStateWithLifecycle()
+    val live by LiveShare.session.collectAsStateWithLifecycle()
+    fun sendLink(url: String) = ShareSheet.text(ctx, "Follow my live location: $url (updates every 20 s). $name, via Security4Her", "Send live link")
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 10.dp)) {
+        Text(greeting(), color = Muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(greeting(), color = Muted, style = MaterialTheme.typography.bodyMedium)
-                Text(name, style = MaterialTheme.typography.headlineMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(name, style = MaterialTheme.typography.headlineMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            if (watch) Row(
+                Modifier.clip(RoundedCornerShape(20.dp)).background(Mint.copy(alpha = 0.16f)).padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(ImageVector.vectorResource(R.drawable.ic_watch), null, tint = Mint, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Watch linked", color = Mint, style = MaterialTheme.typography.labelMedium)
             }
-            Avatar(name, 46.dp)
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier.size(46.dp).clip(CircleShape).background(Surface1).clickable(onClickLabel = "Ask Security4Her", onClick = onChat),
+                contentAlignment = Alignment.Center,
+            ) { Icon(ImageVector.vectorResource(R.drawable.ic_chat), "Ask Security4Her", tint = Ink, modifier = Modifier.size(22.dp)) }
         }
-        Spacer(Modifier.height(18.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatusPill(Modifier.weight(1f), "Location", if (locOn) "On" else "Off", locOn)
-            StatusPill(Modifier.weight(1f), "Contacts", if (contacts == null) "…" else "${alerted.size} ready", alerted.isNotEmpty()) { onTab(Tab.Contacts) }
-            StatusPill(Modifier.weight(1f), "Watch", when (watch) { true -> "Linked"; false -> "Not nearby"; null -> "…" }, watch == true)
+        if (!locOn) {
+            Spacer(Modifier.height(10.dp))
+            Chunky(
+                onClick = { runCatching { ctx.startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}"))) } },
+                modifier = Modifier.fillMaxWidth(), face = Amber.copy(alpha = 0.14f).compositeOver(Night), edge = Amber.copy(alpha = 0.4f).compositeOver(Night), outline = Amber.copy(alpha = 0.5f), depth = 3.dp,
+            ) {
+                Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.LocationOn, null, tint = Amber)
+                    Spacer(Modifier.width(10.dp))
+                    Text("Location is off, so an SOS can't say where you are. Tap to allow it.", color = Amber, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
         }
-        Spacer(Modifier.height(26.dp))
+        UpdateCard(Modifier.padding(top = 12.dp))
+        if (!smsOn) {
+            // One-time setup, never during an emergency: once SMS is allowed every SOS text goes out by itself.
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(SosRed.copy(alpha = 0.14f).compositeOver(Night)).padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("SOS texts aren't automatic yet", color = SosRed, style = MaterialTheme.typography.titleMedium)
+                    Text("Allow texting once so an SOS reaches people by itself.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                }
+                Spacer(Modifier.width(12.dp))
+                Chunky(onClick = onFixSms, tone = Tone.Danger, depth = 3.dp, shape = RoundedCornerShape(14.dp)) {
+                    Text("Fix", color = Color.White, fontFamily = Baloo, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp))
+                }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        if (next != null && !(next.key == "perms" && !smsOn && locOn)) Tip(tipFor(next)) {
+            Spacer(Modifier.height(12.dp))
+            Chunky(onClick = { onStep(next) }, depth = 3.dp, shape = RoundedCornerShape(14.dp)) {
+                Text(next.title, color = OnLilac, fontFamily = Baloo, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp))
+            }
+        }
+        Spacer(Modifier.height(10.dp))
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             SosHoldButton { SosEngine.start(ctx, trigger = "button", source = "phone") }
         }
-        Spacer(Modifier.height(16.dp))
         Text(
             "Hold for 1.5 seconds. Your location and a live link go out by text, then a call follows after ${settings.countdownSec} s.",
             color = Muted, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
         )
-        Spacer(Modifier.height(24.dp))
-        val live by LiveShare.session.collectAsStateWithLifecycle()
-        fun sendLink(url: String) = ShareSheet.text(ctx, "Follow my live location: $url (updates every 20 s). $name, via Security4Her", "Send live link")
-        JourneyHomeCard(onStart = onJourney)
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(20.dp))
+        if (journey?.running == true) { JourneyHomeCard(onStart = onJourney); Spacer(Modifier.height(12.dp)) }
         live?.let { s ->
             LiveCard(s, onSend = { sendLink(s.url) }, onStop = { LiveShare.stop(ctx) })
             Spacer(Modifier.height(12.dp))
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            QuickAction(Modifier.weight(1f), Icons.Filled.Share, if (live == null) "Live location" else "Send link", LiveGreen) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            QuickTile(Modifier.weight(1f), Icons.Filled.Share, if (live == null) "Live location" else "Send link", "Share where you are", Mint) {
                 if (!locOn) {
                     Toast.makeText(ctx, "Allow location first.", Toast.LENGTH_SHORT).show()
-                    return@QuickAction
+                    return@QuickTile
                 }
                 if (!Locator.enabled(ctx)) {
                     Toast.makeText(ctx, "Turn on location in quick settings first.", Toast.LENGTH_LONG).show()
                     runCatching { ctx.startActivity(Intent(AndroidSettings.ACTION_LOCATION_SOURCE_SETTINGS)) }
-                    return@QuickAction
+                    return@QuickTile
                 }
                 val s = live ?: LiveShare.start(ctx)
                 sendLink(s.url)
             }
-            QuickAction(Modifier.weight(1f), Icons.Filled.Call, "Call 112", SosRed) {
+            QuickTile(Modifier.weight(1f), Icons.Filled.Place, "Safe Journey", "I'll check you arrive", Lilac, onClick = onJourney)
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            QuickTile(Modifier.weight(1f), Icons.Filled.Call, "Call 112", "Police, fire, ambulance", SosRed) {
                 ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:112")))
             }
-            QuickAction(Modifier.weight(1f), Icons.Filled.Place, "Safe places", Lilac) { onTab(Tab.Map) }
+            QuickTile(Modifier.weight(1f), ImageVector.vectorResource(R.drawable.ic_shield), "Safe places", "Nearby and open", Lilac) { onTab(Tab.Map) }
         }
         Spacer(Modifier.height(16.dp))
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Surface1).padding(18.dp)) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Surface1).padding(18.dp)) {
             Text("Who hears from you", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(12.dp))
             when {
@@ -692,13 +1013,11 @@ private fun HomeScreen(profile: Profile, contacts: List<Contact>?, settings: Set
                 alerted.isEmpty() -> {
                     Text("No one yet. Add at least one trusted contact so your SOS reaches someone.", color = Muted)
                     Spacer(Modifier.height(14.dp))
-                    OutlinedButton(onClick = { onTab(Tab.Contacts) }, border = androidx.compose.foundation.BorderStroke(1.dp, Lilac)) {
-                        Text("Add contacts", color = Lilac)
-                    }
+                    ChunkyButton("Add a contact", tone = Tone.Plain, icon = Icons.Filled.Person) { onTab(Tab.People) }
                 }
                 else -> {
                     Row(horizontalArrangement = Arrangement.spacedBy((-10).dp)) {
-                        alerted.take(5).forEach { Avatar(it.name, 40.dp) }
+                        alerted.take(5).forEach { Avatar(it.name, 42.dp) }
                     }
                     Spacer(Modifier.height(10.dp))
                     val police = if (settings.testMode) settings.demoNumber.ifBlank { null }?.let { "your demo number" } else "police ${settings.policeNumber}"
@@ -708,6 +1027,19 @@ private fun HomeScreen(profile: Profile, contacts: List<Contact>?, settings: Set
                     )
                 }
             }
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+}
+
+@Composable
+private fun QuickTile(modifier: Modifier, icon: ImageVector, label: String, sub: String, tint: Color, onClick: () -> Unit) {
+    Chunky(onClick = onClick, modifier = modifier, tone = Tone.Plain, depth = 3.dp, shape = RoundedCornerShape(20.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Icon(icon, null, tint = tint, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.height(14.dp))
+            Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+            Text(sub, color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -737,57 +1069,37 @@ private fun LiveCard(s: `in`.security4her.app.sos.LiveSession, onSend: () -> Uni
         )
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(onClick = onSend, colors = ButtonDefaults.buttonColors(containerColor = LiveGreen, contentColor = Color(0xFF06270F))) { Text("Send link", fontWeight = FontWeight.SemiBold) }
+            Button(onClick = onSend, colors = ButtonDefaults.buttonColors(containerColor = LiveGreen, contentColor = OnMint)) { Text("Send link", fontWeight = FontWeight.SemiBold) }
             OutlinedButton(onClick = onStop, border = androidx.compose.foundation.BorderStroke(1.dp, SosRed)) { Text("Stop sharing", color = SosRed) }
         }
     }
 }
 
 @Composable
-private fun StatusPill(modifier: Modifier, label: String, value: String, ok: Boolean, onClick: (() -> Unit)? = null) {
-    Column(
-        modifier.clip(RoundedCornerShape(14.dp)).background(Surface1)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(7.dp).clip(CircleShape).background(if (ok) Lilac else Amber))
-            Spacer(Modifier.width(6.dp))
-            Text(label, color = Muted, fontSize = 12.sp)
-        }
-        Spacer(Modifier.height(3.dp))
-        Text(value, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-@Composable
-private fun QuickAction(modifier: Modifier, icon: ImageVector, label: String, tint: Color, busy: Boolean = false, onClick: () -> Unit) {
-    Column(
-        modifier.clip(RoundedCornerShape(18.dp)).background(Surface1).clickable(onClick = onClick).padding(vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(Modifier.size(42.dp).clip(CircleShape).background(tint.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
-            if (busy) CircularProgressIndicator(Modifier.size(18.dp), color = tint, strokeWidth = 2.dp)
-            else Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
-    }
-}
-
-@Composable
-private fun SosHoldButton(onFire: () -> Unit) {
+internal fun SosHoldButton(practice: Boolean = false, onFire: () -> Unit) {
+    val base = if (practice) Lilac else SosRed
     val progress = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     var holding by remember { mutableStateOf(false) }
-    val breathe = rememberInfiniteTransition(label = "breathe")
-    val halo by breathe.animateFloat(0.86f, 1f, infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "halo")
+    val press by androidx.compose.animation.core.animateFloatAsState(
+        if (holding) 0.94f else 1f, androidx.compose.animation.core.spring(dampingRatio = 0.5f, stiffness = 400f), label = "press",
+    )
+    val radar = rememberInfiniteTransition(label = "radar")
+    val wave by radar.animateFloat(0f, 1f, infiniteRepeatable(tween(2600, easing = LinearEasing)), label = "wave")
+    val disc = androidx.compose.ui.graphics.Brush.radialGradient(
+        0f to (if (practice) Color(0xFFF0ABFC) else Color(0xFFFF8A94)), 0.55f to base, 1f to (if (practice) LilacDeep else Color(0xFFD42A45)),
+    )
     Box(
-        Modifier.size(256.dp).pointerInput(Unit) {
+        Modifier.size(280.dp).pointerInput(Unit) {
             detectTapGestures(onPress = {
                 holding = true
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 val job = scope.launch {
+                    launch {
+                        delay(500); haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        delay(500); haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    }
                     progress.animateTo(1f, tween(1500, easing = LinearEasing))
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onFire()
@@ -804,23 +1116,42 @@ private fun SosHoldButton(onFire: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            val w = 9.dp.toPx()
-            val inset = w / 2
+            val w = 8.dp.toPx()
             val r = size.minDimension / 2
-            drawCircle(SosRed.copy(alpha = 0.10f), radius = (r - inset) * (if (holding) 1f else halo))
-            drawCircle(SosRed.copy(alpha = 0.18f), radius = r - inset, style = Stroke(w))
+            val inner = 98.dp.toPx()
+            // Two radar ripples leave the button; they pause while she holds so the progress ring reads clearly
+            if (!holding && progress.value == 0f) for (k in 0..1) {
+                val t = (wave + k * 0.5f) % 1f
+                drawCircle(base.copy(alpha = 0.28f * (1f - t)), radius = inner + (r - w - inner) * t, style = Stroke(2.dp.toPx()))
+            }
+            drawCircle(base.copy(alpha = 0.16f), radius = r - w / 2, style = Stroke(w))
             drawArc(
-                SosRed, -90f, 360f * progress.value, false,
-                topLeft = Offset(inset, inset), size = Size(size.width - w, size.height - w), style = Stroke(w, cap = StrokeCap.Round),
+                Color.White, -90f, 360f * progress.value, false,
+                topLeft = Offset(w / 2, w / 2), size = Size(size.width - w, size.height - w), style = Stroke(w, cap = StrokeCap.Round),
             )
         }
-        Box(Modifier.size(188.dp).clip(CircleShape).background(SosRed), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(196.dp).graphicsLayer { scaleX = press; scaleY = press }
+                .sosGlow(base).clip(CircleShape).background(disc)
+                .border(2.dp, Color.White.copy(alpha = 0.22f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("SOS", color = Color.White, fontSize = 58.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, fontFamily = Instrument)
-                Text(if (holding) "Keep holding" else "Hold to send", color = Color.White.copy(alpha = 0.88f), fontSize = 14.sp)
+                Text("SOS", color = if (practice) OnLilac else Color.White, fontSize = 66.sp, lineHeight = 62.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp, fontFamily = Baloo)
+                Text(
+                    if (holding) "Keep holding" else if (practice) "Hold to practise" else "Hold to send",
+                    color = (if (practice) OnLilac else Color.White).copy(alpha = 0.92f), style = MaterialTheme.typography.labelLarge,
+                )
             }
         }
     }
+}
+
+/** Soft red glow under the SOS disc. */
+private fun Modifier.sosGlow(c0: Color) = this.drawBehind {
+    val c = center.copy(y = center.y + 12.dp.toPx())
+    val rr = size.minDimension * 0.78f
+    drawCircle(androidx.compose.ui.graphics.Brush.radialGradient(listOf(c0.copy(alpha = 0.5f), Color.Transparent), center = c, radius = rr), radius = rr, center = c)
 }
 
 @Composable
@@ -860,7 +1191,7 @@ private fun ContactsScreen(contacts: List<Contact>?, error: String?, onChanged: 
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Row(Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Trusted contacts", style = MaterialTheme.typography.headlineSmall)
+                Text("Your people", style = MaterialTheme.typography.headlineMedium)
                 if (list.isNotEmpty()) Text("Texted in this order during SOS", color = Muted, style = MaterialTheme.typography.bodyMedium)
             }
             if (list.isNotEmpty()) TextButton(onClick = { editing = Contact(name = "", phone = "", priority = list.size + 1) }) { Text("Add", color = Lilac) }
@@ -872,9 +1203,11 @@ private fun ContactsScreen(contacts: List<Contact>?, error: String?, onChanged: 
                 Modifier.fillMaxSize().padding(bottom = 40.dp), verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Logo(76.dp)
+                Box(Modifier.size(96.dp).clip(CircleShape).background(Lilac.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Person, null, tint = Lilac, modifier = Modifier.size(44.dp))
+                }
                 Spacer(Modifier.height(18.dp))
-                Text("Who should hear from you first?", style = MaterialTheme.typography.titleMedium)
+                Text("Who should hear from you first?", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "Add family or friends. They get a text with your live location when SOS starts.",
@@ -988,7 +1321,7 @@ private fun ContactDialog(c: Contact, onDismiss: () -> Unit, onSave: (Contact) -
 // ---------------------------------------------------------------- Settings
 
 @Composable
-private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit, onOpenLocker: () -> Unit) {
+private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit, onOpenLocker: () -> Unit, onOpenChat: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var linkMsg by remember { mutableStateOf<String?>(null) }
@@ -1001,8 +1334,35 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
     val switchColors = SwitchDefaults.colors(checkedTrackColor = Lilac, checkedThumbColor = OnLilac, uncheckedTrackColor = Surface2, uncheckedBorderColor = Line)
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 20.dp)) {
-        Text("Settings", style = MaterialTheme.typography.headlineSmall)
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(contentAlignment = Alignment.BottomEnd) {
+                Avatar(profile.displayName ?: "?", 96.dp)
+                Box(Modifier.size(32.dp).clip(CircleShape).background(Mint).border(3.dp, Night, CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Check, "Verified", tint = OnMint, modifier = Modifier.size(18.dp))
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(profile.displayName ?: "You", style = MaterialTheme.typography.headlineMedium)
+            Text(if (profile.verificationMethod == "digilocker") "Verified woman, via DigiLocker (demo)" else "Verified (demo)", color = Lilac, style = MaterialTheme.typography.bodyMedium)
+        }
         Spacer(Modifier.height(20.dp))
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Surface1).clickable(onClick = onOpenChat).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(ImageVector.vectorResource(R.drawable.ic_chat), null, tint = Lilac, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Ask Security4Her", style = MaterialTheme.typography.titleMedium)
+                Text("Questions about SOS, journeys, the map and more", color = Muted, style = MaterialTheme.typography.bodySmall)
+            }
+            Text("›", color = Lilac, fontSize = 26.sp)
+        }
+        Spacer(Modifier.height(28.dp))
+        Text("Settings", style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(14.dp))
+        Section("Colours") { PalettePicker() }
+        Section("App updates") { UpdateSection() }
 
         Section("Test Mode") {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1101,6 +1461,36 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
 }
 
 @Composable
+private fun PalettePicker() {
+    val ctx = LocalContext.current
+    val now = Palettes.current.value
+    Text("Pick what feels right. SOS stays red in every one.", color = Muted, style = MaterialTheme.typography.bodySmall)
+    Spacer(Modifier.height(12.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Palettes.all.forEach { pal ->
+            val sel = pal == now
+            Column(
+                Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
+                    .border(if (sel) 2.dp else 1.dp, if (sel) Lilac else Line, RoundedCornerShape(16.dp))
+                    .clickable(onClickLabel = "Use ${pal.name}") { Palettes.set(ctx, pal) }.padding(6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                // A tiny preview of the palette: background, card, accent, SOS
+                Box(Modifier.fillMaxWidth().height(64.dp).clip(RoundedCornerShape(11.dp)).background(pal.night).padding(7.dp)) {
+                    Box(Modifier.fillMaxWidth().height(16.dp).clip(RoundedCornerShape(5.dp)).background(pal.surface2))
+                    Box(Modifier.align(Alignment.BottomStart).size(width = 26.dp, height = 12.dp).clip(RoundedCornerShape(6.dp)).background(pal.accent))
+                    Box(Modifier.align(Alignment.BottomEnd).size(18.dp).clip(CircleShape).background(SosRed))
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(pal.name, style = MaterialTheme.typography.labelMedium, fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium, color = if (sel) Lilac else Ink)
+            }
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    Text(now.blurb, color = Muted, style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable
 internal fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
     Text(title, color = Muted, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Surface1).padding(16.dp), content = content)
@@ -1124,17 +1514,45 @@ private fun ActiveSosScreen(inc: Incident) {
     val locationOn = remember(now / 3000) { Locator.enabled(ctx) }
 
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxWidth().background(if (inc.active) SosRed else Surface1).padding(horizontal = 24.dp, vertical = 22.dp)) {
-            Text(
-                when (inc.state) { "active" -> "SOS active"; "resolved" -> "You're marked safe"; else -> "SOS cancelled" },
-                color = Color.White, style = MaterialTheme.typography.displaySmall,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                if (inc.active) "Running for %d:%02d".format(secs / 60, secs % 60) + if (inc.test) "  ·  Test Mode" else ""
-                else if (inc.smsSent > 0) "Your contacts are getting an \"I'm safe\" text." else "No texts had gone out, so no one was told.",
-                color = Color.White.copy(alpha = 0.88f), style = MaterialTheme.typography.bodyLarge,
-            )
+        val beat = rememberInfiniteTransition(label = "sosBeat")
+        val dot by beat.animateFloat(0.35f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "dot")
+        Column(
+            Modifier.fillMaxWidth()
+                .background(
+                    if (inc.active) androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFFFF5A69), Color(0xFFCF2744)))
+                    else androidx.compose.ui.graphics.SolidColor(Surface1),
+                )
+                .padding(horizontal = 24.dp, vertical = 20.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (inc.active) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(Color.White.copy(alpha = dot)))
+                    Spacer(Modifier.width(10.dp))
+                }
+                Text(
+                    when (inc.state) { "active" -> "SOS active"; "resolved" -> "You're marked safe"; else -> "SOS cancelled" },
+                    color = Color.White, style = if (inc.active) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                if (inc.test) Text(
+                    "Test Mode", color = Color.White, style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.clip(RoundedCornerShape(20.dp)).border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+            if (inc.active) {
+                Text(
+                    "%d:%02d".format(secs / 60, secs % 60), color = Color.White,
+                    fontFamily = Baloo, fontWeight = FontWeight.ExtraBold, fontSize = 72.sp, lineHeight = 74.sp,
+                )
+                Text("Your people are being alerted. Keep the app open if you can.", color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.bodyMedium)
+            } else {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (inc.smsSent > 0) "Your contacts are getting an \"I'm safe\" text." else "No texts had gone out, so no one was told.",
+                    color = Muted, style = MaterialTheme.typography.bodyLarge,
+                )
+            }
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // Call
@@ -1222,6 +1640,15 @@ private fun ActiveSosScreen(inc: Incident) {
             // Texts
             if (inc.recipients.isNotEmpty()) Card {
                 Text("Texts", style = MaterialTheme.typography.titleMedium)
+                if (inc.active && inc.recipients.any { it.state == "compose" }) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Android hasn't allowed this app to send texts by itself, so your SOS text is waiting in Messages. Tap Send there.",
+                        color = Amber, style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    ChunkyButton("Open Messages again", tone = Tone.Danger, icon = Icons.Filled.Email) { SosEngine.composeAgain() }
+                }
                 Spacer(Modifier.height(6.dp))
                 inc.recipients.forEach { r ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1232,8 +1659,8 @@ private fun ActiveSosScreen(inc: Incident) {
                             Text(r.error ?: r.phone, color = if (r.error != null) SosRed else Muted, style = MaterialTheme.typography.bodySmall)
                         }
                         Text(
-                            when (r.state) { "sending" -> "Sending"; "sent" -> "Sent"; "delivered" -> "Delivered"; else -> "Failed" },
-                            color = when (r.state) { "failed" -> SosRed; "sending" -> Muted; else -> Lilac },
+                            when (r.state) { "sending" -> "Sending"; "sent" -> "Sent"; "delivered" -> "Delivered"; "compose" -> "In Messages"; else -> "Failed" },
+                            color = when (r.state) { "failed" -> SosRed; "sending" -> Muted; "compose" -> Amber; else -> Lilac },
                             style = MaterialTheme.typography.labelLarge,
                         )
                     }
@@ -1413,20 +1840,12 @@ internal fun Field(value: String, onChange: (String) -> Unit, label: String, typ
 }
 
 @Composable
-internal fun PrimaryButton(text: String, busy: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
-    Button(
-        onClick = onClick, enabled = enabled && !busy,
-        modifier = Modifier.fillMaxWidth().height(54.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Lilac, contentColor = OnLilac, disabledContainerColor = Surface2, disabledContentColor = Muted),
-    ) {
-        if (busy) CircularProgressIndicator(Modifier.size(20.dp), color = OnLilac, strokeWidth = 2.dp) else Text(text)
-    }
-}
+internal fun PrimaryButton(text: String, busy: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) =
+    ChunkyButton(text, busy = busy, enabled = enabled, onClick = onClick)
 
 @Composable
 internal fun Note(text: String) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).border(1.dp, Line, RoundedCornerShape(12.dp)).padding(14.dp)) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Surface1).padding(14.dp)) {
         Text(text, color = Muted, style = MaterialTheme.typography.bodySmall)
     }
 }

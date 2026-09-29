@@ -24,6 +24,11 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- In-app updates: hand the downloaded APK to Android's installer. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Pocket SOS: listen for three knocks with the screen off, and resume after a reboot. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".App"
@@ -88,6 +93,23 @@
         </service>
 
         <receiver android:name=".sos.SosReceiver" android:exported="false" />
+
+        <!-- Pocket SOS: triple knock on the phone starts an SOS countdown. -->
+        <service
+            android:name=".sos.PocketSosService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Detects three knocks on the phone (through a pocket or bag) to start an emergency SOS" />
+        </service>
+        <receiver android:name=".sos.PocketReceiver" android:exported="false" />
+        <receiver android:name=".sos.PocketBootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Sharing exported evidence and opening video clips. -->
         <provider

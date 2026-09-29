@@ -20,11 +20,13 @@ android {
         applicationId = "in.security4her.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.2.0-watch"
+        // Bump both for every release; the watch compares versionCode with the "watch" entry in web-install/version.json.
+        versionCode = 5
+        versionName = "0.3.1"
         buildConfigField("String", "SUPABASE_URL", cfg("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", cfg("SUPABASE_ANON_KEY"))
         buildConfigField("String", "TRACK_BASE_URL", cfg("TRACK_BASE_URL"))
+        buildConfigField("String", "UPDATE_URL", "\"${localProps.getProperty("UPDATE_URL", "https://security4her.vercel.app/version.json")}\"")
     }
 
     signingConfigs {
