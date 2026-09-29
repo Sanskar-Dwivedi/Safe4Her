@@ -122,7 +122,7 @@ data class Incident(
 
 data class Fix(val lat: Double, val lng: Double, val acc: Float?, val at: Long)
 
-/** The single SOS pipeline used by the Home button and by the watch (CODEX_BRIEF §3). */
+/** The single SOS pipeline used by the Home button and by the watch. */
 object SosEngine {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _current = MutableStateFlow<Incident?>(null)

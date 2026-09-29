@@ -1,4 +1,4 @@
-// Security4Her — Wear OS watch app (Claude-owned module; see CONTRACT.md).
+// Security4Her — Wear OS watch app (see CONTRACT.md).
 import java.util.Properties
 plugins {
     id("com.android.application")

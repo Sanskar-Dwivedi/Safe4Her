@@ -9,7 +9,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Guards the wire format in CONTRACT.md §2/§3 — the phone (Codex) and server depend on these exact keys. */
+/** Guards the wire format in CONTRACT.md §2/§3 — the phone and server depend on these exact keys. */
 class ModelsTest {
     private fun keys(json: String): Set<String> = (Json.parseToJsonElement(json) as JsonObject).keys
 

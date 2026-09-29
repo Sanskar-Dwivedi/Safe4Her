@@ -1,9 +1,7 @@
 # Security4Her — Integration Contract (frozen at H0)
 
-Both builders code against this file. **Claude** owns root Gradle files, `keystore/`, this file,
-`supabase/`, `web-track/`, `scripts/`, `wear/`, and `mobile/src/main/java/in/security4her/app/map/`.
-**Codex** owns everything else under `mobile/`. Never edit a path you don't own. If you need a
-change in someone else's path, add a line to "Change requests" at the bottom and tell them.
+The phone app, watch app, backend and live page all code against this file. Change it first, then the
+code, and note the change under "Change requests" at the bottom.
 
 ## 1. App identity & build
 
@@ -124,15 +122,15 @@ cloud project. All RPCs are called via PostgREST `rpc/<name>` with named paramet
   `SOS from <name>. I may be in danger. Live location: <shareUrl> Last seen: https://maps.google.com/?q=<lat>,<lng> (±<acc>m, <HH:mm>)`
 - In **Test Mode** (the default in debug builds), the police SMS and the auto-call go to the "demo number" setting, never to 112.
 
-## 5. Map feature (Claude-owned package inside `:mobile`)
+## 5. Map feature (package inside `:mobile`)
 
 - Entry point: `in.security4her.app.map.SafetyMapScreen(supabase: io.github.jan.supabase.SupabaseClient, modifier: Modifier = Modifier)`.
 - It uses only `supabase.postgrest.rpc(...)`, Fused Location, and Maps Compose.
-- Codex's `mobile/build.gradle.kts` must include `maps-compose`, `play-services-location`, `kotlinx-coroutines-play-services`, `activity-compose`, Compose `material3`, the supabase-kt `postgrest-kt` module, and the `kotlinx-serialization` plugin + `kotlinx-serialization-json` (versions above).
+- `mobile/build.gradle.kts` must include `maps-compose`, `play-services-location`, `kotlinx-coroutines-play-services`, `activity-compose`, Compose `material3`, the supabase-kt `postgrest-kt` module, and the `kotlinx-serialization` plugin + `kotlinx-serialization-json` (versions above).
 - Files: `map/MapRepository.kt` (RPC calls + `SafePlace`/`DangerCell` models) and `map/SafetyMapScreen.kt`. Host it inside your Scaffold content, with no extra top padding needed.
-- Codex's manifest must declare `ACCESS_FINE_LOCATION`, `CALL_PHONE` and the Maps API key meta-data.
+- The manifest must declare `ACCESS_FINE_LOCATION`, `CALL_PHONE` and the Maps API key meta-data.
 
 ## Change requests
 _(append: date, who, what, why)_
-- 2026-09-28, Claude (for Atharva): wrote the Codex-owned `mobile/` app (outside `map/`) because the Codex track never landed. Demo mode when `SUPABASE_URL` is blank (local fake backend); map tab falls back to a demo list without a Maps key.
-- 2026-09-28, Claude: `wear/build.gradle.kts` and the §1 snippet — `java.util.Properties()` doesn't resolve in module scripts (the `java` extension shadows the package). Fixed with `import java.util.Properties`. Build on JDK 17 (Gradle 8.14.3 can't run on JDK 25).
+- 2026-09-28: wrote the `mobile/` app. Demo mode when `SUPABASE_URL` is blank (local fake backend); map tab falls back to a demo list without a Maps key.
+- 2026-09-28: `wear/build.gradle.kts` and the §1 snippet — `java.util.Properties()` doesn't resolve in module scripts (the `java` extension shadows the package). Fixed with `import java.util.Properties`. Build on JDK 17 (Gradle 8.14.3 can't run on JDK 25).

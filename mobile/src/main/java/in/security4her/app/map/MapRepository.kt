@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-// Claude-owned package (CONTRACT.md §5). Talks only to the map RPCs in CONTRACT.md §3.
+// Map data (CONTRACT.md §5). Talks only to the map RPCs in CONTRACT.md §3.
 
 @Serializable
 data class SafePlace(

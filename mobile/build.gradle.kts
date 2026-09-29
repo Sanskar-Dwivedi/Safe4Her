@@ -1,4 +1,4 @@
-// Security4Her — Android phone app (see CONTRACT.md; mobile/.../map/ is Claude-owned).
+// Security4Her — Android phone app (see CONTRACT.md).
 import java.util.Properties
 plugins {
     id("com.android.application")
