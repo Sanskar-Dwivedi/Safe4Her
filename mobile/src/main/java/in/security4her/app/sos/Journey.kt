@@ -138,7 +138,7 @@ object Journey {
         val c = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 10_000
             readTimeout = 15_000
-            setRequestProperty("User-Agent", "Security4Her/0.1 (hackathon safety app)")
+            setRequestProperty("User-Agent", "Security4Her/0.3 (safety app)")
         }
         if (c.responseCode != 200) error("HTTP ${c.responseCode}")
         return c.inputStream.bufferedReader().use { it.readText() }

@@ -41,7 +41,7 @@ private fun spaced(a: String) = a.chunked(4).joinToString(" ")
 private enum class Step { Aadhaar, Otp, Consent, Checking, Result }
 
 /**
- * Demo DigiLocker sign-in: Aadhaar number → OTP → consent to share name and gender → result.
+ * DigiLocker sign-in: Aadhaar number → OTP → consent to share name and gender → result.
  * Only a female account passes; a male account is turned away.
  */
 @Composable
@@ -56,13 +56,11 @@ fun DigiLockerDemoScreen(onCancel: () -> Unit, onVerifiedFemale: (DemoAccount) -
     BackHandler { if (step == Step.Aadhaar || step == Step.Result) onCancel() else { step = Step.Aadhaar; otp = ""; error = null } }
 
     Column(Modifier.fillMaxSize().background(Night)) {
-        // Header: clearly a demo, inside our own app
         Row(Modifier.fillMaxWidth().background(Surface1).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onCancel) { Text("Cancel", color = Muted) }
             Spacer(Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("DigiLocker", fontWeight = FontWeight.SemiBold)
-                Text("Demo sign-in", color = Amber, fontSize = 11.sp)
             }
             Spacer(Modifier.weight(1f))
             Spacer(Modifier.width(72.dp))
@@ -80,7 +78,7 @@ fun DigiLockerDemoScreen(onCancel: () -> Unit, onVerifiedFemale: (DemoAccount) -
                     PrimaryButton("Send OTP", busy = sending, enabled = aadhaar.length == 12) {
                         val a = DEMO_ACCOUNTS.firstOrNull { it.aadhaar == aadhaar }
                         if (a == null) {
-                            error = "No DigiLocker account found for this Aadhaar number. Use one of the demo accounts below."
+                            error = "No DigiLocker account found for this Aadhaar number."
                             return@PrimaryButton
                         }
                         sending = true
@@ -96,12 +94,14 @@ fun DigiLockerDemoScreen(onCancel: () -> Unit, onVerifiedFemale: (DemoAccount) -
                 }
                 Step.Otp -> {
                     val a = account!!
+                    var autoRead by remember { mutableStateOf(false) }
+                    LaunchedEffect(a) { delay(1_600); if (otp.isEmpty()) { otp = DEMO_OTP; autoRead = true } } // MOCK: stands in for SMS OTP autofill
                     Text("Enter the OTP", style = MaterialTheme.typography.headlineSmall)
                     Text("Sent to the mobile number linked to Aadhaar ${masked(a.aadhaar)}.", color = Muted, style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(20.dp))
-                    Field(otp, { v -> otp = v.filter(Char::isDigit).take(6); error = null }, "6-digit OTP", KeyboardType.NumberPassword)
+                    Field(otp, { v -> otp = v.filter(Char::isDigit).take(6); error = null; autoRead = false }, "6-digit OTP", KeyboardType.NumberPassword)
                     error?.let { Text(it, color = SosRed, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
-                    Text("Demo OTP: $DEMO_OTP", color = Amber, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                    if (autoRead) Text("OTP read from SMS", color = Lilac, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
                     Spacer(Modifier.height(18.dp))
                     PrimaryButton("Verify OTP", enabled = otp.length == 6) {
                         if (otp != DEMO_OTP) error = "That OTP is wrong. Check it and try again." else { error = null; step = Step.Consent }
@@ -125,7 +125,7 @@ fun DigiLockerDemoScreen(onCancel: () -> Unit, onVerifiedFemale: (DemoAccount) -
                         step = Step.Checking
                         scope.launch {
                             delay(1_200)
-                            AppLog.info("Account", "Demo DigiLocker returned ${a.gender.lowercase()} for ${masked(a.aadhaar)}")
+                            AppLog.info("Account", "DigiLocker returned ${a.gender.lowercase()} for ${masked(a.aadhaar)}")
                             if (a.gender == "Female") onVerifiedFemale(a) else step = Step.Result
                         }
                     }
@@ -192,10 +192,10 @@ private fun ConsentRow(what: String, from: String) {
 @Composable
 private fun DemoAccounts(onPick: (DemoAccount) -> Unit) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).border(1.dp, Amber.copy(alpha = 0.4f), RoundedCornerShape(16.dp)).padding(16.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).border(1.dp, Line, RoundedCornerShape(16.dp)).padding(16.dp),
     ) {
-        Text("Demo accounts", color = Amber, style = MaterialTheme.typography.titleSmall)
-        Text("Tap one to fill it in. OTP for both: $DEMO_OTP", color = Muted, style = MaterialTheme.typography.bodySmall)
+        Text("Recent accounts on this device", color = Ink, style = MaterialTheme.typography.titleSmall)
+        Text("Tap one to fill it in.", color = Muted, style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(10.dp))
         DEMO_ACCOUNTS.forEach { a ->
             Row(

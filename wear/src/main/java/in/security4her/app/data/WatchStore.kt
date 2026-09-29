@@ -21,6 +21,8 @@ class WatchStore private constructor(private val context: Context) {
     val phoneStatus: Flow<PhoneStatus?> = context.dataStore.data.map { decode(it, KEY_STATUS, PhoneStatus.serializer()) }
     val setupDone: Flow<Boolean> = context.dataStore.data.map { it[KEY_SETUP] ?: false }
     val safetyMode: Flow<Boolean> = context.dataStore.data.map { it[KEY_SAFETY] ?: false }
+    /** Voice SOS: listen for "HELP HELP HELP". Its own switch, independent of Safety Mode. */
+    val voiceSos: Flow<Boolean> = context.dataStore.data.map { it[KEY_VOICE] ?: false }
 
     suspend fun incidentNow(): ActiveIncident? = incident.first()
     suspend fun linkNow(): DeviceLink? = link.first()
@@ -76,6 +78,10 @@ class WatchStore private constructor(private val context: Context) {
         context.dataStore.edit { it[KEY_SAFETY] = on }
     }
 
+    suspend fun setVoiceSos(on: Boolean) {
+        context.dataStore.edit { it[KEY_VOICE] = on }
+    }
+
     private fun <T> decode(p: Preferences, key: Preferences.Key<String>, serializer: KSerializer<T>): T? =
         p[key]?.let { runCatching { S4hJson.decodeFromString(serializer, it) }.getOrNull() }
 
@@ -85,6 +91,7 @@ class WatchStore private constructor(private val context: Context) {
         private val KEY_STATUS = stringPreferencesKey("phone_status")
         private val KEY_SETUP = booleanPreferencesKey("setup_done")
         private val KEY_SAFETY = booleanPreferencesKey("safety_mode")
+        private val KEY_VOICE = booleanPreferencesKey("voice_sos")
 
         @Volatile private var instance: WatchStore? = null
 

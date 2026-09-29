@@ -138,7 +138,7 @@ class App : Application() {
         fun has(p: String) = if (ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED) "on" else "off"
         AppLog.info(
             "App",
-            "Opened · ${if (Backend.mock) "demo mode" else "server mode"} · location ${has(Manifest.permission.ACCESS_FINE_LOCATION)}, " +
+            "Opened · ${if (Backend.mock) "offline mode" else "server mode"} · location ${has(Manifest.permission.ACCESS_FINE_LOCATION)}, " +
                 "SMS ${has(Manifest.permission.SEND_SMS)}, calls ${has(Manifest.permission.CALL_PHONE)}",
         )
     }
@@ -338,7 +338,7 @@ private fun AuthScreen(onDone: (Profile) -> Unit) {
         Text(if (creating) "Create your account" else "Welcome back", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(6.dp))
         Text(
-            if (creating) "It takes about a minute. Your details stay on this phone in demo mode." else "Sign in to pick up where you left off.",
+            if (creating) "It takes about a minute." else "Sign in to pick up where you left off.",
             color = Muted, style = MaterialTheme.typography.bodyLarge,
         )
         Spacer(Modifier.height(28.dp))
@@ -379,10 +379,6 @@ private fun AuthScreen(onDone: (Profile) -> Unit) {
                 }
             }
         }
-        if (Backend.mock) {
-            Spacer(Modifier.height(28.dp))
-            Note("Demo mode: no server is set up, so your account and contacts stay on this phone.")
-        }
     }
 }
 
@@ -401,7 +397,7 @@ private fun VerifyScreen(profile: Profile, onDone: (Profile) -> Unit) {
                 try {
                     // MOCK: demo DigiLocker said female; record it (real flow: digilocker-start → callback, CONTRACT.md §3)
                     if (Backend.mockVerifyFemale("digilocker")) {
-                        AppLog.ok("Account", "Verified as a woman through demo DigiLocker (${acct.name})")
+                        AppLog.ok("Account", "Verified as a woman through DigiLocker (${acct.name})")
                         onDone(Backend.profile())
                     } else error = "Verification didn't go through. Try again."
                 } catch (e: Exception) {
@@ -440,7 +436,7 @@ private fun VerifyScreen(profile: Profile, onDone: (Profile) -> Unit) {
         Spacer(Modifier.weight(1f))
         PrimaryButton("Verify with DigiLocker", busy = busy) { error = null; digilocker = true }
         Spacer(Modifier.height(10.dp))
-        Text("Demo DigiLocker: uses sample accounts, no real documents.", color = Muted, style = MaterialTheme.typography.bodySmall,
+        Text("Only your name and gender are shared. No documents.", color = Muted, style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
 }
@@ -1032,7 +1028,7 @@ private fun HomeScreen(
                         alerted.take(5).forEach { Avatar(it.name, 42.dp) }
                     }
                     Spacer(Modifier.height(10.dp))
-                    val police = if (settings.testMode) settings.demoNumber.ifBlank { null }?.let { "your demo number" } else "police ${settings.policeNumber}"
+                    val police = if (settings.testMode) settings.demoNumber.ifBlank { null }?.let { "your test number" } else "police ${settings.policeNumber}"
                     Text(
                         alerted.joinToString(", ") { it.name } + (police?.let { ", and $it" } ?: ""),
                         color = Muted, style = MaterialTheme.typography.bodyMedium,
@@ -1355,7 +1351,7 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
             }
             Spacer(Modifier.height(10.dp))
             Text(profile.displayName ?: "You", style = MaterialTheme.typography.headlineMedium)
-            Text(if (profile.verificationMethod == "digilocker") "Verified woman, via DigiLocker (demo)" else "Verified (demo)", color = Lilac, style = MaterialTheme.typography.bodyMedium)
+            Text(if (profile.verificationMethod == "digilocker") "Verified woman, via DigiLocker" else "Verified", color = Lilac, style = MaterialTheme.typography.bodyMedium)
         }
         Spacer(Modifier.height(20.dp))
         Row(
@@ -1416,7 +1412,7 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
 
         Section("Test Mode") {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Send police texts and calls to a demo number", modifier = Modifier.weight(1f))
+                Text("Send police texts and calls to a test number", modifier = Modifier.weight(1f))
                 Switch(
                     checked = settings.testMode, onCheckedChange = { set(settings.copy(testMode = it)) },
                     colors = SwitchDefaults.colors(checkedTrackColor = Amber, checkedThumbColor = Night, uncheckedTrackColor = Surface2, uncheckedBorderColor = Line),
@@ -1425,11 +1421,11 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
             Spacer(Modifier.height(12.dp))
             var demo by remember(settings.demoNumber) { mutableStateOf(settings.demoNumber) }
             val demoBad = demo.isNotBlank() && digits(demo) < 3
-            Field(demo, { demo = it.filter { c -> c.isDigit() || c in "+ -" } }, "Demo number (a teammate's phone)", KeyboardType.Phone)
+            Field(demo, { demo = it.filter { c -> c.isDigit() || c in "+ -" } }, "Test number (a friend's phone)", KeyboardType.Phone)
             if (demoBad) FieldError("Enter a full phone number.")
             SaveBar(changed = demo.trim() != settings.demoNumber, valid = !demoBad, onDiscard = { demo = settings.demoNumber }) {
                 set(settings.copy(demoNumber = demo.trim()))
-                AppLog.ok("Settings", "Demo number saved")
+                AppLog.ok("Settings", "Test number saved")
             }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
@@ -1493,7 +1489,7 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
                 Column(Modifier.weight(1f)) {
                     Text(profile.displayName ?: "You", style = MaterialTheme.typography.titleMedium)
                     Text(
-                                if (profile.verificationMethod == "digilocker") "Verified with DigiLocker (demo)" else "Verified (demo)",
+                                if (profile.verificationMethod == "digilocker") "Verified with DigiLocker" else "Verified",
                         color = Lilac, style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -1661,11 +1657,6 @@ private fun ActiveSosScreen(inc: Incident) {
                     when (inc.state) { "active" -> "SOS active"; "resolved" -> "You're marked safe"; else -> "SOS cancelled" },
                     color = Color.White, style = if (inc.active) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineMedium,
                     modifier = Modifier.weight(1f),
-                )
-                if (inc.test) Text(
-                    "Test Mode", color = Color.White, style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.clip(RoundedCornerShape(20.dp)).border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
                 )
             }
             if (inc.active) {

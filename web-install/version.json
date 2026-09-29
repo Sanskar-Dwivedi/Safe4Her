@@ -1,15 +1,15 @@
 {
-  "versionCode": 7,
-  "versionName": "0.3.3",
+  "versionCode": 8,
+  "versionName": "0.3.4",
   "apk": "Security4Her-phone.apk",
-  "sha256": "d651c2dc91a490b23de930611816f12c7e6deb9661b88409a510417716e3d64f",
-  "bytes": 19977021,
-  "notes": "SOS settings now have a Save button with a Saved confirmation.",
+  "sha256": "dbfc7855d0d8d5707ba9171b68c0c19b5d6a101bdbd5cd5ecbd119c19d317d67",
+  "bytes": 19927869,
+  "notes": "New on the watch: Voice SOS \u2014 say HELP HELP HELP and the watch starts an SOS, fully offline.",
   "watch": {
-    "versionCode": 5,
-    "versionName": "0.3.1",
+    "versionCode": 6,
+    "versionName": "0.4.0",
     "apk": "Security4Her-watch.apk",
-    "sha256": "d52e9922284c244674ec813e7efa6baa02efd520c0d5222afc23468083219b7c",
-    "bytes": 33865488
+    "sha256": "a261d22ceddf8e5f8f73e367ced260f41e2daf33279751aa9dc49d06a22df1e3",
+    "bytes": 67345321
   }
 }

@@ -15,6 +15,7 @@ import `in`.security4her.app.sos.PhoneLink
 import `in`.security4her.app.sos.SosController
 import `in`.security4her.app.ui.WatchActions
 import `in`.security4her.app.ui.WatchUi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -31,6 +32,11 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch {
                 if (Locator.hasPermission(this@MainActivity)) store.setSetupDone(true)
             }
+        }
+
+    private val micLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) SafetyService.send(this, SafetyService.ACTION_ENSURE)
         }
 
     private val actions = object : WatchActions {
@@ -56,6 +62,17 @@ class MainActivity : ComponentActivity() {
 
         override fun dismiss() = SosController.dismiss(this@MainActivity)
 
+        override fun setVoiceSos(on: Boolean) {
+            lifecycleScope.launch {
+                store.setVoiceSos(on)
+                if (on && !`in`.security4her.app.voice.VoiceSos.hasPermission(this@MainActivity)) {
+                    micLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                } else if (on) {
+                    SafetyService.send(this@MainActivity, SafetyService.ACTION_ENSURE) // claims the microphone while visible
+                }
+            }
+        }
+
         override fun setSafetyMode(on: Boolean) {
             lifecycleScope.launch {
                 store.setSafetyMode(on) // write state first; the service only observes it
@@ -78,7 +95,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        lifecycleScope.launch { PhoneLink.syncFromPhone(this@MainActivity) }
+        lifecycleScope.launch {
+            PhoneLink.syncFromPhone(this@MainActivity)
+            // Re-arm Voice SOS (e.g. after a reboot): the microphone can only be claimed while the app is visible.
+            if (store.voiceSos.first()) SafetyService.send(this@MainActivity, SafetyService.ACTION_ENSURE)
+        }
         `in`.security4her.app.sos.WatchUpdater.check(this)
     }
 

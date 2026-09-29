@@ -58,6 +58,7 @@ interface WatchActions {
     fun imSafe()
     fun dismiss()
     fun setSafetyMode(on: Boolean)
+    fun setVoiceSos(on: Boolean)
 }
 
 private object C {
@@ -79,6 +80,8 @@ fun WatchUi(store: WatchStore, actions: WatchActions) {
     val phoneStatus by store.phoneStatus.collectAsStateWithLifecycle(initialValue = null)
     val link by store.link.collectAsStateWithLifecycle(initialValue = null)
     val safety by store.safetyMode.collectAsStateWithLifecycle(initialValue = false)
+    val voiceOn by store.voiceSos.collectAsStateWithLifecycle(initialValue = false)
+    var showVoice by remember { mutableStateOf(false) }
     val countdown by SosController.countdown.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
@@ -97,7 +100,8 @@ fun WatchUi(store: WatchStore, actions: WatchActions) {
                 cd != null -> CountdownScreen(cd, actions)
                 inc != null -> IncidentScreen(inc, phoneStatus, link, actions)
                 !setupDone -> SetupScreen(actions)
-                else -> HomeScreen(link, phoneReachable, safety, actions)
+                showVoice -> VoiceSosScreen(voiceOn, onToggle = { actions.setVoiceSos(it) }, onBack = { showVoice = false })
+                else -> HomeScreen(link, phoneReachable, safety, voiceOn, actions, onVoice = { showVoice = true })
             }
         }
     }
@@ -194,15 +198,17 @@ private fun SetupScreen(actions: WatchActions) {
 }
 
 @Composable
-private fun HomeScreen(link: DeviceLink?, phoneReachable: Boolean?, safety: Boolean, actions: WatchActions) {
+private fun HomeScreen(
+    link: DeviceLink?, phoneReachable: Boolean?, safety: Boolean, voiceOn: Boolean, actions: WatchActions, onVoice: () -> Unit,
+) {
     Screen {
         BrandTitle()
-        if (link?.testMode != false) Label("TEST MODE", color = C.amber, size = 11.sp, weight = FontWeight.Bold)
         RoundButton("SOS", C.red, 104.dp, 30.sp) { actions.sosNow() }
         PillButton(if (safety) "Safety Mode: ON" else "Safety Mode: OFF", if (safety) C.purple else Color(0xFF333333)) {
             actions.setSafetyMode(!safety)
         }
         if (safety) Label("Shake your wrist hard 3 times to start SOS", color = C.grey, size = 11.sp)
+        PillButton(if (voiceOn) "Voice SOS: ON  ›" else "Voice SOS  ›", if (voiceOn) C.purple else Color(0xFF333333), onClick = onVoice)
         StatusRow(
             "Phone",
             when (phoneReachable) { true -> "connected"; false -> "not reachable"; null -> "checking…" },
@@ -241,7 +247,9 @@ private fun CountdownScreen(countdown: SosController.Countdown, actions: WatchAc
         Label("SOS in", color = C.coral, size = 16.sp, weight = FontWeight.Bold)
         Label("${countdown.secondsLeft}", size = 56.sp, weight = FontWeight.Bold)
         Label(
-            when (countdown.trigger) { "shake" -> "Shake detected"; "knock" -> "Gesture detected"; else -> "SOS pressed" },
+            when (countdown.trigger) {
+                "shake" -> "Shake detected"; "knock" -> "Gesture detected"; "voice" -> "Heard HELP HELP HELP"; else -> "SOS pressed"
+            },
             color = C.grey, size = 12.sp,
         )
         RoundButton("Cancel", Color(0xFF424242), 84.dp, 18.sp) { actions.cancelCountdown() }
@@ -273,7 +281,6 @@ private fun IncidentScreen(incident: ActiveIncident, phone: PhoneStatus?, link: 
         }
 
         Label("SOS ACTIVE", color = C.red, size = 18.sp, weight = FontWeight.Bold)
-        if (incident.test) Label("TEST MODE", color = C.amber, size = 11.sp, weight = FontWeight.Bold)
         val serverOk = incident.serverAccepted || phone?.serverAccepted == true
         if (incident.delivered) {
             Label("Alert delivered", color = C.green, size = 14.sp, weight = FontWeight.SemiBold)

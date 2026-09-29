@@ -142,7 +142,7 @@ object SosEngine {
         if (live != null && live.active) return // one SOS at a time; the watch and phone dedupe on id
         val s = Settings.load(ctx)
         val how = when (trigger) {
-            "knock" -> "Knock Knock on watch"; "pocket" -> "three knocks on the phone"; "shake" -> "shake on watch"; "journey" -> "Safe Journey: no answer to a check-in"; else -> "SOS button"
+            "knock" -> "Knock Knock on watch"; "voice" -> "HELP HELP HELP heard by the watch"; "pocket" -> "three knocks on the phone"; "shake" -> "shake on watch"; "journey" -> "Safe Journey: no answer to a check-in"; else -> "SOS button"
         }
         _current.value = Incident(
             id = id, trigger = trigger, source = source, startedAt = System.currentTimeMillis(), test = s.testMode,
@@ -242,8 +242,8 @@ object SosEngine {
         val contacts = runCatching { runBlocking { Backend.contacts() } }.getOrDefault(emptyList())
         val list = contacts.filter { it.receivesSos }.map { Recipient(it.name, it.phone) }.toMutableList()
         val police = if (s.testMode) s.demoNumber else s.policeNumber
-        if (police.isNotBlank()) list += Recipient(if (s.testMode) "Demo number (Test Mode)" else "Police $police", police, police = true)
-        else if (s.testMode) log("Test Mode: no demo number set, police SMS skipped", "fail")
+        if (police.isNotBlank()) list += Recipient(if (s.testMode) "Test number" else "Police $police", police, police = true)
+        else if (s.testMode) log("Test Mode: no test number set, police SMS skipped", "fail")
         if (list.isEmpty()) {
             log("No one to text. Add trusted contacts.", "fail")
             return
@@ -374,7 +374,7 @@ object SosEngine {
         }
         if (number.isBlank()) {
             update { it.copy(call = "skipped") }
-            log(if (s.testMode) "Auto-call skipped: set a demo number in Settings" else "Auto-call skipped: no number set", "fail")
+            log(if (s.testMode) "Auto-call skipped: set a test number in Settings" else "Auto-call skipped: no number set", "fail")
             return
         }
         val at = System.currentTimeMillis() + s.countdownSec * 1000L

@@ -89,11 +89,14 @@ private val TOPICS = listOf(
     Topic(listOf("pocket", "knock", "knocks", "tap", "taps", "gesture", "triple", "bag", "without watch")) {
         "Pocket SOS: turn it on in Me → Pocket SOS. With the screen off, knock firmly on your phone three times through your pocket or bag, about half a second apart. It buzzes, counts down 5 seconds (tap Cancel if it was a mistake), then starts a normal SOS with texts, live location, recording and the call. You feel a small tick for each knock and a strong buzz when the countdown starts. If it misses your knocks or reacts to light taps, open Practise and adjust strength and tap Set to my knocks; nothing is sent while practising."
     },
+    Topic(listOf("voice", "shout", "say", "speak", "talk", "hands free", "hands-free", "scream")) {
+        "Voice SOS is on the Wear OS watch. Turn it on from the watch's Home screen (Voice SOS), then saying HELP HELP HELP clearly, three times in a row, starts the same 5-second countdown as the other triggers: the watch vibrates, you can cancel, and then the full SOS goes out. It listens only while switched on, entirely on the watch; no audio is saved or sent. Use Practise on the watch to check it hears you."
+    },
     Topic(listOf("pin", "password", "code")) {
         "A safety PIN stops anyone else from switching your SOS off. Set 4 digits in Me → During SOS. You'll be asked for it when you tap I'm safe."
     },
-    Topic(listOf("test", "practice", "practise", "demo", "try")) {
-        "Test Mode (in Me) sends the police text and the automatic call to a demo number, like a friend's phone, instead of the police. Use it to try an SOS safely."
+    Topic(listOf("test", "practice", "practise", "try")) {
+        "Test Mode (in Me) sends the police text and the automatic call to a test number, like a friend's phone, instead of the police. Use it to try an SOS safely."
     },
     Topic(listOf("112", "181", "1091", "helpline", "number", "call", "numbers", "ambulance")) {
         "Emergency numbers in India:\n• 112: all emergencies (police, fire, ambulance)\n• 181: Women Helpline\n• 1091: Women Police Helpline\n• 100: Police\nCall 112 is also on Home and on the SOS screen."
@@ -102,7 +105,7 @@ private val TOPICS = listOf(
         "Your location is shared only during an SOS, a Safe Journey or when you share it yourself. Recordings stay on your phone unless you export them. Contacts only get what you send them."
     },
     Topic(listOf("digilocker", "verify", "verified", "women only", "why women", "aadhaar")) {
-        "Security4Her is only for women, which keeps the safety map and alerts trustworthy. DigiLocker confirms it once when you sign up. In this build the DigiLocker sign-in is a demo."
+        "Security4Her is only for women, which keeps the safety map and alerts trustworthy. DigiLocker confirms it once when you sign up."
     },
     Topic(listOf("battery", "background", "killed", "sleep")) {
         "Allow Run in the background during setup (or in Android settings) so the phone doesn't pause an SOS or a Safe Journey to save battery."

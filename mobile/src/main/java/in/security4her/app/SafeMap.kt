@@ -150,7 +150,7 @@ object Places {
         val c = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 10_000
             readTimeout = 15_000
-            setRequestProperty("User-Agent", "Security4Her/0.1 (hackathon safety app)")
+            setRequestProperty("User-Agent", "Security4Her/0.3 (safety app)")
         }
         if (c.responseCode != 200) error("HTTP ${c.responseCode}")
         return c.inputStream.bufferedReader().use { it.readText() }
@@ -200,7 +200,7 @@ object Places {
                     doOutput = true
                     connectTimeout = 10_000
                     readTimeout = 25_000
-                    setRequestProperty("User-Agent", "Security4Her/0.1 (hackathon safety app)")
+                    setRequestProperty("User-Agent", "Security4Her/0.3 (safety app)")
                     setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
                 }
                 c.outputStream.use { it.write(("data=" + URLEncoder.encode(q, "UTF-8")).toByteArray()) }

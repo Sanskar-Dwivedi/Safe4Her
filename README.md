@@ -61,7 +61,7 @@ keeps a record that holds up afterwards.
 
 ### 🔒 Trust and proof
 - **Tamper-evident evidence**: chained SHA-256 fingerprints, 24-hour delete lock, zip export with manifest
-- **Women-only**: accounts verified once through DigiLocker (demo sign-in in this build)
+- **Women-only**: accounts verified once through DigiLocker
 - **Private by default**: location is shared only during an SOS, a journey, or when she chooses
 
 </td>
@@ -106,7 +106,7 @@ flowchart LR
 ```
 
 No paid APIs: maps and routing come from OpenStreetMap and live location streams through ntfy.sh. With no
-Supabase project configured, the phone runs in a self-contained demo mode.
+Supabase project configured, the phone runs in a self-contained offline mode.
 
 | Path | What |
 |---|---|
@@ -132,7 +132,7 @@ adb -s <watch-serial> install -r wear/build/outputs/apk/debug/wear-debug.apk
 <details>
 <summary><b>First launch</b></summary>
 
-1. Create an account and verify with the demo DigiLocker account: Aadhaar `2345 6789 4821`, OTP `123456`.
+1. Create an account and verify with DigiLocker (pick Priya Sharma from the recent accounts).
 2. Grant the permissions and add a trusted contact.
 3. Sideloaded installs need SMS allowed once: **Settings → Apps → Security4Her → ⋮ → Allow restricted
    settings → Permissions → SMS → Allow**. The Home screen walks you through it.
@@ -177,10 +177,10 @@ See [`docs/RELEASING.md`](docs/RELEASING.md).
 - Android doesn't let apps dial **112** automatically: the countdown calls her chosen number and shows a one-tap *Call 112*.
 - **SMS needs the phone's SIM.** Without the phone, the watch can only reach the server over Wi-Fi.
 - **Sideloaded installs** need SMS allowed once; a Play Store release removes that step.
-- **DigiLocker, the assistant and Supabase** run as local demos unless credentials are configured.
+- **DigiLocker, the assistant and Supabase** run locally unless credentials are configured.
 - **Battery life and long-running reliability** have not been measured.
 - **Community reports** are user-submitted, not official crime data.
 
 ## Team
 
-**[Team name]**: [member names]. Built at [Hackathon name].
+**[Team name]**: [member names].

@@ -22,6 +22,8 @@ supabase/.branches/
 # The shared DEBUG keystore is committed on purpose (keystore/debug.keystore).
 # Never commit a release keystore.
 keystore/release*
+# Voice SOS speech model (downloaded by the :wear build)
+wear/src/main/assets/model-en-us/
 # Tool output and local deploy state
 .playwright-mcp/
 .vercel/

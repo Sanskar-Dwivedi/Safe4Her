@@ -1,5 +1,7 @@
 // Security4Her — Wear OS watch app (see CONTRACT.md).
+import java.net.URI
 import java.util.Properties
+import java.util.zip.ZipFile
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -21,11 +23,13 @@ android {
         minSdk = 30
         targetSdk = 35
         // Bump both for every release; the watch compares versionCode with the "watch" entry in web-install/version.json.
-        versionCode = 5
-        versionName = "0.3.1"
+        versionCode = 6
+        versionName = "0.4.0"
         buildConfigField("String", "SUPABASE_URL", cfg("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", cfg("SUPABASE_ANON_KEY"))
         buildConfigField("String", "TRACK_BASE_URL", cfg("TRACK_BASE_URL"))
+        // Watches are ARM; x86_64 stays for the emulator. Skipping 32-bit x86/MIPS saves ~11 MB of speech-engine libraries.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
         buildConfigField("String", "UPDATE_URL", "\"${localProps.getProperty("UPDATE_URL", "https://security4her.vercel.app/version.json")}\"")
     }
 
@@ -49,6 +53,11 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+    // Compress code and the speech engine inside the APK: it downloads in about half the size.
+    packaging {
+        jniLibs { useLegacyPackaging = true }
+        dex { useLegacyPackaging = true }
     }
     buildFeatures {
         compose = true
@@ -79,6 +88,9 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Voice SOS: offline speech recognition on the watch (Vosk). JNA comes as the Android AAR with native libs.
+    implementation("com.alphacephei:vosk-android:0.3.75") { exclude(group = "net.java.dev.jna") }
+    implementation("net.java.dev.jna:jna:5.18.1@aar")
     constraints {
         implementation("androidx.fragment:fragment:1.8.9") {
             because("old transitive Fragment breaks Activity Result lint checks")
@@ -87,3 +99,28 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
 }
+
+// ---- Voice SOS speech model --------------------------------------------------------------------------
+// The small English Vosk model (~41 MB download, ~70 MB unpacked) is fetched at build time instead of being
+// committed. It lands in src/main/assets/model-en-us/ (git-ignored); the app copies it to internal storage once.
+val voiceModelDir: File = file("src/main/assets/model-en-us")
+val fetchVoiceModel by tasks.registering {
+    description = "Downloads the offline speech model used by Voice SOS."
+    outputs.dir(voiceModelDir)
+    onlyIf { !File(voiceModelDir, "uuid").exists() }
+    doLast {
+        val zip = File(temporaryDir, "vosk-model.zip")
+        URI("https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip").toURL()
+            .openStream().use { input -> zip.outputStream().use { input.copyTo(it) } }
+        voiceModelDir.deleteRecursively()
+        ZipFile(zip).use { z ->
+            z.entries().asSequence().filter { !it.isDirectory && !it.name.endsWith("README") }.forEach { e ->
+                val out = File(voiceModelDir, e.name.substringAfter('/'))
+                out.parentFile.mkdirs()
+                z.getInputStream(e).use { input -> out.outputStream().use { input.copyTo(it) } }
+            }
+        }
+        File(voiceModelDir, "uuid").writeText("vosk-model-small-en-us-0.15")
+    }
+}
+tasks.named("preBuild") { dependsOn(fetchVoiceModel) }

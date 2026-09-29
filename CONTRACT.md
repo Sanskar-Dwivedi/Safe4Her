@@ -65,7 +65,7 @@ Times are epoch milliseconds. Lat/lng are doubles and accuracy is a float in met
 
 | Direction | Kind | Path | Payload |
 |---|---|---|---|
-| watch → phone | Message | `/s4h/sos/start` | `{"incidentId":"uuid","trigger":"knock"\|"shake"\|"button","createdAt":1727,"lat":28.6,"lng":77.2,"accuracyM":12.5,"fixAt":1727}` (lat/lng/accuracyM/fixAt optional) |
+| watch → phone | Message | `/s4h/sos/start` | `{"incidentId":"uuid","trigger":"knock"\|"shake"\|"button"\|"voice","createdAt":1727,"lat":28.6,"lng":77.2,"accuracyM":12.5,"fixAt":1727}` (lat/lng/accuracyM/fixAt optional) |
 | watch → phone | Message | `/s4h/sos/location` | `{"incidentId","lat","lng","accuracyM","fixAt"}` |
 | watch → phone | Message | `/s4h/sos/cancel` | `{"incidentId"}`, sent when the user cancels or says "I'm safe" on the watch; the phone ends the incident as `resolved` |
 | watch → phone | Message | `/s4h/link/request` | `{}`: asks the phone to (re)write `/s4h/device` |
@@ -99,7 +99,7 @@ cloud project. All RPCs are called via PostgREST `rpc/<name>` with named paramet
 | RPC | Caller | Returns | Notes |
 |---|---|---|---|
 | `mock_verify_female()` | phone (authenticated) | `boolean` | Works only while `app_config.digilocker_mode = 'mock'` |
-| `upsert_incident(p_id uuid, p_trigger text, p_source text, p_lat float8 = null, p_lng float8 = null, p_acc real = null, p_test boolean = true)` | phone | one row `{id, share_token, status, created}` | Idempotent. `p_trigger` is knock/shake/button; `p_source` is `phone` or `watch` (i.e. relayed by the phone) |
+| `upsert_incident(p_id uuid, p_trigger text, p_source text, p_lat float8 = null, p_lng float8 = null, p_acc real = null, p_test boolean = true)` | phone | one row `{id, share_token, status, created}` | Idempotent. `p_trigger` is knock/shake/button/voice/pocket/journey; `p_source` is `phone` or `watch` (i.e. relayed by the phone) |
 | `add_incident_location(p_id uuid, p_lat float8, p_lng float8, p_acc real = null, p_fix_at timestamptz = now())` | phone | void | Ignored unless the incident is active |
 | `end_incident(p_id uuid, p_status text)` | phone | void | `p_status` is `cancelled` or `resolved`; the share link stops working |
 | `register_watch()` | phone | `text` device token | Replaces any previous watch token for the user |
@@ -134,3 +134,4 @@ cloud project. All RPCs are called via PostgREST `rpc/<name>` with named paramet
 _(append: date, who, what, why)_
 - 2026-09-28: wrote the `mobile/` app. Demo mode when `SUPABASE_URL` is blank (local fake backend); map tab falls back to a demo list without a Maps key.
 - 2026-09-28: `wear/build.gradle.kts` and the §1 snippet — `java.util.Properties()` doesn't resolve in module scripts (the `java` extension shadows the package). Fixed with `import java.util.Properties`. Build on JDK 17 (Gradle 8.14.3 can't run on JDK 25).
+- 2026-09-29: new trigger `voice` (watch heard "HELP HELP HELP", Voice SOS). Migration `20260929000004_more_triggers.sql` also allows `pocket` and `journey`, which the phone already sends.
