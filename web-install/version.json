@@ -4,12 +4,12 @@
   "apk": "Security4Her-phone.apk",
   "sha256": "96f406042fdb53a5c01a0b83aaee2fff89826ed7a89c62d99d4f66a4ae27268a",
   "bytes": 28262898,
-  "notes": "Install and update the watch app straight from your phone: Me \u2192 Install or update the watch app.",
+  "notes": "Voice SOS is more sensitive: catches HELP HELP HELP with pauses, quieter voices and \"help me\".",
   "watch": {
-    "versionCode": 6,
-    "versionName": "0.4.0",
+    "versionCode": 7,
+    "versionName": "0.4.1",
     "apk": "Security4Her-watch.apk",
-    "sha256": "6b51cf1077fc6ff966b3569e6f9f932977e41b76c25e681d9b1239484294759b",
-    "bytes": 67430352
+    "sha256": "a5a01c571a8741d10a83a0fc27e2d379173da064d9c2ddeb3af39a3cb8755cbd",
+    "bytes": 67345737
   }
 }
