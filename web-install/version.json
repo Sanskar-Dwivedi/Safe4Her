@@ -1,10 +1,10 @@
 {
-  "versionCode": 3,
-  "versionName": "0.2.1",
+  "versionCode": 7,
+  "versionName": "0.3.3",
   "apk": "Security4Her-phone.apk",
-  "sha256": "0fb08c72708a297dbff4e5f569451e258af537cbdf420b281053e1e4f13364bf",
-  "bytes": 19911101,
-  "notes": "Faster updates and a cleaner Safety map.",
+  "sha256": "d651c2dc91a490b23de930611816f12c7e6deb9661b88409a510417716e3d64f",
+  "bytes": 19977021,
+  "notes": "SOS settings now have a Save button with a Saved confirmation.",
   "watch": {
     "versionCode": 5,
     "versionName": "0.3.1",

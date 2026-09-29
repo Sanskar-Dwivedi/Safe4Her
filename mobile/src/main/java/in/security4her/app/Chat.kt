@@ -86,6 +86,9 @@ private val TOPICS = listOf(
     Topic(listOf("watch", "wear", "wrist", "smartwatch")) {
         "With the Wear OS app, press and hold SOS on your watch even when your phone is in a bag. The watch also records audio from your wrist. It links to your phone on its own once both apps are open."
     },
+    Topic(listOf("pocket", "knock", "knocks", "tap", "taps", "gesture", "triple", "bag", "without watch")) {
+        "Pocket SOS: turn it on in Me → Pocket SOS. With the screen off, knock firmly on your phone three times through your pocket or bag, about half a second apart. It buzzes, counts down 5 seconds (tap Cancel if it was a mistake), then starts a normal SOS with texts, live location, recording and the call. You feel a small tick for each knock and a strong buzz when the countdown starts. If it misses your knocks or reacts to light taps, open Practise and adjust strength and tap Set to my knocks; nothing is sent while practising."
+    },
     Topic(listOf("pin", "password", "code")) {
         "A safety PIN stops anyone else from switching your SOS off. Set 4 digits in Me → During SOS. You'll be asked for it when you tap I'm safe."
     },

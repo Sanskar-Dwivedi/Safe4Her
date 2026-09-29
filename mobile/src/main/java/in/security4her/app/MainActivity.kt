@@ -245,6 +245,7 @@ private fun Root() {
     var profile by remember { mutableStateOf<Profile?>(null) }
     var stage by remember { mutableStateOf(Stage.Loading) }
     val incident by SosEngine.current.collectAsStateWithLifecycle()
+    val pocket by `in`.security4her.app.sos.PocketSos.countdown.collectAsStateWithLifecycle()
     val journey by `in`.security4her.app.sos.Journey.state.collectAsStateWithLifecycle()
 
     fun route(p: Profile?) {
@@ -263,6 +264,7 @@ private fun Root() {
     Box(Modifier.fillMaxSize().background(Night).systemBarsPadding().imePadding()) {
         val inc = incident
         when {
+            pocket != null && stage == Stage.Main -> PocketCountdownScreen(pocket!!)
             inc != null && stage == Stage.Main -> ActiveSosScreen(inc)
             journey?.status == "checking" && stage == Stage.Main -> CheckInScreen(journey!!)
             stage == Stage.Loading -> Loading()
@@ -635,7 +637,10 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
     LaunchedEffect(Unit) {
         while (true) { watch = WearBridge.watchReachable(ctx); delay(10_000) }
     }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { resumed++; Updater.check(ctx) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        resumed++; Updater.check(ctx)
+        `in`.security4her.app.sos.PocketSos.ensureRunning(ctx)
+    }
     LaunchedEffect(journey) { if (journey != null) Progress.mark(ctx, "journey") }
     val alerted = contacts?.filter { it.receivesSos }.orEmpty()
     val facts = remember(contacts, settings, watch, resumed, tick) {
@@ -652,6 +657,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
     var perms by rememberSaveable { mutableStateOf(false) }
     var sheet by rememberSaveable { mutableStateOf<String?>(null) }
     var showChat by rememberSaveable { mutableStateOf(false) }
+    var showPractice by rememberSaveable { mutableStateOf(false) }
 
     fun open(step: SetupStep) {
         when (step.key) {
@@ -668,6 +674,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
         showJourney -> { BackHandler { showJourney = false }; JourneySetupScreen(onClose = { showJourney = false }); return }
         perms -> { PermissionsScreen(onDone = { perms = false; resumed++ }); return }
         showChat -> { ChatScreen(onClose = { showChat = false }); return }
+        showPractice -> { PocketPracticeScreen(onClose = { showPractice = false }); return }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -691,7 +698,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
                         Tab.Me -> SettingsScreen(
                             profile, settings,
                             onChange = { settings = it }, onSignedOut = onSignedOut, onOpenLog = { showLog = true }, onOpenLocker = { showLocker = true },
-                            onOpenChat = { showChat = true },
+                            onOpenChat = { showChat = true }, onPractice = { showPractice = true },
                         )
                     }
                 }
@@ -920,6 +927,11 @@ private fun HomeScreen(
                 Spacer(Modifier.width(6.dp))
                 Text("Watch linked", color = Mint, style = MaterialTheme.typography.labelMedium)
             }
+            if (`in`.security4her.app.sos.PocketSos.enabled(ctx)) Text(
+                "Pocket SOS", color = Lilac, style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(20.dp)).background(Lilac.copy(alpha = 0.14f))
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+            )
             Spacer(Modifier.width(8.dp))
             Box(
                 Modifier.size(46.dp).clip(CircleShape).background(Surface1).clickable(onClickLabel = "Ask Security4Her", onClick = onChat),
@@ -1321,7 +1333,7 @@ private fun ContactDialog(c: Contact, onDismiss: () -> Unit, onSave: (Contact) -
 // ---------------------------------------------------------------- Settings
 
 @Composable
-private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit, onOpenLocker: () -> Unit, onOpenChat: () -> Unit) {
+private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit, onOpenLocker: () -> Unit, onOpenChat: () -> Unit, onPractice: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var linkMsg by remember { mutableStateOf<String?>(null) }
@@ -1363,6 +1375,44 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
         Spacer(Modifier.height(14.dp))
         Section("Colours") { PalettePicker() }
         Section("App updates") { UpdateSection() }
+        Section("Pocket SOS") {
+            var pocketOn by remember { mutableStateOf(`in`.security4her.app.sos.PocketSos.enabled(ctx)) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Knock 3 times to start SOS")
+                    Text(
+                        "No watch? With the screen off, knock firmly on your phone three times through your pocket or bag. " +
+                            "You feel a tick per knock and a strong buzz when it's armed, then 5 seconds to cancel before the SOS starts. Uses a little extra battery.",
+                        color = Muted, style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Switch(
+                    checked = pocketOn,
+                    onCheckedChange = {
+                        pocketOn = it
+                        `in`.security4her.app.sos.PocketSos.setEnabled(ctx, it)
+                        if (it && !`in`.security4her.app.sos.PocketSos.calibrated(ctx)) onPractice() // first time: tune it to her knock
+                        if (it && !`in`.security4her.app.sos.PocketSos.canShowOverLockScreen(ctx)) `in`.security4her.app.sos.PocketSos.askForLockScreenAlerts(ctx)
+                    },
+                    colors = switchColors,
+                )
+            }
+            var lockOk by remember { mutableStateOf(`in`.security4her.app.sos.PocketSos.canShowOverLockScreen(ctx)) }
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { lockOk = `in`.security4her.app.sos.PocketSos.canShowOverLockScreen(ctx) }
+            if (pocketOn && !lockOk) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Allow full-screen alerts so the countdown and Cancel button appear over your lock screen.",
+                    color = Amber, style = MaterialTheme.typography.bodySmall,
+                )
+                TextButton(onClick = { `in`.security4her.app.sos.PocketSos.askForLockScreenAlerts(ctx) }) { Text("Allow full-screen alerts", color = Lilac) }
+            }
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(onClick = onPractice, border = androidx.compose.foundation.BorderStroke(1.dp, Lilac)) {
+                Text("Practise and adjust strength", color = Lilac)
+            }
+        }
 
         Section("Test Mode") {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1373,7 +1423,14 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
                 )
             }
             Spacer(Modifier.height(12.dp))
-            Field(settings.demoNumber, { set(settings.copy(demoNumber = it)) }, "Demo number (a teammate's phone)", KeyboardType.Phone)
+            var demo by remember(settings.demoNumber) { mutableStateOf(settings.demoNumber) }
+            val demoBad = demo.isNotBlank() && digits(demo) < 3
+            Field(demo, { demo = it.filter { c -> c.isDigit() || c in "+ -" } }, "Demo number (a teammate's phone)", KeyboardType.Phone)
+            if (demoBad) FieldError("Enter a full phone number.")
+            SaveBar(changed = demo.trim() != settings.demoNumber, valid = !demoBad, onDiscard = { demo = settings.demoNumber }) {
+                set(settings.copy(demoNumber = demo.trim()))
+                AppLog.ok("Settings", "Demo number saved")
+            }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
                 onClick = { Sms.sendTest(ctx, settings.demoNumber) }, enabled = settings.demoNumber.count(Char::isDigit) >= 3,
@@ -1404,21 +1461,7 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
                 Switch(checked = settings.smsUpdates, onCheckedChange = { set(settings.copy(smsUpdates = it)) }, colors = switchColors)
             }
         }
-        Section("During SOS") {
-            Field(settings.policeNumber, { set(settings.copy(policeNumber = it)) }, "Police text number", KeyboardType.Phone)
-            Spacer(Modifier.height(10.dp))
-            Field(settings.autoCallNumber, { set(settings.copy(autoCallNumber = it)) }, "Number to call (blank: your first contact)", KeyboardType.Phone)
-            Spacer(Modifier.height(10.dp))
-            Field(
-                settings.countdownSec.toString(), { v -> v.filter(Char::isDigit).take(2).toIntOrNull()?.let { set(settings.copy(countdownSec = it)) } },
-                "Seconds before the call", KeyboardType.Number,
-            )
-            Spacer(Modifier.height(10.dp))
-            Field(
-                settings.pin, { v -> set(settings.copy(pin = v.filter(Char::isDigit).take(4))) },
-                "PIN to end an SOS (4 digits, optional)", KeyboardType.NumberPassword, secret = true,
-            )
-        }
+        Section("During SOS") { DuringSosEditor(settings) { set(it) } }
         Section("Watch") {
             Text("Your watch links to this account automatically. Re-link if it shows the wrong name.", color = Muted, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(10.dp))
@@ -1482,12 +1525,97 @@ private fun PalettePicker() {
                     Box(Modifier.align(Alignment.BottomEnd).size(18.dp).clip(CircleShape).background(SosRed))
                 }
                 Spacer(Modifier.height(6.dp))
-                Text(pal.name, style = MaterialTheme.typography.labelMedium, fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium, color = if (sel) Lilac else Ink)
+                Text(pal.name, fontSize = 11.sp, maxLines = 1, softWrap = false, fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium, color = if (sel) Lilac else Ink)
             }
         }
     }
     Spacer(Modifier.height(8.dp))
     Text(now.blurb, color = Muted, style = MaterialTheme.typography.bodySmall)
+}
+
+private fun digits(s: String) = s.count(Char::isDigit)
+
+/** Edits the SOS numbers, countdown and PIN as a draft; nothing changes until she taps Save. */
+@Composable
+private fun DuringSosEditor(settings: Settings, onSave: (Settings) -> Unit) {
+    var police by remember(settings.policeNumber) { mutableStateOf(settings.policeNumber) }
+    var call by remember(settings.autoCallNumber) { mutableStateOf(settings.autoCallNumber) }
+    var secs by remember(settings.countdownSec) { mutableStateOf(settings.countdownSec.toString()) }
+    var pin by remember(settings.pin) { mutableStateOf(settings.pin) }
+
+    val policeErr = if (digits(police) < 3) "Enter the number to text, for example 112." else null
+    val callErr = if (call.isNotBlank() && digits(call) < 3) "Enter a full phone number, or leave it blank." else null
+    val secsN = secs.toIntOrNull()
+    val secsErr = if (secsN == null || secsN !in 3..60) "Choose between 3 and 60 seconds." else null
+    val pinErr = if (pin.isNotEmpty() && pin.length != 4) "A PIN needs exactly 4 digits, or leave it blank." else null
+    val changed = police.trim() != settings.policeNumber || call.trim() != settings.autoCallNumber ||
+        secs != settings.countdownSec.toString() || pin != settings.pin
+    val phone = { v: String -> v.filter { c -> c.isDigit() || c in "+ -" } }
+
+    Field(police, { police = phone(it) }, "Police text number", KeyboardType.Phone)
+    policeErr?.let { FieldError(it) }
+    Spacer(Modifier.height(10.dp))
+    Field(call, { call = phone(it) }, "Number to call (blank: your first contact)", KeyboardType.Phone)
+    callErr?.let { FieldError(it) }
+    Spacer(Modifier.height(10.dp))
+    Field(secs, { secs = it.filter(Char::isDigit).take(2) }, "Seconds before the call", KeyboardType.Number)
+    secsErr?.let { FieldError(it) }
+    Spacer(Modifier.height(10.dp))
+    Field(pin, { pin = it.filter(Char::isDigit).take(4) }, "PIN to end an SOS (4 digits, optional)", KeyboardType.NumberPassword, secret = true)
+    pinErr?.let { FieldError(it) }
+
+    SaveBar(
+        changed = changed, valid = listOf(policeErr, callErr, secsErr, pinErr).all { it == null },
+        onDiscard = { police = settings.policeNumber; call = settings.autoCallNumber; secs = settings.countdownSec.toString(); pin = settings.pin },
+    ) {
+        onSave(settings.copy(policeNumber = police.trim(), autoCallNumber = call.trim(), countdownSec = secsN ?: settings.countdownSec, pin = pin))
+        AppLog.ok("Settings", "SOS settings saved: text ${police.trim()}, call ${call.trim().ifBlank { "first contact" }}, ${secsN}s countdown, PIN ${if (pin.isEmpty()) "off" else "on"}")
+    }
+}
+
+@Composable
+private fun FieldError(text: String) {
+    Text(text, color = SosRed, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 4.dp, top = 4.dp))
+}
+
+/**
+ * Save / Discard for a group of fields. Appears when something changed; after saving shows a green tick and
+ * "Saved" for a moment, with a short vibration, so she knows it stuck.
+ */
+@Composable
+private fun SaveBar(changed: Boolean, valid: Boolean, onDiscard: () -> Unit, onSave: () -> Unit) {
+    val feel = LocalHapticFeedback.current
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    var savedAt by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(savedAt) { if (savedAt != 0L) { delay(2_500); savedAt = 0L } }
+    androidx.compose.animation.AnimatedVisibility(changed || savedAt != 0L) {
+        Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (changed) {
+                Text("Unsaved changes", color = Amber, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = { onDiscard(); focus.clearFocus() }) { Text("Discard", color = Muted) }
+                Spacer(Modifier.width(6.dp))
+                Chunky(
+                    onClick = {
+                        onSave(); focus.clearFocus(); savedAt = System.currentTimeMillis()
+                        feel.performHapticFeedback(HapticFeedbackType.Confirm)
+                    },
+                    enabled = valid, depth = 3.dp, shape = RoundedCornerShape(14.dp),
+                ) {
+                    Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Check, null, tint = if (valid) OnLilac else Muted, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Save", color = if (valid) OnLilac else Muted, fontFamily = Baloo, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                    }
+                }
+            } else {
+                Box(Modifier.size(24.dp).clip(CircleShape).background(Mint), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Check, "Saved", tint = OnMint, modifier = Modifier.size(16.dp))
+                }
+                Spacer(Modifier.width(8.dp))
+                Text("Saved", color = Mint, style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
 }
 
 @Composable

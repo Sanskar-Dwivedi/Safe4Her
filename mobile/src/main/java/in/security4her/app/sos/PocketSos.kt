@@ -41,54 +41,100 @@ import kotlin.math.sqrt
 // Only listens while the screen is off, so tapping and typing on the screen can never trigger it.
 
 /**
- * Finds three short, sharp knocks in accelerometer data.
- * A knock is a brief spike (under ~120 ms) above [high]; walking and running make longer, rhythmic bumps,
- * so a knock must follow a still moment, the three must be 120–700 ms apart, and nothing may follow for 450 ms.
+ * Finds three deliberate knocks in accelerometer data.
+ *
+ * A knock is a sudden change in acceleration, so the detector watches the jump between one reading and the next
+ * (m/s^2 per sample). Slow movement (holding the phone, walking, turning) changes little from sample to sample;
+ * a knock's hit and ring change a lot. Each jump above [FLOOR] opens an 80 ms window; its peak decides whether it's a
+ * knock (at or above [threshold]) or too soft. Nothing is counted for 200 ms after a knock, and by then the phone must
+ * have settled (a shove or a fall keeps moving). The threshold rises with ongoing movement, so she can knock while
+ * walking. Exactly three knocks, 0.2-1.1 s apart, then 0.7 s with no fourth; longer runs (running, bumps) are rejected.
  */
 class KnockDetector(
-    private val high: Float = 3.0f,
-    private val low: Float = 1.2f,
-    private val onKnock: (count: Int) -> Unit = {},
+    @Volatile var threshold: Float = DEFAULT_THRESHOLD,
+    private val onKnock: (count: Int, strength: Float) -> Unit = { _, _ -> },
+    private val onSoft: (strength: Float) -> Unit = {},
+    private val onReject: (reason: Reject) -> Unit = {},
     private val onTriple: () -> Unit,
 ) {
-    private val g = FloatArray(3)
+    enum class Reject { TooSlow, TooMany, Moving }
+
+    private enum class Phase { Idle, Peak, Settle }
+
+    private val prev = FloatArray(3)
     private var primed = false
-    private var inSpike = false
-    private var spikeStart = 0L
-    private var lastSpikeEnd = 0L
-    private var lastBusy = 0L // last long movement (walking, a bump)
+    private var lastT = 0L
+    private var activity = 0f // average ongoing movement
+    private var recent = 0f // movement over the last ~50 ms
+    private var phase = Phase.Idle
+    private var crossT = 0L
+    private var peak = 0f
+    private var bar = 0f // threshold in force when the jolt started
     private val knocks = ArrayList<Long>(4)
     private var fireAt = 0L
+    private var blockedUntil = 0L
 
-    fun reset() { knocks.clear(); fireAt = 0L; inSpike = false }
+    /** The latest jump, for a live meter. */
+    @Volatile var level = 0f
+        private set
+
+    /** Drop a jolt in progress (e.g. while the phone itself is vibrating). */
+    fun cancelJolt() { phase = Phase.Idle }
+
+    fun reset() { knocks.clear(); fireAt = 0L; phase = Phase.Idle }
 
     /** [t] in milliseconds. */
     fun feed(x: Float, y: Float, z: Float, t: Long) {
-        if (!primed) { g[0] = x; g[1] = y; g[2] = z; primed = true; return }
-        // Slow low-pass tracks gravity; what's left is the jolt
-        g[0] = g[0] * 0.95f + x * 0.05f; g[1] = g[1] * 0.95f + y * 0.05f; g[2] = g[2] * 0.95f + z * 0.05f
-        val dx = x - g[0]; val dy = y - g[1]; val dz = z - g[2]
-        val m = sqrt(dx * dx + dy * dy + dz * dz)
+        if (!primed) { prev[0] = x; prev[1] = y; prev[2] = z; primed = true; lastT = t; return }
+        val dt = (t - lastT).coerceIn(1, 100).toFloat()
+        lastT = t
+        val dx = x - prev[0]; val dy = y - prev[1]; val dz = z - prev[2]
+        prev[0] = x; prev[1] = y; prev[2] = z
+        val d = sqrt(dx * dx + dy * dy + dz * dz)
+        level = d
+        recent += (d - recent) * dt / (50f + dt)
 
         if (fireAt != 0L && t >= fireAt) { fireAt = 0L; knocks.clear(); onTriple(); return }
+        if (fireAt == 0L && knocks.isNotEmpty() && t - knocks.last() > MAX_GAP) { knocks.clear(); onReject(Reject.TooSlow) }
 
-        if (!inSpike && m > high && t - lastSpikeEnd > 80) { inSpike = true; spikeStart = t }
-        else if (inSpike && m < low) {
-            inSpike = false
-            lastSpikeEnd = t
-            if (t - spikeStart <= 120) knock(spikeStart) else { lastBusy = t; reset() }
-        } else if (inSpike && t - spikeStart > 250) { inSpike = false; lastSpikeEnd = t; lastBusy = t; reset() }
+        when (phase) {
+            Phase.Idle -> {
+                activity += (d - activity) * dt / (500f + dt)
+                val b = maxOf(threshold, activity * 4f)
+                if (d > maxOf(FLOOR, activity * 2.5f, b * 0.35f)) { phase = Phase.Peak; crossT = t; peak = d; bar = b }
+            }
+            Phase.Peak -> {
+                if (d > peak) peak = d
+                if (t - crossT >= 80) {
+                    if (peak >= bar) { phase = Phase.Settle; knock(crossT, peak) }
+                    else { onSoft(peak); phase = Phase.Idle }
+                }
+            }
+            Phase.Settle -> if (t - crossT >= 200) {
+                if (recent > bar * 0.4f) { // still shaking: a shove or a fall, not a knock
+                    knocks.clear(); fireAt = 0L; blockedUntil = t + 1_000; onReject(Reject.Moving)
+                }
+                phase = Phase.Idle
+            }
+        }
     }
 
-    private fun knock(t: Long) {
-        if (knocks.isEmpty() && t - lastBusy < 500) return // moving about: not a deliberate knock
-        val prev = knocks.lastOrNull()
-        if (prev != null && t - prev > 700) knocks.clear()
-        if (prev != null && t - prev < 120) return
-        if (fireAt != 0L) { reset(); return } // a fourth knock: rhythm, not a signal
+    private fun knock(t: Long, strength: Float) {
+        if (t < blockedUntil) { blockedUntil = t + 1_000; return }
+        if (fireAt != 0L) { // a fourth knock: a rhythm, not the signal
+            knocks.clear(); fireAt = 0L; blockedUntil = t + 1_200; onReject(Reject.TooMany); return
+        }
+        knocks.lastOrNull()?.let { if (t - it > MAX_GAP) knocks.clear() }
         knocks += t
-        onKnock(knocks.size)
-        if (knocks.size == 3) fireAt = t + 450
+        onKnock(knocks.size, strength)
+        if (knocks.size == 3) fireAt = t + 700
+    }
+
+    companion object {
+        const val DEFAULT_THRESHOLD = 4.5f
+        /** Smallest jump shown as a (too soft) knock. */
+        const val FLOOR = 1.0f
+        private const val MAX_GAP = 1_100L
     }
 }
 
@@ -107,6 +153,59 @@ object PocketSos {
 
     fun enabled(ctx: Context) = Store.prefs(ctx).getBoolean(PREF, false)
 
+    // ---- how hard a knock must be (m/s^2 of jolt) ----
+    enum class Sensitivity(val label: String, val threshold: Float) { High("Light", 2.8f), Normal("Normal", 4.5f), Low("Firm", 7.5f) }
+
+    @Volatile var threshold = KnockDetector.DEFAULT_THRESHOLD
+        private set
+
+    fun loadThreshold(ctx: Context): Float {
+        threshold = Store.prefs(ctx).getFloat("pocket_threshold", KnockDetector.DEFAULT_THRESHOLD)
+        return threshold
+    }
+
+    /** True once she has tuned the strength to her own knocks (or picked one). */
+    fun calibrated(ctx: Context) = Store.prefs(ctx).contains("pocket_threshold")
+
+    fun setThreshold(ctx: Context, t: Float) {
+        threshold = t.coerceIn(1.8f, 14f)
+        Store.prefs(ctx).edit().putFloat("pocket_threshold", threshold).apply()
+        AppLog.info("Pocket", "Knock strength set to %.1f".format(java.util.Locale.US, threshold))
+    }
+
+    /** Sets the threshold from her own knocks: a bit below her usual knock, so a slightly softer one still counts. */
+    fun calibrate(ctx: Context, strengths: List<Float>): Float {
+        val median = strengths.sorted()[strengths.size / 2]
+        setThreshold(ctx, median * 0.55f)
+        return threshold
+    }
+
+    // ---- haptics: strong enough to feel through a pocket, and they play even on silent ----
+
+    /** elapsedRealtime (ms) until which our own vibration is shaking the phone; knocks aren't read meanwhile. */
+    @Volatile var mutedUntil = 0L
+        private set
+
+    enum class Buzz(val timings: LongArray, val amps: IntArray) {
+        Knock(longArrayOf(0, 35), intArrayOf(0, 170)), // each counted knock: a small tick
+        Armed(longArrayOf(0, 260, 110, 260, 110, 650), intArrayOf(0, 255, 0, 255, 0, 255)), // three knocks: countdown started
+        Tick(longArrayOf(0, 70), intArrayOf(0, 200)), // each second of the countdown
+        Sent(longArrayOf(0, 1_000), intArrayOf(0, 255)), // the SOS went out
+        Cancelled(longArrayOf(0, 50, 90, 50), intArrayOf(0, 140, 0, 140)),
+    }
+
+    fun buzz(ctx: Context, b: Buzz) {
+        val v = if (Build.VERSION.SDK_INT >= 31) ctx.getSystemService(VibratorManager::class.java).defaultVibrator
+        else @Suppress("DEPRECATION") ctx.getSystemService(Vibrator::class.java)
+        if (!v.hasVibrator()) return
+        mutedUntil = android.os.SystemClock.elapsedRealtime() + b.timings.sum() + 150
+        val effect = if (v.hasAmplitudeControl()) VibrationEffect.createWaveform(b.timings, b.amps, -1) else VibrationEffect.createWaveform(b.timings, -1)
+        runCatching {
+            if (Build.VERSION.SDK_INT >= 33) v.vibrate(effect, android.os.VibrationAttributes.createForUsage(android.os.VibrationAttributes.USAGE_ALARM))
+            else @Suppress("DEPRECATION") v.vibrate(effect, android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_ALARM).build())
+        }
+    }
+
     fun setEnabled(ctx: Context, on: Boolean) {
         Store.prefs(ctx).edit().putBoolean(PREF, on).apply()
         val i = Intent(ctx, PocketSosService::class.java)
@@ -115,21 +214,28 @@ object PocketSos {
         AppLog.info("Pocket", if (on) "Pocket SOS turned on" else "Pocket SOS turned off")
     }
 
+    /** Restarts listening if Android stopped it (called whenever the app opens). */
+    fun ensureRunning(ctx: Context) {
+        if (enabled(ctx)) runCatching { ContextCompat.startForegroundService(ctx, Intent(ctx, PocketSosService::class.java)) }
+    }
+
     /** Called on the three knocks: buzz, wake the app, count down, then SOS unless cancelled. */
     fun trigger(ctx: Context) {
         val app = ctx.applicationContext
         if (_countdown.value != null || SosEngine.current.value?.active == true) return
         AppLog.warn("Pocket", "Three knocks detected; SOS in $COUNTDOWN_S seconds unless cancelled")
-        buzz(app, longArrayOf(0, 120, 90, 120))
+        buzz(app, Buzz.Armed)
+        wakeScreen(app)
         job = scope.launch {
             for (s in COUNTDOWN_S downTo 1) {
                 _countdown.value = s
                 notifyCountdown(app, s)
-                if (s < COUNTDOWN_S) buzz(app, longArrayOf(0, 60))
+                if (s < COUNTDOWN_S) buzz(app, Buzz.Tick)
                 delay(1_000)
             }
             _countdown.value = null
             clear(app)
+            buzz(app, Buzz.Sent)
             SosEngine.start(app, trigger = "pocket", source = "phone")
         }
     }
@@ -139,6 +245,7 @@ object PocketSos {
         job?.cancel()
         _countdown.value = null
         clear(ctx.applicationContext)
+        buzz(ctx.applicationContext, Buzz.Cancelled)
         AppLog.info("Pocket", "Pocket SOS cancelled before it started")
     }
 
@@ -148,13 +255,30 @@ object PocketSos {
         job?.cancel()
         _countdown.value = null
         clear(ctx.applicationContext)
+        buzz(ctx.applicationContext, Buzz.Sent)
         SosEngine.start(ctx.applicationContext, trigger = "pocket", source = "phone")
     }
 
-    fun buzz(ctx: Context, pattern: LongArray) {
-        val v = if (Build.VERSION.SDK_INT >= 31) ctx.getSystemService(VibratorManager::class.java).defaultVibrator
-        else @Suppress("DEPRECATION") ctx.getSystemService(Vibrator::class.java)
-        runCatching { v.vibrate(VibrationEffect.createWaveform(pattern, -1)) }
+    /** Android 14+ only shows a full-screen alert (the countdown over the lock screen) once the user allows it. */
+    fun canShowOverLockScreen(ctx: Context) =
+        Build.VERSION.SDK_INT < 34 || ctx.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
+
+    fun askForLockScreenAlerts(ctx: Context) {
+        if (Build.VERSION.SDK_INT < 34) return
+        runCatching {
+            ctx.startActivity(
+                Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, android.net.Uri.parse("package:${ctx.packageName}"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+    }
+
+    /** Lights the screen for the countdown so Cancel is right there. */
+    @Suppress("DEPRECATION")
+    private fun wakeScreen(ctx: Context) = runCatching {
+        ctx.getSystemService(PowerManager::class.java)
+            .newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE, "s4h:pocket")
+            .acquire(8_000)
     }
 
     private const val ALERT_ID = 131
@@ -194,20 +318,27 @@ object PocketSos {
 class PocketSosService : Service(), SensorEventListener {
     private var detector: KnockDetector? = null
     private lateinit var power: PowerManager
+    private var awake: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         power = getSystemService(PowerManager::class.java)
-        detector = KnockDetector(onTriple = { PocketSos.trigger(this) })
+        detector = KnockDetector(
+            threshold = PocketSos.loadThreshold(this),
+            onKnock = { n, _ -> if (n < 3) PocketSos.buzz(this, PocketSos.Buzz.Knock) },
+            onTriple = { PocketSos.trigger(this) },
+        )
+        // With the screen off many phones sleep the processor and stop the motion sensor; keep it awake to listen
+        awake = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "s4h:pocket-listen").apply { setReferenceCounted(false); acquire() }
         val sm = getSystemService(SensorManager::class.java)
         val acc = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         if (acc == null) {
             AppLog.error("Pocket", "This phone has no motion sensor, so Pocket SOS can't work")
             stopSelf(); return
         }
-        sm.registerListener(this, acc, 10_000) // 100 Hz: enough to catch a knock's short spike
+        sm.registerListener(this, acc, 5_000) // ask for 200 Hz; phones give what they can, knocks last 20-40 ms
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -224,14 +355,18 @@ class PocketSosService : Service(), SensorEventListener {
 
     override fun onSensorChanged(e: SensorEvent) {
         // Screen on means she's using the phone: taps on glass must never count
-        if (power.isInteractive || PocketSos.practicing) { detector?.reset(); return }
-        detector?.feed(e.values[0], e.values[1], e.values[2], e.timestamp / 1_000_000)
+        val d = detector ?: return
+        if (power.isInteractive || PocketSos.practicing) { d.reset(); return }
+        if (android.os.SystemClock.elapsedRealtime() < PocketSos.mutedUntil) { d.cancelJolt(); return } // our own buzz
+        d.threshold = PocketSos.threshold
+        d.feed(e.values[0], e.values[1], e.values[2], e.timestamp / 1_000_000)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     override fun onDestroy() {
         getSystemService(SensorManager::class.java).unregisterListener(this)
+        runCatching { awake?.release() }
         super.onDestroy()
     }
 
