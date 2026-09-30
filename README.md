@@ -183,4 +183,4 @@ See [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## Team
 
-**[Team name]**: [member names].
+**OBSIDIAN**
