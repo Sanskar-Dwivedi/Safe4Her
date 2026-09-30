@@ -68,15 +68,21 @@ object VoiceSos {
     @Synchronized
     fun model(ctx: Context): Model {
         model?.let { return it }
+        return Model(prepare(ctx).absolutePath).also { model = it }
+    }
+
+    /** Unpacks the model out of the APK once (and drops copies left by older versions). Returns its folder. */
+    @Synchronized
+    fun prepare(ctx: Context): File {
         val app = ctx.applicationContext
         val version = runCatching { app.assets.open("$ASSET_DIR/uuid").bufferedReader().use { it.readText().trim() } }.getOrDefault("model")
         val dir = File(app.filesDir, "voice/$version")
         if (!File(dir, "ready").exists()) {
-            dir.deleteRecursively()
+            dir.parentFile?.listFiles()?.forEach { it.deleteRecursively() }
             copyAssets(app, ASSET_DIR, dir)
             File(dir, "ready").writeText("ok")
         }
-        return Model(dir.absolutePath).also { model = it }
+        return dir
     }
 
     private fun copyAssets(ctx: Context, from: String, to: File) {

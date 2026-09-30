@@ -23,14 +23,17 @@ android {
         minSdk = 30
         targetSdk = 35
         // Bump both for every release; the watch compares versionCode with the "watch" entry in web-install/version.json.
-        versionCode = 7
-        versionName = "0.4.1"
+        versionCode = 8
+        versionName = "1.0.0"
         buildConfigField("String", "SUPABASE_URL", cfg("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", cfg("SUPABASE_ANON_KEY"))
         buildConfigField("String", "TRACK_BASE_URL", cfg("TRACK_BASE_URL"))
         // Watches are ARM; x86_64 stays for the emulator. Skipping 32-bit x86/MIPS saves ~11 MB of speech-engine libraries.
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
-        buildConfigField("String", "UPDATE_URL", "\"${localProps.getProperty("UPDATE_URL", "https://security4her.vercel.app/version.json")}\"")
+        val updateUrl = localProps.getProperty("UPDATE_URL", "https://security4her.vercel.app/version.json")
+        buildConfigField("String", "UPDATE_URL", "\"$updateUrl\"")
+        // Plain HTTP is allowed only for a local test server (UPDATE_URL=http://localhost:… in local.properties).
+        manifestPlaceholders["cleartext"] = updateUrl.startsWith("http://localhost").toString()
     }
 
     signingConfigs {
@@ -45,8 +48,11 @@ android {
     buildTypes {
         debug { signingConfig = signingConfigs.getByName("debug") }
         release {
-            isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug") // hackathon only
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // The same key as every earlier build, so installed apps update in place.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -81,6 +87,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
     implementation("androidx.lifecycle:lifecycle-service:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-process:2.10.0")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.work:work-runtime-ktx:2.10.1")
     implementation("com.google.android.gms:play-services-wearable:19.0.0")

@@ -9,13 +9,13 @@ cd "$(dirname "$0")/.."
 NOTES="${1:-Fixes and improvements.}"
 
 export JAVA_HOME="${JAVA_HOME:-$LOCALAPPDATA/s4h-tools/jdk17}"
-./gradlew :mobile:assembleDebug :wear:assembleDebug --console=plain -q
+./gradlew :mobile:assembleRelease :wear:assembleRelease --console=plain -q
 
 ver() { grep -oE "$2 = \"?[^\"]+\"?" "$1/build.gradle.kts" | head -1 | sed -E "s/$2 = \"?([^\"]+)\"?/\1/"; }
 P_CODE=$(ver mobile versionCode); P_NAME=$(ver mobile versionName)
 W_CODE=$(ver wear versionCode);   W_NAME=$(ver wear versionName)
-cp mobile/build/outputs/apk/debug/mobile-debug.apk web-install/Security4Her-phone.apk
-cp wear/build/outputs/apk/debug/wear-debug.apk web-install/Security4Her-watch.apk
+cp mobile/build/outputs/apk/release/mobile-release.apk web-install/Security4Her-phone.apk
+cp wear/build/outputs/apk/release/wear-release.apk web-install/Security4Her-watch.apk
 cd web-install
 
 python - "$P_CODE" "$P_NAME" "$W_CODE" "$W_NAME" "$NOTES" <<'PY'

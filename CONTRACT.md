@@ -120,7 +120,7 @@ cloud project. All RPCs are called via PostgREST `rpc/<name>` with named paramet
 - Share URL: `${TRACK_BASE_URL}?k=${share_token}`.
 - The SMS body stays under 3 SMS parts:
   `SOS from <name>. I may be in danger. Live location: <shareUrl> Last seen: https://maps.google.com/?q=<lat>,<lng> (±<acc>m, <HH:mm>)`
-- In **Test Mode** (the default in debug builds), the police SMS and the auto-call go to the "demo number" setting, never to 112.
+- In **Test Mode** (on by default), the police SMS and the auto-call go to the "test number" setting, never to 112.
 
 ## 5. Map feature (package inside `:mobile`)
 
@@ -132,6 +132,6 @@ cloud project. All RPCs are called via PostgREST `rpc/<name>` with named paramet
 
 ## Change requests
 _(append: date, who, what, why)_
-- 2026-09-28: wrote the `mobile/` app. Demo mode when `SUPABASE_URL` is blank (local fake backend); map tab falls back to a demo list without a Maps key.
+- 2026-09-28: wrote the `mobile/` app. Offline mode when `SUPABASE_URL` is blank (local backend on the phone); the map uses OpenStreetMap without a Maps key.
 - 2026-09-28: `wear/build.gradle.kts` and the §1 snippet — `java.util.Properties()` doesn't resolve in module scripts (the `java` extension shadows the package). Fixed with `import java.util.Properties`. Build on JDK 17 (Gradle 8.14.3 can't run on JDK 25).
 - 2026-09-29: new trigger `voice` (watch heard "HELP HELP HELP", Voice SOS). Migration `20260929000004_more_triggers.sql` also allows `pocket` and `journey`, which the phone already sends.

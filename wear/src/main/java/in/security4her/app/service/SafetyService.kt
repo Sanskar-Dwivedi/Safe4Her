@@ -11,6 +11,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import `in`.security4her.app.MainActivity
 import `in`.security4her.app.R
@@ -23,6 +24,8 @@ import `in`.security4her.app.sos.SosController
 import `in`.security4her.app.sos.WatchRecorder
 import `in`.security4her.app.voice.VoiceListener
 import `in`.security4her.app.voice.VoiceSos
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
@@ -43,6 +46,9 @@ class SafetyService : LifecycleService() {
 
     private var shake: ShakeDetector? = null
     private var voice: VoiceListener? = null
+    /** Whether we hold the microphone type. Android only grants it while the app is on screen. */
+    private var micClaimed = false
+    private var foreground = false
     private var lastState: State? = null
 
     private data class State(
@@ -75,8 +81,9 @@ class SafetyService : LifecycleService() {
                 }
                 if (!safety && !voiceOn && incident == null && countdown == null) {
                     stopSelf()
-                } else {
-                    notify(buildNotification(safety, incident, countdown, voiceOn))
+                } else if (foreground) {
+                    // Only while really running: a refused start must not leave a "listening" notification behind.
+                    notify(buildNotification(safety, incident, countdown, voiceOn, listening = voice != null))
                 }
             }
         }
@@ -85,6 +92,8 @@ class SafetyService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         if (!promoteToForeground()) {
+            // Started from the background (after a restart) and Android refused: ask for one tap instead.
+            CoroutineScope(Dispatchers.Default).launch { if (Rearm.armed(applicationContext)) Rearm.askToResume(applicationContext) }
             stopSelf()
             return START_NOT_STICKY
         }
@@ -94,12 +103,18 @@ class SafetyService : LifecycleService() {
         if (intent?.action == ACTION_ENSURE) {
             // A listener that gave up (e.g. the microphone wasn't allowed yet) gets another go.
             if (voice?.isRunning == false) { voice = null }
-            lastState?.let { s -> setVoice(s.voice && !s.practicing && s.incident == null && s.countdown == null, s.voice) }
+            lastState?.let { s ->
+                setVoice(s.voice && !s.practicing && s.incident == null && s.countdown == null, s.voice)
+                if (s.safety || s.voice || s.incident != null) notify(buildNotification(s.safety, s.incident, s.countdown, s.voice, listening = voice != null))
+            }
         }
-        return START_NOT_STICKY
+        // If Android stops us for memory, come back (and ask for a tap if the microphone can't be reclaimed).
+        return START_STICKY
     }
 
     override fun onDestroy() {
+        getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
+        foreground = false
         WatchRecorder.stop(this)
         voice?.stop()
         voice = null
@@ -113,18 +128,25 @@ class SafetyService : LifecycleService() {
         val loc = ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         // Microphone type: needed by Voice SOS (listening) and the SOS recorder. It can only be claimed while the app is visible.
         val withMic = if (WatchRecorder.hasPermission(this)) loc or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else loc
-        try {
+        micClaimed = try {
             // Holding the microphone type now (while the app is on screen) lets a later shake-triggered SOS record.
             ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(false, null, null), withMic)
+            withMic != loc
         } catch (e: Exception) {
             ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(false, null, null), loc)
+            false
         }
+        foreground = true
+        if (micClaimed) Rearm.clear(this)
         true
     } catch (e: Exception) {
         // Missing location permission or a background-start restriction.
         Log.e(TAG, "cannot start foreground service", e)
         false
     }
+
+    private fun appVisible() =
+        ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
 
     private fun setShake(on: Boolean) {
         if (on && shake == null) {
@@ -138,6 +160,15 @@ class SafetyService : LifecycleService() {
     }
 
     private fun setVoice(listen: Boolean, enabled: Boolean) {
+        if (listen && voice == null && !micClaimed) {
+            if (appVisible()) promoteToForeground() // on screen: the microphone can be claimed now
+            if (!micClaimed) {
+                // Restarted in the background: Android won't let us listen until the app is opened once.
+                VoiceSos.report(VoiceSos.Status.Paused)
+                lifecycleScope.launch { Rearm.askToResume(applicationContext) }
+                return
+            }
+        }
         if (listen && voice == null) {
             voice = VoiceListener(this) {
                 if (VoiceSos.claimTrigger()) SosController.beginCountdown(this, "voice")
@@ -174,6 +205,7 @@ class SafetyService : LifecycleService() {
         incident: ActiveIncident?,
         countdown: SosController.Countdown?,
         voiceOn: Boolean = false,
+        listening: Boolean = true,
     ): Notification {
         val open = PendingIntent.getActivity(
             this, 0,
@@ -184,6 +216,8 @@ class SafetyService : LifecycleService() {
             countdown != null -> "SOS in ${countdown.secondsLeft} s — tap Cancel if this is a mistake"
             incident != null && incident.delivered -> "SOS active — alert delivered"
             incident != null -> "SOS active — NOT SENT yet, retrying"
+            voiceOn && !listening && VoiceSos.practicing.value -> "Practising Voice SOS"
+            voiceOn && !listening -> "Voice SOS paused — tap to resume"
             safety && voiceOn -> "Shake 3 times, or say HELP HELP HELP, for SOS"
             safety -> "Safety Mode on — shake 3 times for SOS"
             voiceOn -> "Voice SOS on — say HELP HELP HELP"
@@ -220,14 +254,16 @@ class SafetyService : LifecycleService() {
             private set
 
         /** Call from a foreground context (activity visible), where starting a location FGS is allowed. */
-        fun send(context: Context, action: String) {
-            if (!Locator.hasPermission(context)) return
-            try {
+        fun send(context: Context, action: String): Boolean {
+            if (!Locator.hasPermission(context)) return false
+            return try {
                 ContextCompat.startForegroundService(
                     context, Intent(context, SafetyService::class.java).setAction(action),
                 )
+                true
             } catch (e: Exception) {
                 Log.e(TAG, "startForegroundService failed", e)
+                false
             }
         }
 

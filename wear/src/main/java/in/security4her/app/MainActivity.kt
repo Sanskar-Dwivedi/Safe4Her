@@ -97,10 +97,11 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         lifecycleScope.launch {
             PhoneLink.syncFromPhone(this@MainActivity)
-            // Re-arm Voice SOS (e.g. after a reboot): the microphone can only be claimed while the app is visible.
-            if (store.voiceSos.first()) SafetyService.send(this@MainActivity, SafetyService.ACTION_ENSURE)
+            // Re-arm protection (e.g. after a restart): the microphone can only be claimed while the app is visible.
+            if (store.voiceSos.first() || store.safetyModeNow()) SafetyService.send(this@MainActivity, SafetyService.ACTION_ENSURE)
         }
-        `in`.security4her.app.sos.WatchUpdater.check(this)
+        // Just look: the background job installs at a moment that won't interrupt her.
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { `in`.security4her.app.sos.WatchUpdater.run(this@MainActivity, install = false) }
     }
 
     private fun handleEntry(intent: Intent) {

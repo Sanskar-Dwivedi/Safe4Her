@@ -382,6 +382,7 @@ fun SafeMapScreen() {
                 AppLog.info("Map", "Loaded ${it.size} safe places near %.4f, %.4f".format(Locale.US, c.latitude, c.longitude))
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e // she left the map; not a failure
             AppLog.warn("Map", "Couldn't load safe places", e)
             error = "Couldn't load hospitals and police stations. Check your internet and tap Refresh."
             emptyList()
@@ -405,7 +406,8 @@ fun SafeMapScreen() {
                 lat = r.lat, lng = r.lng, phone = null, distanceM = meters(here.latitude, here.longitude, r.lat, r.lng),
             )
         }
-        (places.orEmpty() + community).sortedBy { it.distanceM }
+        // Only what she could actually walk or ride to: nothing from another city.
+        (places.orEmpty() + community).filter { it.distanceM <= 30_000 }.sortedBy { it.distanceM }
     }
     val hotspots = remember(cd) { Community.hotspots(cd) }
     val danger = remember(me, cd) { me?.let { Community.dangerAt(it.latitude, it.longitude, cd) } }

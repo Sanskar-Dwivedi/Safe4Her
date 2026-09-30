@@ -655,6 +655,8 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
     var showChat by rememberSaveable { mutableStateOf(false) }
     var showPractice by rememberSaveable { mutableStateOf(false) }
     var showWatchInstall by rememberSaveable { mutableStateOf(false) }
+    var showFakeCall by rememberSaveable { mutableStateOf(false) }
+    var showSiren by rememberSaveable { mutableStateOf(false) }
 
     fun open(step: SetupStep) {
         when (step.key) {
@@ -673,6 +675,8 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
         showChat -> { ChatScreen(onClose = { showChat = false }); return }
         showPractice -> { PocketPracticeScreen(onClose = { showPractice = false }); return }
         showWatchInstall -> { WatchInstallScreen(onClose = { showWatchInstall = false }); return }
+        showFakeCall -> { FakeCallScreen(onClose = { showFakeCall = false }); return }
+        showSiren -> { SirenScreen(onClose = { showSiren = false }); return }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -690,6 +694,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
                         Tab.Home -> HomeScreen(
                             profile, contacts, settings, facts, watch, onTab = { tab = it }, onJourney = { showJourney = true },
                             onStep = ::open, onChat = { showChat = true }, onFixSms = { sheet = "sms" },
+                            onFakeCall = { showFakeCall = true }, onSiren = { showSiren = true },
                         )
                         Tab.Map -> SafeMapScreen()
                         Tab.People -> ContactsScreen(contacts, contactsError) { reload++ }
@@ -900,6 +905,7 @@ private fun tipFor(s: SetupStep) = when (s.key) {
 private fun HomeScreen(
     profile: Profile, contacts: List<Contact>?, settings: Settings, facts: ReadyFacts, watch: Boolean,
     onTab: (Tab) -> Unit, onJourney: () -> Unit, onStep: (SetupStep) -> Unit, onChat: () -> Unit, onFixSms: () -> Unit,
+    onFakeCall: () -> Unit, onSiren: () -> Unit,
 ) {
     val ctx = LocalContext.current
     val tick by Progress.tick.collectAsStateWithLifecycle()
@@ -1013,6 +1019,11 @@ private fun HomeScreen(
                 ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:112")))
             }
             QuickTile(Modifier.weight(1f), ImageVector.vectorResource(R.drawable.ic_shield), "Safe places", "Nearby and open", Lilac) { onTab(Tab.Map) }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            QuickTile(Modifier.weight(1f), Icons.Filled.Phone, "Fake call", "A call to step away", Mint, onClick = onFakeCall)
+            QuickTile(Modifier.weight(1f), Icons.Filled.Notifications, "Siren", "Loud alarm and flash", SosRed, onClick = onSiren)
         }
         Spacer(Modifier.height(16.dp))
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Surface1).padding(18.dp)) {

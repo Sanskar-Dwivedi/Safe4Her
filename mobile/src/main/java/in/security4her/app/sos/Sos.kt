@@ -222,7 +222,8 @@ object SosEngine {
             if (!inc.active) return
             try {
                 val token = Backend.upsertIncident(inc.id, inc.trigger, inc.source, inc.lat, inc.lng, inc.acc, inc.test)
-                val url = BuildConfig.TRACK_BASE_URL.ifBlank { "https://sanskar-dwivedi.github.io/Safe4Her/" } + "?k=" + token
+                // The server's tracking page when one is hosted; otherwise the live-location page the SMS already links.
+                val url = BuildConfig.TRACK_BASE_URL.takeIf { it.isNotBlank() && !Backend.mock }?.let { "$it?k=$token" } ?: inc.liveUrl
                 update { it.copy(server = "ok", shareUrl = url) }
                 if (!Backend.mock) log("Server accepted the SOS", "ok")
                 return

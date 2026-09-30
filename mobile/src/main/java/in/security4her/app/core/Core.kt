@@ -117,7 +117,7 @@ data class Settings(
     companion object {
         fun load(ctx: Context): Settings = with(Store.prefs(ctx)) {
             Settings(
-                testMode = getBoolean("test_mode", BuildConfig.DEBUG),
+                testMode = getBoolean("test_mode", true), // on until she turns it off: police texts and the auto-call go to her test number
                 demoNumber = getString("demo_number", "")!!,
                 policeNumber = getString("police_number", "112")!!,
                 autoCallNumber = getString("auto_call_number", "")!!,

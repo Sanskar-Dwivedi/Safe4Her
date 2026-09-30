@@ -208,7 +208,10 @@ private fun HomeScreen(
             actions.setSafetyMode(!safety)
         }
         if (safety) Label("Shake your wrist hard 3 times to start SOS", color = C.grey, size = 11.sp)
-        PillButton(if (voiceOn) "Voice SOS: ON  ›" else "Voice SOS  ›", if (voiceOn) C.purple else Color(0xFF333333), onClick = onVoice)
+        PillButton(if (voiceOn) "Voice SOS: ON" else "Voice SOS: OFF", if (voiceOn) C.purple else Color(0xFF333333)) {
+            actions.setVoiceSos(!voiceOn)
+        }
+        VoiceHint(voiceOn, onVoice)
         StatusRow(
             "Phone",
             when (phoneReachable) { true -> "connected"; false -> "not reachable"; null -> "checking…" },
@@ -224,20 +227,42 @@ private fun HomeScreen(
     }
 }
 
-/** In-app update: shows the version, or a one-tap update when the website has a newer one. */
+/** Under the Voice SOS switch: what to say, live status, and the way into practice. */
+@Composable
+private fun VoiceHint(on: Boolean, onMore: () -> Unit) {
+    val status by `in`.security4her.app.voice.VoiceSos.status.collectAsStateWithLifecycle()
+    val (text, color) = when {
+        !on -> "Say HELP HELP HELP to start SOS" to C.grey
+        status == `in`.security4her.app.voice.VoiceSos.Status.Listening || status == `in`.security4her.app.voice.VoiceSos.Status.Hearing ->
+            "Listening for HELP HELP HELP" to C.green
+        status == `in`.security4her.app.voice.VoiceSos.Status.NoPermission -> "Allow the microphone to use this" to C.coral
+        status == `in`.security4her.app.voice.VoiceSos.Status.Failed -> "Microphone busy. Turn off and on." to C.coral
+        else -> "Getting ready…" to C.amber
+    }
+    Label(text, color = color, size = 11.sp)
+    Text(
+        text = "Practise  ›", color = C.purpleLight, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Practise Voice SOS", onClick = onMore).padding(horizontal = 12.dp, vertical = 6.dp),
+    )
+}
+
+/** Updates install by themselves; this only shows what's happening, with a manual button as a fallback. */
 @Composable
 private fun UpdateBlock() {
     val ctx = LocalContext.current
     val s by WatchUpdater.state.collectAsStateWithLifecycle()
     when (val x = s) {
-        is WatchUpdater.State.Available -> PillButton("Update to ${x.r.name}", C.purple) { WatchUpdater.update(ctx, x.r) }
+        is WatchUpdater.State.Available -> {
+            Label("Version ${x.r.name} installs by itself", color = C.grey, size = 11.sp)
+            PillButton("Update now", Color(0xFF333333)) { WatchUpdater.update(ctx, x.r) }
+        }
         is WatchUpdater.State.Downloading -> Label("Updating… ${(x.progress * 100).toInt()}%", color = C.purpleLight, size = 12.sp)
-        is WatchUpdater.State.Installing -> Label("Confirm the update on screen", color = C.purpleLight, size = 12.sp)
+        is WatchUpdater.State.Installing -> Label("Installing update…", color = C.purpleLight, size = 12.sp)
         is WatchUpdater.State.Failed -> {
             Label(x.message, color = C.coral, size = 11.sp)
             x.r?.let { r -> PillButton("Try again", Color(0xFF333333)) { WatchUpdater.update(ctx, r) } }
         }
-        else -> Label("Version ${WatchUpdater.versionName}", color = C.grey, size = 11.sp)
+        else -> Label("Version ${WatchUpdater.versionName} · up to date", color = C.grey, size = 11.sp)
     }
 }
 

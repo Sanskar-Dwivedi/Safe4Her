@@ -1,12 +1,12 @@
-# Builds the phone and watch apps, runs their unit tests and lint on every push and pull request.
+# Runs the unit tests and lint, then builds both release APKs, on every push and pull request.
 name: Android
 
 on:
   push:
     branches: [main]
-    paths: ["mobile/**", "wear/**", "gradle/**", "*.gradle.kts", "gradle.properties", ".github/workflows/android.yml"]
+    paths: ["mobile/**", "wear/**", "gradle/**", "*.gradle.kts", "gradle.properties", "keystore/**", ".github/workflows/android.yml"]
   pull_request:
-    paths: ["mobile/**", "wear/**", "gradle/**", "*.gradle.kts", "gradle.properties", ".github/workflows/android.yml"]
+    paths: ["mobile/**", "wear/**", "gradle/**", "*.gradle.kts", "gradle.properties", "keystore/**", ".github/workflows/android.yml"]
   workflow_dispatch:
 
 permissions:
@@ -30,7 +30,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Supabase and Maps keys are optional; without them the phone builds in demo mode.
+      # Supabase and Maps keys are optional; without them the phone keeps its data on the device.
       - name: Write local.properties
         run: |
           chmod +x gradlew
@@ -42,8 +42,8 @@ jobs:
       - name: Lint
         run: ./gradlew :mobile:lintDebug :wear:lintDebug --console=plain
 
-      - name: Build APKs
-        run: ./gradlew :mobile:assembleDebug :wear:assembleDebug --console=plain
+      - name: Build release APKs
+        run: ./gradlew :mobile:assembleRelease :wear:assembleRelease --console=plain
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -58,5 +58,5 @@ jobs:
         with:
           name: apks
           path: |
-            mobile/build/outputs/apk/debug/*.apk
-            wear/build/outputs/apk/debug/*.apk
+            mobile/build/outputs/apk/release/*.apk
+            wear/build/outputs/apk/release/*.apk

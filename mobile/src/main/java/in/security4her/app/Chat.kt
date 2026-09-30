@@ -83,6 +83,12 @@ private val TOPICS = listOf(
     Topic(listOf("contact", "contacts", "people", "family", "friend", "who", "add")) {
         "Add trusted contacts in the People tab, from your phone book or by typing a number. They're texted in the order shown, and you can switch anyone off without deleting them."
     },
+    Topic(listOf("fake call", "fake", "excuse", "uncomfortable", "get away", "leave")) {
+        "Fake call makes your phone ring with a real-looking call (from Mom, Dad or any name you type) so you can step away. Answer it and a voice talks to you. Home → Fake call; it can ring now, in 10 s or in 30 s. Nobody is actually called."
+    },
+    Topic(listOf("siren", "alarm", "loud", "noise", "attention", "flash", "torch")) {
+        "Siren plays a loud alarm (even on silent), flashes the screen and strobes the torch to draw attention. Home → Siren; tap anywhere to stop. It doesn't contact anyone, so use SOS too if you need help."
+    },
     Topic(listOf("install watch", "watch app", "install on watch", "update watch", "watch update", "put on watch")) {
         "Your phone installs the watch app for you, no computer needed. On the watch turn on Developer options, then Wireless debugging, and tap Pair new device. Then open Me → Install or update the watch app here, type the 6-digit code and tap Pair and install. After that the watch updates itself."
     },

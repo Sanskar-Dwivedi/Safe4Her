@@ -21,8 +21,8 @@ android {
         minSdk = 26
         targetSdk = 35
         // Bump both for every release; the in-app updater compares versionCode with web-install/version.json.
-        versionCode = 9
-        versionName = "0.3.5"
+        versionCode = 10
+        versionName = "1.0.0"
         buildConfigField("String", "SUPABASE_URL", cfg("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", cfg("SUPABASE_ANON_KEY"))
         buildConfigField("String", "TRACK_BASE_URL", cfg("TRACK_BASE_URL"))
@@ -46,8 +46,11 @@ android {
     buildTypes {
         debug { signingConfig = signingConfigs.getByName("debug") }
         release {
-            isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug") // hackathon only
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // The same key as every earlier build, so installed apps update in place.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

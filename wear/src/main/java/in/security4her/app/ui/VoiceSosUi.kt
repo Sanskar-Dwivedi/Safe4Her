@@ -110,7 +110,7 @@ fun VoiceSosScreen(on: Boolean, onToggle: (Boolean) -> Unit, onBack: () -> Unit)
         Pill(if (on) "Voice SOS: ON" else "Voice SOS: OFF", if (on) Purple else Off) { onToggle(!on) }
         T("Say HELP HELP HELP, with short pauses if you like. The watch vibrates and gives you 5 seconds to cancel, then sends the SOS.", Grey, 11.sp)
         Pill("Practise", Off) { practising = true }
-        T("Listens only while on. Nothing is recorded or sent. Uses extra battery.", Grey, 10.sp)
+        T("Listens only while on. Nothing is recorded or sent. If the watch restarts, one tap on the notification turns it back on.", Grey, 10.sp)
         Pill("Back", Off, onBack)
     }
 }

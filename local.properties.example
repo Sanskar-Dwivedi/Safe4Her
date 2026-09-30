@@ -1,8 +1,19 @@
-# Copy to local.properties (gitignored) and fill in. Both :wear and :mobile read these.
+# Copy to local.properties (gitignored) and fill in. Both :wear and :mobile read these. Everything but sdk.dir is optional.
 sdk.dir=C\:\\Users\\YOU\\AppData\\Local\\Android\\Sdk
+
+# Supabase backend (accounts, contacts, incidents). Leave blank to keep everything on the phone.
 SUPABASE_URL=https://YOUR-PROJECT.supabase.co
 SUPABASE_ANON_KEY=eyJ...
-TRACK_BASE_URL=https://sanskar-dwivedi.github.io/Safe4Her/
-MAPS_API_KEY=AIza...
-# Live map page linked in SOS texts (optional; defaults to the published s4h-live page)
+
+# Server tracking page (web-track/, published by .github/workflows/pages.yml), used with Supabase.
+# Leave blank to link the live-location page below instead.
+TRACK_BASE_URL=
+
+# Live map page linked in SOS texts (defaults to the published s4h-live page)
 LIVE_PAGE_URL=https://atharvalakhe.github.io/s4h-live/
+
+# Google Maps key for the map tab (optional; OpenStreetMap is used without it)
+MAPS_API_KEY=
+
+# Where both apps look for updates (defaults to https://security4her.vercel.app/version.json)
+# UPDATE_URL=

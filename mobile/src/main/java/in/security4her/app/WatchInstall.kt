@@ -82,7 +82,7 @@ private const val WATCH_PKG = "in.security4her.app"
 /** A watch advertising Wireless debugging on this Wi-Fi: the pairing dialog, or the ready-to-connect service. */
 data class WatchService(val name: String, val host: String, val port: Int, val pairing: Boolean)
 
-enum class InstallStep(val label: String) { Connect("Connect to your watch"), Download("Download the watch app"), Install("Install on the watch"), Finish("Turn on watch updates") }
+enum class InstallStep(val label: String) { Connect("Connect to your watch"), Download("Download the watch app"), Install("Install on the watch"), Finish("Turn on automatic updates") }
 
 sealed interface WatchInstallState {
     data object Idle : WatchInstallState
@@ -388,6 +388,7 @@ fun WatchInstallScreen(onClose: () -> Unit) {
     var wifi by remember { mutableStateOf(WatchFinder.onWifi(ctx)) }
     LaunchedEffect(Unit) { while (true) { wifi = WatchFinder.onWifi(ctx); delay(2_000) } }
     var code by remember { mutableStateOf("") }
+    var tried by remember { mutableStateOf("") }
     var manual by remember { mutableStateOf(false) }
     val working = state is WatchInstallState.Working
     BackHandler(onBack = onClose)
@@ -400,8 +401,7 @@ fun WatchInstallScreen(onClose: () -> Unit) {
         Text("Install on your watch", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(6.dp))
         Text(
-            "Your phone sends the watch app straight to your watch over Wi-Fi. No computer needed, and you only do this once: " +
-                "after that the watch updates itself.",
+            "Your phone puts the watch app on your watch over Wi-Fi. You do this once: after that the watch keeps itself up to date.",
             color = Muted, style = MaterialTheme.typography.bodyLarge,
         )
         Spacer(Modifier.height(20.dp))
@@ -409,19 +409,24 @@ fun WatchInstallScreen(onClose: () -> Unit) {
         when (val s = state) {
             is WatchInstallState.Working, is WatchInstallState.Done -> Progress(s, onClose)
             else -> {
-                GetReady()
-                Spacer(Modifier.height(16.dp))
                 val failed = s as? WatchInstallState.Failed
+                // Six digits typed: go. No extra button to find. Each code is tried once; a new code tries again.
+                LaunchedEffect(code, pairing) {
+                    if (code.length == 6 && pairing != null && code != tried) {
+                        tried = code
+                        WatchInstaller.start(ctx, pairing.host, null, pairing.port, code, finder)
+                    }
+                }
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Surface1).padding(18.dp).animateContentSize()) {
                     when {
                         !wifi -> Status("Connect this phone to Wi-Fi", "Use the same Wi-Fi network as your watch.", warn = true)
                         pairing != null -> {
-                            Status("Found a watch ready to pair", "Enter the 6-digit code shown on the watch.", good = true)
+                            Status("Watch found", "Type the 6-digit code it shows. Installing starts by itself.", good = true)
                             Spacer(Modifier.height(14.dp))
                             Field(code, { code = it.filter(Char::isDigit).take(6) }, "Wi-Fi pairing code", KeyboardType.Number)
-                            Spacer(Modifier.height(14.dp))
-                            ChunkyButton("Pair and install", enabled = code.length == 6) {
-                                WatchInstaller.start(ctx, pairing.host, null, pairing.port, code, finder)
+                            if (failed != null && code.length == 6) {
+                                Spacer(Modifier.height(14.dp))
+                                ChunkyButton("Try again") { WatchInstaller.start(ctx, pairing.host, null, pairing.port, code, finder) }
                             }
                         }
                         ready != null -> {
@@ -443,6 +448,8 @@ fun WatchInstallScreen(onClose: () -> Unit) {
                         Text(it.message, color = SosRed, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
+                Spacer(Modifier.height(16.dp))
+                GetReady(expanded = pairing == null && ready == null)
                 Spacer(Modifier.height(8.dp))
                 TextButton(onClick = { manual = !manual }) { Text(if (manual) "Hide address entry" else "Watch not found? Enter its address", color = Lilac) }
                 if (manual) ManualEntry(enabled = !working) { host, port, pairPort, c -> WatchInstaller.start(ctx, host, port, pairPort, c, finder) }
@@ -452,11 +459,19 @@ fun WatchInstallScreen(onClose: () -> Unit) {
     }
 }
 
+/** The one-time watch settings. Open while the phone is still looking; folded away once the watch is found. */
 @Composable
-private fun GetReady() {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Surface1).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("On your watch", style = MaterialTheme.typography.titleMedium)
-        listOf(
+private fun GetReady(expanded: Boolean) {
+    var open by remember(expanded) { mutableStateOf(expanded) }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Surface1).clickable { open = !open }.padding(18.dp).animateContentSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Get the watch ready (once)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Text(if (open) "Hide" else "Show", color = Lilac, style = MaterialTheme.typography.labelLarge)
+        }
+        if (open) listOf(
             "Connect the watch to the same Wi-Fi as this phone.",
             "Open Settings → System → About. Tap Build number (on Galaxy Watch: Software version) until it says you're a developer.",
             "Go back to Settings → Developer options. Turn on ADB debugging, then Wireless debugging.",

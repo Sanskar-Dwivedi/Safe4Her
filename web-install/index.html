@@ -708,7 +708,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
         <li class="step" data-step="4">
           <button class="step-head" type="button"><span class="num"><span>4</span><svg><use href="#i-check"/></svg></span><span class="step-title">Pair your phone</span></button>
           <div class="step-body"><div><div class="step-inner">
-            <p>On your phone open Security4Her, then <strong>Me</strong>, then <strong>Install or update the watch app</strong>. On the watch tap <strong>Pair new device</strong>. The phone finds the watch by itself: type the six-digit code the watch shows and tap <strong>Pair and install</strong>.</p>
+            <p>On your phone open Security4Her, then <strong>Me</strong>, then <strong>Install or update the watch app</strong>. On the watch tap <strong>Pair new device</strong>. The phone finds the watch by itself: type the six-digit code the watch shows and installing starts on its own.</p>
             <div class="step-actions"><button class="btn btn-sm" type="button" data-next>It's installing</button></div>
             <details class="alt"><summary>Prefer a computer? Install with adb</summary>
             <p>Get <a href="https://developer.android.com/tools/releases/platform-tools" target="_blank" rel="noopener">Android platform tools</a> and the <a href="Security4Her-watch.apk" download>watch APK</a>. Type what the watch's Pair new device screen shows and run the command:</p>
@@ -727,7 +727,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
         <li class="step" data-step="5">
           <button class="step-head" type="button"><span class="num"><span>5</span><svg><use href="#i-check"/></svg></span><span class="step-title">Let the phone install it</span></button>
           <div class="step-body"><div><div class="step-inner">
-            <p>The phone downloads the watch app, checks its fingerprint and installs it on the watch. It takes about a minute; keep the watch awake until the phone shows four ticks.</p>
+            <p>The phone downloads the watch app, checks its fingerprint and installs it on the watch. It takes about a minute; keep the watch awake until the phone shows four ticks. After this the watch updates itself, silently.</p>
             <div class="step-actions"><button class="btn btn-sm" type="button" data-next>All four ticked</button></div>
           </div></div></div>
         </li>
@@ -753,7 +753,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
   <div class="wrap page band-grid">
     <div>
       <h2>What you're installing</h2>
-      <p class="sub">Everything works without a subscription. Maps and routing use OpenStreetMap, so nothing is behind a paywall.</p>
+      <p class="sub">Everything works without a subscription. Maps and routing use OpenStreetMap, so nothing is behind a paywall, and both apps keep themselves up to date.</p>
       <div class="cta"><a class="btn btn-sm" href="#phone">Install on your phone</a><a class="btn btn-sm btn-ghost" href="#watch">Add a watch</a></div>
     </div>
     <div class="feats">
@@ -761,6 +761,10 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
       <div class="feat"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></span><b>Live location by SMS</b><p>Your contacts get a text with a link to a map that follows you every 20 seconds.</p></div>
       <div class="feat"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 19c4-1 3-7 8-7s4 6 8 7"/><circle cx="12" cy="6" r="2.5"/></svg></span><b>Safe Journey</b><p>Pick where you're going. If you're late or stop moving and don't check in, your contacts are alerted.</p></div>
       <div class="feat"><span class="ic"><svg viewBox="0 0 24 24"><path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3z"/><path d="M9 4v13M15 7v13"/></svg></span><b>Community safety map</b><p>See safe places, hospitals and police nearby, and red zones marked by women or by repeated SOS alerts.</p></div>
+      <div class="feat"><span class="ic"><svg viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M3 9v6M21 9v6"/></svg></span><b>Pocket SOS</b><p>Phone in a pocket or bag? Knock on it three times. It wakes over the lock screen and counts down, even with the screen off.</p></div>
+      <div class="feat"><span class="ic"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span><b>Voice SOS on the watch</b><p>Say "HELP HELP HELP" and the watch starts the SOS countdown. It's recognised on the watch itself; nothing is recorded or sent.</p></div>
+      <div class="feat"><span class="ic"><svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg></span><b>Fake call</b><p>Your phone rings with a real-looking call from Mom or anyone you choose, so you can step away. Answer it and a voice talks to you.</p></div>
+      <div class="feat"><span class="ic"><svg viewBox="0 0 24 24"><path d="M6 17V11a6 6 0 0 1 12 0v6"/><path d="M4 17h16M12 3v1M4.5 6.5l.8.8M19.5 6.5l-.8.8"/></svg></span><b>Siren</b><p>A loud alarm that plays even on silent, with a flashing screen and torch to draw attention fast.</p></div>
       <div class="feat"><span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 11l5-3v8l-5-3"/></svg></span><b>Evidence recording</b><p>Audio and video start with the SOS, fingerprinted so any edit shows. Your watch records audio too.</p></div>
       <div class="feat"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></span><b>Women-only community</b><p>Accounts are verified through DigiLocker before joining.</p></div>
     </div>
