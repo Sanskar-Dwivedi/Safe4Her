@@ -50,7 +50,7 @@ private fun mmss(s: Long) = "%d:%02d".format(s / 60, s % 60)
 // ---------------------------------------------------------------- During an SOS
 
 @Composable
-fun EvidenceCard() {
+fun EvidenceCard(sosActive: Boolean = true) {
     val ctx = LocalContext.current
     val c by Evidence.active.collectAsStateWithLifecycle()
     val wants = remember { Evidence.wantsAudio(ctx) || Evidence.wantsVideo(ctx) }
@@ -62,7 +62,19 @@ fun EvidenceCard() {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(10.dp).clip(CircleShape).background(if (case?.recording == true) SosRed.copy(alpha = a) else Muted))
             Spacer(Modifier.width(10.dp))
-            Text(if (case?.recording == true) "Recording evidence" else if (case != null) "Evidence saved" else "Starting evidence recording…", style = MaterialTheme.typography.titleMedium)
+            Text(
+                when {
+                    case?.recording == true -> "Recording evidence"
+                    case != null || !sosActive -> "Evidence saved"
+                    else -> "Starting evidence recording…"
+                },
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
+        // After the app restarts, a finished SOS no longer has its live case; point to where the recordings are.
+        if (case == null && !sosActive) {
+            Spacer(Modifier.height(6.dp))
+            Text("Find it in Settings → Evidence locker.", color = Muted, style = MaterialTheme.typography.bodySmall)
         }
         if (case != null) {
             Spacer(Modifier.height(8.dp))

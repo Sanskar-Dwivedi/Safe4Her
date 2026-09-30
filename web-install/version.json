@@ -1,15 +1,15 @@
 {
-  "versionCode": 9,
-  "versionName": "0.3.5",
+  "versionCode": 10,
+  "versionName": "1.0.0",
   "apk": "Security4Her-phone.apk",
-  "sha256": "96f406042fdb53a5c01a0b83aaee2fff89826ed7a89c62d99d4f66a4ae27268a",
-  "bytes": 28262898,
-  "notes": "Voice SOS is more sensitive: catches HELP HELP HELP with pauses, quieter voices and \"help me\".",
+  "sha256": "0bd6f1be55690e10d08f89776693741e41095000fee2ab94a04ba0c8f3564d30",
+  "bytes": 10924379,
+  "notes": "Security4Her 1.0: fake call, siren, and a watch that installs from your phone and then updates itself.",
   "watch": {
-    "versionCode": 7,
-    "versionName": "0.4.1",
+    "versionCode": 8,
+    "versionName": "1.0.0",
     "apk": "Security4Her-watch.apk",
-    "sha256": "a5a01c571a8741d10a83a0fc27e2d379173da064d9c2ddeb3af39a3cb8755cbd",
-    "bytes": 67345737
+    "sha256": "537cf3490486677470eadcf85ec33bf0c58cd2691cc0f00f755d6735c7e4c93c",
+    "bytes": 53129076
   }
 }

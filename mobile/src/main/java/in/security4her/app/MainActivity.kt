@@ -1728,7 +1728,7 @@ private fun ActiveSosScreen(inc: Incident) {
                     colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Night),
                 ) { Text("Turn on location") }
             }
-            EvidenceCard()
+            EvidenceCard(sosActive = inc.active)
             // Location
             Card {
                 Text("Your location", style = MaterialTheme.typography.titleMedium)
