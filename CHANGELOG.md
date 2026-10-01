@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.0-beta.1 (2026-10-01)
+
+Public beta for testing before a commercial launch.
+
+### Added
+- **Beta agreement** on first launch (phone and watch): testers choose which anonymous test data to share, and can
+  change it or delete everything they sent at any time.
+- **Test data, sorted into categories:** crashes (with stack traces), errors, security events, false alarms, feature
+  use, speed and device model. Numbers, places, links and names are removed on the phone first; location, contacts,
+  messages and recordings are never collected.
+- **Report a problem** (Me → Beta testing), with an option to attach recent errors.
+- **Private beta database** (`supabase/beta/beta_testing.sql`) that rejects anything a tester didn't agree to, limits
+  each tester to 600 events an hour, and groups everything into a ranked list of problems for the team.
+
+### Changed
+- Both apps are named **Security4Her Beta**.
+
 ## 1.0.0 (2026-09-30)
 
 ### Added

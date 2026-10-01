@@ -136,6 +136,7 @@ class VoiceListener(
             VoiceSos.model(ctx)
         } catch (e: Throwable) {
             Log.e(TAG, "speech model failed to load", e)
+            `in`.security4her.app.beta.WatchBeta.error("voice_model_failed", e)
             VoiceSos.report(VoiceSos.Status.Failed); running = false; return
         }
         val minBuf = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
@@ -144,6 +145,7 @@ class VoiceListener(
                 AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuf, FRAME * 2 * 8))
         } catch (e: Exception) {
             Log.e(TAG, "microphone unavailable", e)
+            `in`.security4her.app.beta.WatchBeta.error("voice_mic_unavailable", e)
             VoiceSos.report(VoiceSos.Status.Failed); running = false; return
         }
         if (rec.state != AudioRecord.STATE_INITIALIZED) {
@@ -207,6 +209,7 @@ class VoiceListener(
             }
         } catch (e: Exception) {
             Log.e(TAG, "listening stopped", e)
+            `in`.security4her.app.beta.WatchBeta.error("voice_listening_stopped", e)
             VoiceSos.report(VoiceSos.Status.Failed)
         } finally {
             runCatching { recognizer?.close() }

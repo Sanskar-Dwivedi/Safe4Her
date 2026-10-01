@@ -48,6 +48,8 @@ object SosController {
         val app = context.applicationContext
         synchronized(this) {
             if (countdownJob?.isActive == true) return
+            `in`.security4her.app.beta.WatchBeta.event("usage", "info", "countdown_started", null, mapOf("trigger" to trigger))
+            countdownStartedAt = System.currentTimeMillis(); countdownTrigger = trigger
             countdownJob = scope.launch {
                 val live = WatchStore.get(app).incidentNow()
                 if (live != null && !live.ended) return@launch
@@ -63,8 +65,13 @@ object SosController {
         }
     }
 
+    private var countdownStartedAt = 0L
+    private var countdownTrigger = ""
+
     fun cancelCountdown() {
         synchronized(this) {
+            if (countdownJob?.isActive == true) `in`.security4her.app.beta.WatchBeta.event("false_alarm", "warning", "countdown_cancelled_" + countdownTrigger, null,
+                mapOf("trigger" to countdownTrigger, "ms" to System.currentTimeMillis() - countdownStartedAt))
             countdownJob?.cancel()
             countdownJob = null
             _countdown.value = null
@@ -85,6 +92,7 @@ object SosController {
         if (incident.incidentId != fresh.incidentId) return incident // already live: never a second incident
 
         Haptics.sosStarted(app)
+        `in`.security4her.app.beta.WatchBeta.event("usage", "info", "sos_started", null, mapOf("trigger" to trigger, "test_mode" to incident.test))
         SafetyService.ensureRunning(app) // keeps sending location + retrying while active
         scope.launch { deliverToPhone(app, incident.incidentId) }
         scope.launch {
@@ -111,11 +119,12 @@ object SosController {
                 val acked = withTimeoutOrNull(ACK_TIMEOUT_MS) {
                     store.incident.filterNotNull().first { it.incidentId != incidentId || it.phoneAck }
                 }
-                if (acked != null) return
+                if (acked != null) { `in`.security4her.app.beta.WatchBeta.event("performance", "info", "phone_ack", null, mapOf("ms" to System.currentTimeMillis() - current.createdAt, "attempt" to attempt + 1)); `in`.security4her.app.beta.WatchBeta.flush(); return }
             }
             if (attempt < PHONE_ATTEMPTS - 1) delay(3_000)
         }
         Log.w(TAG, "phone did not acknowledge $incidentId; SafetyService keeps retrying")
+        `in`.security4her.app.beta.WatchBeta.event("error", "error", "phone_no_ack", "Phone did not acknowledge the SOS after $PHONE_ATTEMPTS attempts")
     }
 
     /** Path B: direct HTTPS. On failure, WorkManager retries when a network is available. */
@@ -137,6 +146,7 @@ object SosController {
             },
             onFailure = { e ->
                 store.updateIncident(incidentId) { it.copy(serverError = e.message ?: "network error") }
+                `in`.security4her.app.beta.WatchBeta.error("server_post_failed", e)
                 ServerSyncWorker.enqueue(context)
             },
         )
@@ -168,6 +178,7 @@ object SosController {
             val store = WatchStore.get(app)
             val incident = store.incidentNow()?.takeIf { !it.ended } ?: return@launch
             store.updateIncident(incident.incidentId) { it.copy(ended = true, endedAt = System.currentTimeMillis()) }
+            `in`.security4her.app.beta.WatchBeta.event("usage", "info", "sos_ended", null, mapOf("ms" to System.currentTimeMillis() - incident.createdAt)); `in`.security4her.app.beta.WatchBeta.flush()
             val ref = S4hJson.encodeToString(IncidentRef.serializer(), IncidentRef(incident.incidentId))
             PhoneLink.send(app, Paths.SOS_CANCEL, ref)
             val link = store.linkNow()

@@ -25,7 +25,11 @@ def info(path):
     return hashlib.sha256(open(path, "rb").read()).hexdigest(), os.path.getsize(path)
 p_sha, p_size = info("Security4Her-phone.apk")
 w_sha, w_size = info("Security4Her-watch.apk")
+old = {}
+try: old = json.load(open("version.json"))
+except Exception: pass
 json.dump({
+    **({"beta": old["beta"]} if "beta" in old else {}),
     "versionCode": int(p_code), "versionName": p_name, "apk": "Security4Her-phone.apk",
     "sha256": p_sha, "bytes": p_size, "notes": notes,
     "watch": {"versionCode": int(w_code), "versionName": w_name, "apk": "Security4Her-watch.apk", "sha256": w_sha, "bytes": w_size},

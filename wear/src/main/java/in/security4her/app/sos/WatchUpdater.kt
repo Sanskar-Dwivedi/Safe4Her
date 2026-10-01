@@ -142,6 +142,7 @@ object WatchUpdater {
                 val sha = md.digest().joinToString("") { "%02x".format(it) }
                 if (r.sha256.isNotBlank() && sha != r.sha256) {
                     file.delete()
+                    `in`.security4her.app.beta.WatchBeta.event("security", "critical", "update_fingerprint_mismatch", null)
                     _state.value = State.Failed("Download was damaged. Trying again later.", r)
                     return false
                 }
@@ -151,6 +152,7 @@ object WatchUpdater {
             true
         } catch (e: Exception) {
             Log.w(TAG, "update failed", e)
+            `in`.security4her.app.beta.WatchBeta.error("update_download_failed", e)
             _state.value = State.Failed("Download stopped. Trying again later.", r)
             false
         }
@@ -192,6 +194,7 @@ object WatchUpdater {
             PackageInstaller.STATUS_SUCCESS -> _state.value = State.UpToDate
             else -> {
                 Log.w(TAG, "install failed: $status ${intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)}")
+                `in`.security4her.app.beta.WatchBeta.event("error", "error", "update_install_failed", "status $status: ${intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)}")
                 _state.value = State.Failed(
                     if (status == PackageInstaller.STATUS_FAILURE_ABORTED) "Update cancelled." else "Update it from your phone: Security4Her → Me → Watch.",
                     r,

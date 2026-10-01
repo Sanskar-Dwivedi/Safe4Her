@@ -9,7 +9,8 @@
 </p>
 
 <p>
-<img src="https://img.shields.io/badge/version-1.0.0-FF4D5E?style=flat-square" alt="Version 1.0.0">
+<img src="https://img.shields.io/badge/version-1.1.0--beta.1-FF4D5E?style=flat-square" alt="Version 1.1.0-beta.1">
+<img src="https://img.shields.io/badge/status-public_beta-8B5CF6?style=flat-square" alt="Public beta">
 <img src="https://img.shields.io/badge/Android_8+-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android 8+">
 <img src="https://img.shields.io/badge/Wear_OS_3+-4285F4?style=flat-square&logo=wearos&logoColor=white" alt="Wear OS 3+">
 <img src="https://img.shields.io/badge/Kotlin-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Kotlin">
@@ -208,7 +209,7 @@ phone keeps accounts and contacts on the device.
 | [`web-track/`](web-track) | Server tracking page (used with Supabase) |
 | [`supabase/`](supabase) | Postgres migrations, pgTAP tests, Edge Functions |
 | [`scripts/`](scripts) | Database test runner, city seed script |
-| [`docs/`](docs) | [Device test checklist](docs/TESTING.md), [release guide](docs/RELEASING.md) |
+| [`docs/`](docs) | [Beta testing guide](docs/BETA_TESTING.md), [device test checklist](docs/TESTING.md), [release guide](docs/RELEASING.md) |
 | [`CONTRACT.md`](CONTRACT.md) | Wire format between the watch, phone and server |
 
 ## 🛠️ Build from source
@@ -267,6 +268,14 @@ See [`docs/RELEASING.md`](docs/RELEASING.md).
 - [ ] **Hindi and Marathi**, including Voice SOS (*"bachao bachao bachao"*)
 - [ ] **Play Store release**, which removes the one-time SMS and Wireless debugging steps
 
+## 🧪 Beta testing
+
+Security4Her **1.1.0-beta.1** is being tested before a commercial launch. On first launch, testers choose whether to
+share anonymous test data: crashes, errors, security events, false alarms, feature use, speed and phone model.
+Nothing personal is ever collected, and testers can change their choices or delete their data at any time. The team
+reads the results in a private database grouped into problems. See the [beta testing guide](docs/BETA_TESTING.md)
+and [privacy notice](PRIVACY.md#beta-test-data).
+
 ## ⚠️ Known limitations
 
 - Android doesn't let apps dial **112** automatically: the countdown calls her chosen number and shows a one-tap *Call 112*.
@@ -282,6 +291,8 @@ See [`docs/RELEASING.md`](docs/RELEASING.md).
 <div align="center">
 
 **OBSIDIAN**
+
+Atharva Lakhe &nbsp;·&nbsp; Sanskar Dwivedi &nbsp;·&nbsp; Mohit Hadap &nbsp;·&nbsp; Ashay Malode
 
 <sub>Built with Kotlin, Jetpack Compose, Wear OS, Supabase, OpenStreetMap, ntfy.sh and Vosk.</sub>
 

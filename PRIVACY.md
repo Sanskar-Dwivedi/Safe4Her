@@ -1,7 +1,7 @@
 # Privacy
 
-Security4Her is built to share as little as possible, and only when she decides to. There are no ads, no
-analytics and no third-party trackers in either app.
+Security4Her is built to share as little as possible, and only when she decides to. There are no ads and no
+third-party trackers in either app. During the beta, testers can choose to share anonymous test data (below).
 
 ## What leaves the phone, and when
 
@@ -26,6 +26,21 @@ analytics and no third-party trackers in either app.
 - **Contacts** stay on the phone unless a backend is connected. Phone contacts are read only when she picks one.
 - **Verification**: DigiLocker verification keeps only whether she is verified. No Aadhaar number, address,
   photo or document is stored.
+
+## Beta test data
+
+Security4Her 1.1 is a beta. On first launch the app asks whether you want to share anonymous test data, and
+which kinds: crash reports, errors, security events, false alarms, feature use, speed and phone model. Nothing is
+sent unless you agree, and the app works the same if you don't.
+
+- You are identified only by a random tester ID, never by name, number or account.
+- Location, phone numbers, contact names, messages, recordings and Aadhaar are never included. Numbers, places,
+  links and names are removed on your phone before anything is queued.
+- Data goes over an encrypted connection to a private database that only the Security4Her team can read, and the
+  server rejects anything you haven't agreed to.
+- It is used only to fix the app during the beta and is deleted when the beta ends.
+- Change your choices or delete everything you've sent at any time: **Me → Beta testing** on the phone, or **Beta
+  test data** on the watch.
 
 ## Permissions
 

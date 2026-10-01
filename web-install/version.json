@@ -1,15 +1,15 @@
 {
-  "versionCode": 10,
-  "versionName": "1.0.0",
+  "versionCode": 11,
+  "versionName": "1.1.0-beta.1",
   "apk": "Security4Her-phone.apk",
-  "sha256": "0bd6f1be55690e10d08f89776693741e41095000fee2ab94a04ba0c8f3564d30",
-  "bytes": 10924379,
-  "notes": "Security4Her 1.0: fake call, siren, and a watch that installs from your phone and then updates itself.",
+  "sha256": "d9e2919f6fcf9f8c2527cdbed096b6c793930293d166982522028e9f7d16c517",
+  "bytes": 10950455,
+  "notes": "Security4Her Beta: choose to share anonymous test data, and report problems from Me \u2192 Beta testing.",
   "watch": {
-    "versionCode": 8,
-    "versionName": "1.0.0",
+    "versionCode": 9,
+    "versionName": "1.1.0-beta.1",
     "apk": "Security4Her-watch.apk",
-    "sha256": "537cf3490486677470eadcf85ec33bf0c58cd2691cc0f00f755d6735c7e4c93c",
-    "bytes": 53129076
+    "sha256": "86201fea3950ba132e868e0dd54458d17531ecfb7da08e1e0181071b642110a1",
+    "bytes": 53136556
   }
 }

@@ -131,6 +131,7 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         AppLog.init(this)
+        `in`.security4her.app.beta.Beta.init(this)
         `in`.security4her.app.core.Community.init(this)
         Backend.init(this)
         SosEngine.init(this)
@@ -260,6 +261,7 @@ private fun Root() {
     }
 
     LaunchedEffect(Unit) { route(runCatching { Backend.restore() }.getOrNull()) }
+    var betaPending by remember { mutableStateOf(`in`.security4her.app.beta.Beta.needsDecision) }
 
     Box(Modifier.fillMaxSize().background(Night).systemBarsPadding().imePadding()) {
         val inc = incident
@@ -267,6 +269,7 @@ private fun Root() {
             pocket != null && stage == Stage.Main -> PocketCountdownScreen(pocket!!)
             inc != null && stage == Stage.Main -> ActiveSosScreen(inc)
             journey?.status == "checking" && stage == Stage.Main -> CheckInScreen(journey!!)
+            betaPending && stage != Stage.Loading -> `in`.security4her.app.beta.BetaConsentScreen(onDone = { betaPending = false })
             stage == Stage.Loading -> Loading()
             stage == Stage.Auth -> AuthScreen(onDone = ::route)
             stage == Stage.Verify -> VerifyScreen(profile!!, onDone = ::route)
@@ -655,6 +658,8 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
     var showChat by rememberSaveable { mutableStateOf(false) }
     var showPractice by rememberSaveable { mutableStateOf(false) }
     var showWatchInstall by rememberSaveable { mutableStateOf(false) }
+    var showBetaConsent by rememberSaveable { mutableStateOf(false) }
+    var showBetaReport by rememberSaveable { mutableStateOf(false) }
     var showFakeCall by rememberSaveable { mutableStateOf(false) }
     var showSiren by rememberSaveable { mutableStateOf(false) }
 
@@ -675,6 +680,8 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
         showChat -> { ChatScreen(onClose = { showChat = false }); return }
         showPractice -> { PocketPracticeScreen(onClose = { showPractice = false }); return }
         showWatchInstall -> { WatchInstallScreen(onClose = { showWatchInstall = false }); return }
+        showBetaConsent -> { `in`.security4her.app.beta.BetaConsentScreen(onDone = { showBetaConsent = false }, editing = true); return }
+        showBetaReport -> { `in`.security4her.app.beta.BetaReportScreen(onClose = { showBetaReport = false }); return }
         showFakeCall -> { FakeCallScreen(onClose = { showFakeCall = false }); return }
         showSiren -> { SirenScreen(onClose = { showSiren = false }); return }
     }
@@ -702,6 +709,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
                             profile, settings,
                             onChange = { settings = it }, onSignedOut = onSignedOut, onOpenLog = { showLog = true }, onOpenLocker = { showLocker = true },
                             onOpenChat = { showChat = true }, onPractice = { showPractice = true }, onWatchInstall = { showWatchInstall = true },
+                            onBetaConsent = { showBetaConsent = true }, onBetaReport = { showBetaReport = true },
                         )
                     }
                 }
@@ -1342,7 +1350,8 @@ private fun ContactDialog(c: Contact, onDismiss: () -> Unit, onSave: (Contact) -
 // ---------------------------------------------------------------- Settings
 
 @Composable
-private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit, onOpenLocker: () -> Unit, onOpenChat: () -> Unit, onPractice: () -> Unit, onWatchInstall: () -> Unit) {
+private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit, onOpenLocker: () -> Unit, onOpenChat: () -> Unit, onPractice: () -> Unit, onWatchInstall: () -> Unit,
+    onBetaConsent: () -> Unit = {}, onBetaReport: () -> Unit = {}) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var linkMsg by remember { mutableStateOf<String?>(null) }
@@ -1471,6 +1480,7 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
             }
         }
         Section("During SOS") { DuringSosEditor(settings) { set(it) } }
+        Section("Beta testing") { `in`.security4her.app.beta.BetaSection(onEdit = onBetaConsent, onReport = onBetaReport) }
         Section("Watch") {
             ChunkyButton("Install or update the watch app", tone = Tone.Plain, onClick = onWatchInstall)
             Spacer(Modifier.height(14.dp))
@@ -1845,7 +1855,10 @@ private fun ActiveSosScreen(inc: Incident) {
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (pin == Settings.load(ctx).pin) { askPin = false; SosEngine.end("resolved") } else wrong = true
+                    if (pin == Settings.load(ctx).pin) { askPin = false; SosEngine.end("resolved") } else {
+                        wrong = true
+                        `in`.security4her.app.beta.Beta.record(`in`.security4her.app.beta.BetaCategory.SECURITY, "warning", "sos_pin_wrong", null)
+                    }
                 }) { Text("End SOS", color = Lilac) }
             },
             dismissButton = { TextButton(onClick = { askPin = false }) { Text("Keep SOS on", color = Muted) } },

@@ -55,6 +55,7 @@ class Rearm : BroadcastReceiver() {
                 else -> "Safety Mode is"
             }
             Log.i(TAG, "asking to resume: $what paused")
+            `in`.security4her.app.beta.WatchBeta.event("usage", "warning", "protection_paused_after_restart", null)
             val open = PendingIntent.getActivity(
                 ctx, 3,
                 Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_STATUS_ONLY, true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),

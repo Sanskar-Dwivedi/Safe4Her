@@ -9,6 +9,7 @@ import `in`.security4her.app.voice.VoiceSos
 class WatchApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        `in`.security4her.app.beta.WatchBeta.init(this)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL_SAFETY, getString(R.string.channel_safety), NotificationManager.IMPORTANCE_HIGH))
         nm.createNotificationChannel(NotificationChannel(CHANNEL_UPDATES, "Updates", NotificationManager.IMPORTANCE_DEFAULT))

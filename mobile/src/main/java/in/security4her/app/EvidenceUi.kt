@@ -214,7 +214,11 @@ private fun CaseScreen(c0: EvidenceCase, onBack: () -> Unit) {
     val fmt = remember { SimpleDateFormat("HH:mm:ss", Locale.US) }
     BackHandler(onBack = onBack)
     DisposableEffect(Unit) { onDispose { player[0]?.release() } }
-    LaunchedEffect(c.pieces.size) { integrity = withContext(Dispatchers.IO) { Evidence.verify(ctx, c) } }
+    LaunchedEffect(c.pieces.size) {
+        integrity = withContext(Dispatchers.IO) { Evidence.verify(ctx, c) }
+        if (integrity?.ok == false) `in`.security4her.app.beta.Beta.record(`in`.security4her.app.beta.BetaCategory.SECURITY, "critical", "evidence_integrity_failed", null,
+            mapOf("pieces" to c.pieces.size))
+    }
 
     fun fileOf(p: EvidencePiece) = File(Evidence.dir(ctx, c.incidentId), p.file)
     fun play(p: EvidencePiece) {

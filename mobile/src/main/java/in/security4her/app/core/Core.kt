@@ -353,6 +353,7 @@ object AppLog {
     @Synchronized
     private fun add(level: String, tag: String, msg: String) {
         val e = LogEntry(System.currentTimeMillis(), level, tag, msg)
+        `in`.security4her.app.beta.Beta.fromLog(level, tag, msg)
         android.util.Log.println(if (level == "error") android.util.Log.ERROR else if (level == "warn") android.util.Log.WARN else android.util.Log.INFO, "S4h/$tag", msg)
         val next = _entries.value + e
         _entries.value = if (next.size > MAX) next.takeLast(MAX) else next

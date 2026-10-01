@@ -82,6 +82,8 @@ fun WatchUi(store: WatchStore, actions: WatchActions) {
     val safety by store.safetyMode.collectAsStateWithLifecycle(initialValue = false)
     val voiceOn by store.voiceSos.collectAsStateWithLifecycle(initialValue = false)
     var showVoice by remember { mutableStateOf(false) }
+    val betaAgreed by `in`.security4her.app.beta.WatchBeta.agreed.collectAsStateWithLifecycle()
+    var showBeta by remember { mutableStateOf(false) }
     val countdown by SosController.countdown.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
@@ -100,8 +102,9 @@ fun WatchUi(store: WatchStore, actions: WatchActions) {
                 cd != null -> CountdownScreen(cd, actions)
                 inc != null -> IncidentScreen(inc, phoneStatus, link, actions)
                 !setupDone -> SetupScreen(actions)
+                betaAgreed == null || showBeta -> BetaScreen { showBeta = false }
                 showVoice -> VoiceSosScreen(voiceOn, onToggle = { actions.setVoiceSos(it) }, onBack = { showVoice = false })
-                else -> HomeScreen(link, phoneReachable, safety, voiceOn, actions, onVoice = { showVoice = true })
+                else -> HomeScreen(link, phoneReachable, safety, voiceOn, actions, onVoice = { showVoice = true }, onBeta = { showBeta = true })
             }
         }
     }
@@ -200,6 +203,7 @@ private fun SetupScreen(actions: WatchActions) {
 @Composable
 private fun HomeScreen(
     link: DeviceLink?, phoneReachable: Boolean?, safety: Boolean, voiceOn: Boolean, actions: WatchActions, onVoice: () -> Unit,
+    onBeta: () -> Unit = {},
 ) {
     Screen {
         BrandTitle()
@@ -224,6 +228,20 @@ private fun HomeScreen(
         )
         if (link == null) Label("Open Security4Her on your phone and log in to link this watch.", color = C.grey, size = 11.sp)
         UpdateBlock()
+        Text(text = if (`in`.security4her.app.beta.WatchBeta.agreed.value == true) "Beta test data: sharing  ›" else "Beta test data: off  ›", color = C.grey, fontSize = 11.sp,
+            modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Beta test data", onClick = onBeta).padding(horizontal = 10.dp, vertical = 6.dp))
+    }
+}
+
+/** The beta agreement on the watch: one clear yes or no. Saying no (later) deletes what was sent. */
+@Composable
+private fun BetaScreen(onDone: () -> Unit) {
+    Screen {
+        Label("Security4Her Beta", color = C.purpleLight, size = 15.sp, weight = FontWeight.Bold)
+        Label("Help us test it: share anonymous crash, error, false-alarm and speed data from this watch?", size = 12.sp)
+        Label("Never your location, voice, recordings, name or contacts. Turn it off any time here; that deletes what was sent.", color = C.grey, size = 10.sp)
+        PillButton("I agree", C.purple) { `in`.security4her.app.beta.WatchBeta.decide(true); onDone() }
+        PillButton("No thanks", Color(0xFF333333)) { `in`.security4her.app.beta.WatchBeta.decide(false); onDone() }
     }
 }
 
