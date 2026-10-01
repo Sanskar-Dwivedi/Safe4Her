@@ -47,4 +47,7 @@ PY
 cp Security4Her-phone.apk "$USERPROFILE/Desktop/Security4Her-phone.apk" 2>/dev/null || true
 cp Security4Her-watch.apk "$USERPROFILE/Desktop/Security4Her-watch.apk" 2>/dev/null || true
 vercel deploy --prod --yes >/dev/null
+# Tell Bing and other IndexNow search engines the page changed.
+KEY=$(ls | grep -E '^[0-9a-f]{32}\.txt$' | head -1 | sed 's/\.txt$//')
+[ -n "$KEY" ] && curl -s -o /dev/null -X POST https://api.indexnow.org/IndexNow -H "Content-Type: application/json; charset=utf-8"   -d "{\"host\":\"security4her.vercel.app\",\"key\":\"$KEY\",\"urlList\":[\"https://security4her.vercel.app/\"]}" || true
 echo "Published phone $P_NAME ($P_CODE) and watch $W_NAME ($W_CODE)"
