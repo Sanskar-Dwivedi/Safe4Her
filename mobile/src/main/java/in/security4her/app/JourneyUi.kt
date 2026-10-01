@@ -601,7 +601,7 @@ fun SafeJourneySection() {
     var tellStart by remember { mutableStateOf(Journey.tellOnStart(ctx)) }
     var tellArrive by remember { mutableStateOf(Journey.tellOnArrive(ctx)) }
     val colors = SwitchDefaults.colors(checkedTrackColor = Lilac, checkedThumbColor = OnLilac, uncheckedTrackColor = Surface2, uncheckedBorderColor = Line)
-    Section("Safe Journey") {
+    Section("Safe Journey", "Who hears when a journey starts and ends") {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Text contacts when I start a journey", modifier = Modifier.weight(1f))
             Switch(checked = tellStart, onCheckedChange = { tellStart = it; Journey.setTellOnStart(ctx, it) }, colors = colors)

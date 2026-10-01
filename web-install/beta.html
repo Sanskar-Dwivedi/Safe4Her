@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Security4Her Beta: how testing works</title>
+<meta name="description" content="Join the Security4Her beta: what testing involves, what anonymous test data you can choose to share, and how to change or delete it.">
+<meta name="author" content="Atharva Lakhe, Sanskar Dwivedi, Mohit Hadap, Ashay Malode">
+<link rel="canonical" href="https://security4her.vercel.app/beta.html">
+<meta name="theme-color" content="#050505">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Security4Her">
+<meta property="og:title" content="Security4Her Beta: how testing works">
+<meta property="og:description" content="Join the Security4Her beta: what testing involves, what anonymous test data you can choose to share, and how to change or delete it.">
+<meta property="og:image" content="https://security4her.vercel.app/og.jpg">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preload" href="fonts/baloo2.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face{font-family:"Baloo 2";src:url(fonts/baloo2.woff2) format("woff2");font-weight:400 800;font-display:swap}
+@font-face{font-family:"Instrument Sans";src:url(fonts/instrument-sans.woff2) format("woff2");font-weight:400 700;font-display:swap}
+:root{--night:#050505;--plum:#141414;--plum2:#1F1F1F;--line:#2C2C2C;--ink:#F5F5F5;--muted:#9A9A9A;--lilac:#FFFFFF;--on-lilac:#0A0A0A;--sos:#FF4D5E;--green:#5EE0A0;
+  --display:"Baloo 2","Instrument Sans",system-ui,sans-serif;--body:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--night);color:var(--ink);font:400 17px/1.6 var(--body);-webkit-font-smoothing:antialiased;overflow-x:clip}
+a{color:var(--lilac)}
+.wrap{max-width:820px;margin:0 auto;padding:0 20px}
+header{border-bottom:1px solid var(--line)}
+header .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;height:72px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font:800 21px/1 var(--display)}
+.brand img{width:34px;height:34px;border-radius:9px}
+.tag{font:700 11px/1 var(--body);letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--line);border-radius:99px;padding:5px 9px;color:var(--muted)}
+.btn{display:inline-flex;align-items:center;gap:8px;background:var(--lilac);color:var(--on-lilac);font-weight:700;font-size:15px;text-decoration:none;padding:11px 18px;border-radius:14px;white-space:nowrap}
+.btn.ghost{background:none;color:var(--ink);border:1px solid var(--line)}
+main{padding:56px 0 24px}
+h1,h2,h3{font-family:var(--display);font-weight:800;margin:0;letter-spacing:-.01em;line-height:1.05}
+h1{font-size:clamp(40px,8vw,64px)}
+.lead{color:var(--muted);font-size:19px;max-width:36em;margin:18px 0 0}
+.hero .tag{display:inline-block;margin-bottom:18px}
+.hero .row{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
+section{padding-top:56px}
+section>h2{font-size:clamp(28px,5vw,36px);margin-bottom:18px}
+h3{font-size:22px;margin:30px 0 10px}
+p{margin:0 0 14px}
+.muted{color:var(--muted)}
+ol.steps{list-style:none;counter-reset:s;padding:0;margin:0;display:grid;gap:14px}
+ol.steps li{counter-increment:s;display:grid;grid-template-columns:40px minmax(0,1fr);gap:4px 16px;background:var(--plum);border:1px solid var(--line);border-radius:18px;padding:18px}
+ol.steps li::before{content:counter(s);grid-row:span 2;width:40px;height:40px;border-radius:12px;background:var(--plum2);display:grid;place-items:center;font:800 20px/1 var(--display)}
+ol.steps b{font:700 19px/1.25 var(--display)}
+ol.steps span{color:var(--muted);font-size:15.5px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.card{background:var(--plum);border:1px solid var(--line);border-radius:18px;padding:18px}
+.card b{display:block;font:700 18px/1.25 var(--display);margin-bottom:4px}
+.card p{color:var(--muted);font-size:15px;margin:0}
+.never{border-color:rgba(255,77,94,.35)}
+.never ul{margin:8px 0 0;padding-left:20px;color:var(--muted);font-size:15.5px}
+.ok{border-color:rgba(94,224,160,.35)}
+.team{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.person{background:var(--plum);border:1px solid var(--line);border-radius:18px;padding:18px;text-align:center}
+.person i{display:grid;place-items:center;width:52px;height:52px;margin:0 auto 10px;border-radius:50%;background:var(--plum2);font:800 20px/1 var(--display);font-style:normal}
+.person b{font-weight:600;font-size:15.5px}
+.doc table{width:100%;border-collapse:collapse;font-size:15px;margin:6px 0 18px;display:block;overflow-x:auto}
+.doc th,.doc td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line)}
+.doc th{color:var(--muted);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.05em}
+.doc ul{padding-left:20px}.doc li{margin-bottom:6px}
+.doc h2{font-size:clamp(26px,4.5vw,32px);margin:44px 0 14px}
+.doc h3{margin-top:28px}
+.hero+.doc{margin-top:22px;color:var(--muted)}
+.hero+.doc td{color:var(--ink)}
+.doc code{font:500 14px var(--mono)}
+.doc strong{color:var(--ink)}
+footer{border-top:1px solid var(--line);margin-top:64px;padding:28px 0 44px;color:var(--muted);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:10px 28px;justify-content:space-between}
+footer nav{display:flex;flex-wrap:wrap;gap:6px 18px}
+footer a{text-decoration:none}footer a:hover{text-decoration:underline}
+@media (max-width:640px){.grid{grid-template-columns:1fr}.team{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding-top:36px}header .btn{display:none}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <a class="brand" href="./"><img src="logo.webp" alt="" width="34" height="34">Security4Her <span class="tag">Beta</span></a>
+  <a class="btn" href="./#phone">Install the app</a>
+</div></header>
+<main><div class="wrap">
+
+<div class="hero">
+  <span class="tag">Version 1.1 beta</span>
+  <h1>Help us test Security4Her</h1>
+  <p class="lead">We're testing Security4Her with students before it launches for everyone. Use it like you normally would. If something breaks, the app can tell us what went wrong, but only if you say yes.</p>
+  <div class="row"><a class="btn" href="./#phone">Install the beta</a><a class="btn ghost" href="privacy.html">Read the privacy notice</a></div>
+</div>
+
+<section id="how">
+  <h2>How it works</h2>
+  <ol class="steps">
+    <li><b>Install the phone app</b><span>Download it from the <a href="./#phone">install page</a>. The watch app installs from the phone, from Me → Install or update the watch app.</span></li>
+    <li><b>Choose what to share</b><span>The first time you open it, the app asks which test data you're happy to share. Pick any, all or none. The app works exactly the same either way.</span></li>
+    <li><b>Use it as normal</b><span>Try an SOS in Test Mode, start a Safe Journey, test Fake call and the Siren. Use the watch if you have one.</span></li>
+    <li><b>Tell us when something's off</b><span>With sharing on, open Me → Beta testing → Report a problem. Say what happened and you can attach the app's recent errors.</span></li>
+  </ol>
+</section>
+
+<section id="data">
+  <h2>What you can share</h2>
+  <p class="muted">Each kind is a separate choice, and you can change them whenever you like.</p>
+  <div class="grid">
+    <div class="card"><b>Crash reports</b><p>When the app closes unexpectedly: what went wrong in the code.</p></div><div class="card"><b>Errors</b><p>A text that didn't send, GPS that didn't answer, an update that didn't install.</p></div><div class="card"><b>Security events</b><p>A wrong safety PIN, or evidence or a download that fails its check.</p></div><div class="card"><b>False alarms</b><p>A pocket or watch countdown you cancelled, so we can make triggers smarter.</p></div><div class="card"><b>Feature use</b><p>Which features you use: SOS, Safe Journey, Fake call, Siren.</p></div><div class="card"><b>Speed</b><p>How long the app takes to start and how fast an SOS goes out.</p></div><div class="card"><b>Phone model</b><p>Brand, model and Android version, to find phone-specific bugs.</p></div><div class="card"><b>Your reports</b><p>Problems you send from Me → Beta testing → Report a problem.</p></div>
+  </div>
+  <h3>Never collected</h3>
+  <div class="grid">
+    <div class="card never"><b>Not shared, ever</b><ul><li>Your location</li><li>Phone numbers and contact names</li><li>Messages and recordings</li><li>Your name, account or Aadhaar details</li></ul></div>
+    <div class="card ok"><b>How it's kept safe</b><ul style="margin:8px 0 0;padding-left:20px;color:var(--muted);font-size:15.5px"><li>You're a random tester ID, not a person</li><li>Numbers, places, links and names are removed on your phone first</li><li>Sent encrypted to a private database only the team can read</li><li>Deleted when the beta ends</li></ul></div>
+  </div>
+</section>
+
+<section id="control">
+  <h2>You're in control</h2>
+  <div class="grid">
+    <div class="card"><b>Change your choices</b><p>Phone: Me → Beta testing → Change what I share. Watch: Beta test data on the home screen.</p></div>
+    <div class="card"><b>Delete everything you sent</b><p>Phone: Me → Beta testing → Stop sharing and delete my test data. On the watch, turning sharing off deletes it.</p></div>
+  </div>
+</section>
+
+<section id="team">
+  <h2>The team</h2>
+  <p class="muted">Security4Her is a student project, built and tested by:</p>
+  <div class="team">
+    <div class="person"><i>AL</i><b>Atharva Lakhe</b></div><div class="person"><i>SD</i><b>Sanskar Dwivedi</b></div><div class="person"><i>MH</i><b>Mohit Hadap</b></div><div class="person"><i>AM</i><b>Ashay Malode</b></div>
+  </div>
+</section>
+
+<section id="whats-new" class="doc">
+  <h2>What's new</h2>
+  <h3>1.1.0-beta.6 (2026-10-01)</h3>
+<p><strong>Fixed</strong></p>
+<ul>
+<li>Report a problem: the "How bad is it?" buttons were squeezed four to a row, splitting "Annoying" across two lines.
+  They're now two to a row like the problem types, all the same size, with shorter labels that always fit.</li>
+</ul>
+<h3>1.1.0-beta.5 (2026-10-01)</h3>
+<p><strong>Added</strong></p>
+<ul>
+<li><strong>Setup guide</strong> (opens once after sign-up; Me → Setup guide): contacts, permissions, background running, safety
+  PIN, a test text, Pocket SOS, the watch and the extras, one page at a time, each with a live check.</li>
+<li><strong>Fix texting in one tap.</strong> Android 15 refuses SMS to apps installed from a download ("App was denied access").
+  The app now reinstalls itself through Android's installer as an updater would, which lifts the block; then SMS can
+  be allowed normally. Tested on Android 15.</li>
+<li><strong>Pocket SOS screen-off test</strong> (Me → Pocket SOS): the real thing with the screen off, without an SOS, and a plain
+  answer about what the phone felt (paused sensor, too soft, too slow).</li>
+<li>Help for phones whose own Quick Tap or Back tap opens Gemini when knocked.</li>
+</ul>
+<p><strong>Changed</strong></p>
+<ul>
+<li>Phone app updates install through Android's installer API, so updating never brings the SMS block back.</li>
+<li>Settings are folded into short rows that open one at a time.</li>
+</ul>
+<p><strong>Fixed</strong></p>
+<ul>
+<li>Pocket SOS went off from light taps: knocks taught gently could set it far too sensitive. Nothing is now more
+  sensitive than Light, and taps on a phone lying still on a table need to be much harder (unless the proximity
+  sensor says it's in a pocket or bag).</li>
+<li>Pocket SOS missed knocks on phones that wake the screen on a tap, and on phones that pause ordinary sensors with
+  the screen off.</li>
+<li>The manual steps for allowing SMS were in an order Android doesn't allow.</li>
+</ul>
+<h3>1.1.0-beta.4 (2026-10-01)</h3>
+<p><strong>Added</strong></p>
+<ul>
+<li><strong>Beta testing</strong> and <strong>Privacy</strong> pages on the website, linked from the app's About section and the site footer.</li>
+</ul>
+<p><strong>Fixed</strong></p>
+<ul>
+<li>The Privacy link in About opened a page testers couldn't see.</li>
+</ul>
+<h3>1.1.0-beta.3 (2026-10-01)</h3>
+<p><strong>Added</strong></p>
+<ul>
+<li><strong>About</strong> in the phone app (Me → About) and on the website: the team behind Security4Her — Atharva Lakhe,
+  Sanskar Dwivedi, Mohit Hadap and Ashay Malode — with links to the website and privacy notice.</li>
+</ul>
+<h3>1.1.0-beta.1 (2026-10-01)</h3>
+<p>Public beta for testing before a commercial launch.</p>
+<p><strong>Added</strong></p>
+<ul>
+<li><strong>Beta agreement</strong> on first launch (phone and watch): testers choose which anonymous test data to share, and can
+  change it or delete everything they sent at any time.</li>
+<li><strong>Test data, sorted into categories:</strong> crashes (with stack traces), errors, security events, false alarms, feature
+  use, speed and device model. Numbers, places, links and names are removed on the phone first; location, contacts,
+  messages and recordings are never collected.</li>
+<li><strong>Report a problem</strong> (Me → Beta testing), with an option to attach recent errors.</li>
+<li><strong>Private beta database</strong> (<code>supabase/beta/beta_testing.sql</code>) that rejects anything a tester didn't agree to, limits
+  each tester to 600 events an hour, and groups everything into a ranked list of problems for the team.</li>
+</ul>
+<p><strong>Changed</strong></p>
+<ul>
+<li>Both apps are named <strong>Security4Her Beta</strong>.</li>
+</ul>
+<h3>1.0.0 (2026-09-30)</h3>
+<p><strong>Added</strong></p>
+<ul>
+<li><strong>Fake call</strong> (phone): a realistic incoming call from Mom, Dad or any name, now or in 10 or 30 seconds.
+  Answering starts a call timer and a voice on the other end.</li>
+<li><strong>Siren</strong> (phone): a loud alarm that plays even on silent, with a flashing screen and a strobing torch.</li>
+<li><strong>Automatic watch updates</strong>: the watch checks, downloads and installs new versions by itself, silently,
+  never during an SOS, and only while charging when Voice SOS or Safety Mode is on.</li>
+<li><strong>Protection survives restarts</strong>: after the watch restarts or updates, Voice SOS and Safety Mode come back
+  on their own, or with one tap on a <em>Tap to resume</em> notification.</li>
+<li><strong>Voice SOS switch on the watch home screen</strong>, with live status and a way into practice.</li>
+</ul>
+<p><strong>Changed</strong></p>
+<ul>
+<li>Installing the watch app from the phone starts as soon as the 6-digit code is typed, and the one-time
+  watch settings fold away once the watch is found.</li>
+<li>Release builds are optimised with R8: the phone app is 11 MB (was 27 MB) and the watch app 53 MB (was 67 MB).</li>
+</ul>
+<p><strong>Fixed</strong></p>
+<ul>
+<li>The safety map no longer lists places from another city when nothing is nearby.</li>
+<li>The watch no longer shows "Voice SOS on" after a restart when it isn't actually listening.</li>
+</ul>
+</section>
+
+</div></main>
+<footer><div class="wrap">
+  <span>Made by Atharva Lakhe · Sanskar Dwivedi · Mohit Hadap · Ashay Malode</span>
+  <nav><a href="./">Install</a><a href="beta.html">Beta testing</a><a href="privacy.html">Privacy</a><a href="beta.html#whats-new">What's new</a></nav>
+</div></footer>
+</body>
+</html>

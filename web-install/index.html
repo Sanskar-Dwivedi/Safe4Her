@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Security4Her Beta: free women's safety app for Android and Wear OS</title>
 <meta name="description" content="Install Security4Her, the free women's safety app for Android and Wear OS. One press, three knocks or three spoken words send your location to your people, with live tracking, evidence and a community safety map.">
+<meta name="author" content="Atharva Lakhe, Sanskar Dwivedi, Mohit Hadap, Ashay Malode">
 <link rel="canonical" href="https://security4her.vercel.app/">
 <meta name="google-site-verification" content="-yrYFps_kRTYDPjAEasmB8q--1uERJJ2uhdnGeisEsg">
 <meta name="theme-color" content="#050505">
@@ -29,7 +30,8 @@
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"Security4Her",
  "description":"A women's safety app for Android and Wear OS: SOS by press, knock or voice, live location, evidence recording and a community safety map.",
- "operatingSystem":"Android 8.0+, Wear OS 3+","applicationCategory":"LifestyleApplication","softwareVersion":"1.0.0",
+ "operatingSystem":"Android 8.0+, Wear OS 3+","applicationCategory":"LifestyleApplication","softwareVersion":"1.1.0-beta.2",
+ "author":[{"@type":"Person","name":"Atharva Lakhe"},{"@type":"Person","name":"Sanskar Dwivedi"},{"@type":"Person","name":"Mohit Hadap"},{"@type":"Person","name":"Ashay Malode"}],
  "url":"https://security4her.vercel.app/","image":"https://security4her.vercel.app/og.jpg",
  "offers":{"@type":"Offer","price":"0","priceCurrency":"INR"}}
 </script>
@@ -363,6 +365,12 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
 .foot .brand svg{width:30px;height:30px}
 .foot-meta{display:grid;gap:8px;min-width:0;flex:1}
 .hash{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+.credits{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
+.credits b{font-weight:600;color:var(--ink)}
+.credits i{font-style:normal;opacity:.5}
+.foot-links{display:flex;flex-wrap:wrap;gap:6px 18px}
+.foot-links a{color:var(--lilac);text-decoration:none}
+.foot-links a:hover{text-decoration:underline}
 .hash code{font:500 12.5px/1.4 var(--mono);color:var(--ink);word-break:break-all;min-width:0}
 
 /* toast */
@@ -806,7 +814,8 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
         <details><summary>Chrome says the file might be harmful</summary><p class="ans">Chrome shows that warning for every app that doesn't come from the Play Store. Tap Download anyway. To check it's the real file, compare its SHA-256 fingerprint with the one at the bottom of this page.</p></details>
         <details><summary>Nothing happens when I tap the file</summary><p class="ans">Android needs permission for Chrome (or your Files app) to install apps. Open Settings, search for "Install unknown apps", pick the app you're opening the file from and turn on Allow from this source.</p></details>
         <details><summary>It says "App not installed"</summary><p class="ans">An older copy of Security4Her is probably still on the phone. Uninstall it, then open the file again. Also check you have about 80 MB free.</p></details>
-        <details><summary>It says Android blocked SMS for this app</summary><p class="ans">Android 13 and newer does this for every app installed from a download. Open Settings, then Apps, then Security4Her. Tap ⋮ at the top right, choose Allow restricted settings and confirm, then go to Permissions, SMS and choose Allow. Until you do, an SOS still works: it opens Messages with your text and contacts filled in, so it's one tap to send. Installing from a computer with <code>adb install</code> avoids the block completely.</p></details>
+        <details><summary>It says "App was denied access" for SMS</summary><p class="ans">Android 15 does this for every app installed from a download. The app fixes it in one tap: on Home tap <strong>Fix</strong>, then <strong>Fix texting</strong>, and tap <strong>Update</strong> when Android asks. Security4Her reinstalls itself the way an app store would, keeping everything. Open it again and tap <strong>Allow</strong>. Until then, an SOS still works: it opens Messages with your text and contacts filled in, so it's one tap to send.</p></details>
+        <details><summary>Knocking opens Gemini, or does nothing</summary><p class="ans">Pocket SOS only listens with the screen off, so knock after pressing the power button. If Gemini or the Assistant opens, your phone's own tap gesture caught it: in Settings, search for "Quick Tap" or "Back tap" and turn it off. To check your phone, open Me, then Pocket SOS, then <strong>Test it with the screen off</strong>. It tells you exactly what your phone felt.</p></details>
         <details><summary>Why does it ask for so many permissions?</summary><p class="ans">Location to share where you are, SMS and phone to reach your contacts without internet, microphone and camera to record evidence during an SOS, and notifications to show the alert. Nothing is recorded or shared unless an SOS or Safe Journey is running.</p></details>
       </div>
       <div class="faq-group">
@@ -829,8 +838,10 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
   <div class="wrap foot">
     <a class="brand" href="#phone"><svg aria-hidden="true"><use href="#logo"/></svg>Security4Her</a>
     <div class="foot-meta">
-      <span>Phone app 1.1.0-beta.2 for Android 8 and newer. Watch app 1.1.0-beta.2 for Wear OS 3 and newer.</span>
-      <span class="hash">Phone app SHA-256 <code id="sha">526e5192efbc92369ddf0d95e323e1beabe57a14c3ef397828f25ff933391d7f</code><button class="copy-btn" type="button" data-copy-from="sha">Copy</button></span>
+      <span>Phone app 1.1.0-beta.6 for Android 8 and newer. Watch app 1.1.0-beta.2 for Wear OS 3 and newer.</span>
+      <span class="credits">Made by <b>Atharva Lakhe</b><i>·</i><b>Sanskar Dwivedi</b><i>·</i><b>Mohit Hadap</b><i>·</i><b>Ashay Malode</b></span>
+      <span class="hash">Phone app SHA-256 <code id="sha">423cb24e064ec0d62e84443413b49e252c12d8e7b4e0118f19f71c02ef2ab4c8</code><button class="copy-btn" type="button" data-copy-from="sha">Copy</button></span>
+      <span class="foot-links"><a href="beta.html">Beta testing</a><a href="privacy.html">Privacy</a><a href="beta.html#whats-new">What's new</a><a href="beta.html#team">The team</a></span>
     </div>
   </div>
 </footer>
@@ -841,7 +852,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
 <script>
 (() => {
-  const APK = { url: "Security4Her-phone.apk", name: "Security4Her-phone.apk", bytes: 10950643 };
+  const APK = { url: "Security4Her-phone.apk", name: "Security4Her-phone.apk", bytes: 10977715 };
   const CANONICAL = "https://security4her.vercel.app/";
   const TABS = ["phone", "watch", "inside", "help"];
   const $ = (s, r = document) => r.querySelector(s);

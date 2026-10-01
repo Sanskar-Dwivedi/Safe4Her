@@ -500,10 +500,14 @@ private fun PermissionsScreen(onDone: () -> Unit) {
         })
     }
 
-    var idx by rememberSaveable { mutableIntStateOf(0) }
+    var idx by rememberSaveable {
+        mutableIntStateOf(if (SmsUnlock.pending(ctx)) perms.indexOfFirst { it.key == "sms" }.coerceAtLeast(0) else 0)
+    }
     val p = perms[idx.coerceAtMost(perms.lastIndex)]
     val ok = remember(tick, idx) { p.granted(ctx) }
     val blocked = !ok && p.key in asked && p.key != "battery"
+    // Android 15 refuses SMS to downloaded apps outright, so offer the fix straight away instead of a doomed request
+    val smsCard = !ok && p.key == "sms" && (blocked || remember(tick) { SmsUnlock.blocked(ctx) })
     fun next() { if (idx < perms.lastIndex) idx++ else onDone() }
     // Granted from the system dialog: celebrate briefly, then move on
     LaunchedEffect(tick, idx) { if (p.key in asked && p.granted(ctx)) { delay(700); next() } }
@@ -528,15 +532,16 @@ private fun PermissionsScreen(onDone: () -> Unit) {
             Text(p.title, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
             Spacer(Modifier.height(10.dp))
             Text(p.why, color = Muted, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
-            if (blocked && p.key == "sms") {
+            if (smsCard) {
                 Spacer(Modifier.height(18.dp))
-                SmsUnlockSteps()
+                SmsAccessCard(onGranted = { tick++ })
             }
             Spacer(Modifier.height(24.dp))
         }
         Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
             when {
                 ok -> ChunkyButton(if (idx == perms.lastIndex) "All done" else "Continue", tone = Tone.Good) { next() }
+                smsCard -> {}
                 blocked -> ChunkyButton("Open settings") {
                     ctx.startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")))
                 }
@@ -547,32 +552,96 @@ private fun PermissionsScreen(onDone: () -> Unit) {
     }
 }
 
-/** How to lift Android's "restricted setting" block on SMS for an app installed from an APK. */
+/**
+ * Gets SMS allowed. Android 15 refuses it to apps installed from a download ("App was denied access"), so the first
+ * choice is the one-tap fix (the app reinstalls itself the way an updater would, which lifts the block); the manual
+ * route through Settings is below it, in the order Android actually requires.
+ */
 @Composable
-internal fun SmsUnlockSteps() {
+internal fun SmsAccessCard(onGranted: () -> Unit = {}) {
+    val ctx = LocalContext.current
+    var tick by remember { mutableIntStateOf(0) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++ }
+    var asked by remember { mutableStateOf(false) }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { tick++; asked = true }
+    val granted = remember(tick) { Sms.allowed(ctx) }
+    val blocked = remember(tick) { SmsUnlock.blocked(ctx) }
+    val needsInstall = remember(tick) { SmsUnlock.needsInstallPermission(ctx) }
+    var manual by remember { mutableStateOf(false) }
+    LaunchedEffect(granted) {
+        if (granted) { SmsUnlock.pending(ctx); onGranted() }
+    }
+    fun openSettings() = runCatching {
+        ctx.startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Surface1).padding(16.dp)) {
-        Text("Android blocked SMS for this app", style = MaterialTheme.typography.titleMedium, color = Amber)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "It does this for every app installed from a download. It takes 20 seconds to allow:",
-            color = Muted, style = MaterialTheme.typography.bodyMedium,
-        )
-        Spacer(Modifier.height(10.dp))
-        listOf(
-            "Tap Open settings below",
-            "Tap ⋮ at the top right, then Allow restricted settings, and confirm",
-            "Go back, open Permissions, then SMS, and choose Allow",
-        ).forEachIndexed { i, t ->
-            Row(Modifier.padding(vertical = 4.dp)) {
-                Text("${i + 1}", color = Lilac, fontFamily = Baloo, fontWeight = FontWeight.ExtraBold, modifier = Modifier.width(22.dp))
-                Text(t, style = MaterialTheme.typography.bodyMedium)
+        when {
+            granted -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Check, null, tint = Mint)
+                Spacer(Modifier.width(10.dp))
+                Text("Texting is allowed. Every SOS text goes out by itself.", color = Mint, style = MaterialTheme.typography.titleSmall)
+            }
+            blocked -> {
+                Text("Android is blocking texting for this app", style = MaterialTheme.typography.titleMedium, color = Amber)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "It does this to every app installed from a download, and shows \"App was denied access\". Security4Her can fix it by " +
+                        "reinstalling itself the way an app store does. Nothing is deleted.",
+                    color = Muted, style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(12.dp))
+                if (needsInstall) {
+                    StepLine(1, "Allow installs from Security4Her: turn on Allow from this source, then come back.", active = true)
+                    StepLine(2, "Tap Fix texting, then Update when Android asks.", active = false)
+                    Spacer(Modifier.height(10.dp))
+                    ChunkyButton("Allow installs") { SmsUnlock.start(ctx) }
+                } else {
+                    StepLine(1, "Tap Fix texting, then Update when Android asks. The app restarts.", active = true)
+                    StepLine(2, "Open Security4Her again and tap Allow.", active = false)
+                    Spacer(Modifier.height(10.dp))
+                    ChunkyButton("Fix texting", tone = Tone.Danger) { SmsUnlock.start(ctx) }
+                }
+            }
+            else -> {
+                Text("Allow texting", style = MaterialTheme.typography.titleMedium)
+                Text("So an SOS texts your contacts by itself, with no tap needed.", color = Muted, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(12.dp))
+                ChunkyButton("Allow") { ask.launch(Manifest.permission.SEND_SMS) }
+                if (asked) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Android didn't allow it. Use the steps below.", color = Amber, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "No ⋮ menu? Open Security4Her once from the home screen, then try again. Until it's allowed, an SOS opens Messages with your text ready, so it's one tap to send.",
-            color = Muted, style = MaterialTheme.typography.bodySmall,
-        )
+        if (!granted) {
+            TextButton(onClick = { manual = !manual }, contentPadding = PaddingValues(0.dp)) {
+                Text(if (manual) "Hide the steps in Settings" else "Or do it in Settings", color = Lilac)
+            }
+            if (manual) {
+                listOf(
+                    "Tap Open settings. Go to Permissions, then SMS, then Allow. Android says the app was denied access: tap OK. This unlocks the next step.",
+                    "Leave Settings, then tap Open settings again. The menu only appears on a fresh App info page.",
+                    "Tap ⋮ at the top right, then Allow restricted settings, and confirm with your PIN or fingerprint.",
+                    "Go to Permissions, then SMS, and choose Allow.",
+                ).forEachIndexed { i, t -> StepLine(i + 1, t, active = true) }
+                Spacer(Modifier.height(8.dp))
+                ChunkyButton("Open settings", tone = Tone.Plain) { openSettings() }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Until then, an SOS opens Messages with your text and contacts ready, so it's one tap to send.",
+                color = Muted, style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun StepLine(n: Int, text: String, active: Boolean) {
+    Row(Modifier.padding(vertical = 4.dp)) {
+        Text("$n", color = if (active) Lilac else Muted, fontFamily = Baloo, fontWeight = FontWeight.ExtraBold, modifier = Modifier.width(22.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = if (active) Ink else Muted)
     }
 }
 
@@ -662,6 +731,9 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
     var showBetaReport by rememberSaveable { mutableStateOf(false) }
     var showFakeCall by rememberSaveable { mutableStateOf(false) }
     var showSiren by rememberSaveable { mutableStateOf(false) }
+    var showGuide by rememberSaveable { mutableStateOf(!Guide.seen(ctx)) } // opens by itself once, after sign-up
+    // Back after reinstalling to unlock texting: bring the SMS card straight up
+    LaunchedEffect(Unit) { if (SmsUnlock.pending(ctx)) sheet = "sms" }
 
     fun open(step: SetupStep) {
         when (step.key) {
@@ -684,6 +756,14 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
         showBetaReport -> { `in`.security4her.app.beta.BetaReportScreen(onClose = { showBetaReport = false }); return }
         showFakeCall -> { FakeCallScreen(onClose = { showFakeCall = false }); return }
         showSiren -> { SirenScreen(onClose = { showSiren = false }); return }
+        showGuide -> {
+            SetupGuideScreen(
+                contacts, contactsError, onContactsChanged = { reload++ },
+                settings, onSettings = { settings = it; it.save(ctx) },
+                onPractice = { showPractice = true }, onWatchInstall = { showWatchInstall = true },
+                onClose = { showGuide = false; resumed++ },
+            ); return
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -701,7 +781,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
                         Tab.Home -> HomeScreen(
                             profile, contacts, settings, facts, watch, onTab = { tab = it }, onJourney = { showJourney = true },
                             onStep = ::open, onChat = { showChat = true }, onFixSms = { sheet = "sms" },
-                            onFakeCall = { showFakeCall = true }, onSiren = { showSiren = true },
+                            onFakeCall = { showFakeCall = true }, onSiren = { showSiren = true }, onGuide = { showGuide = true },
                         )
                         Tab.Map -> SafeMapScreen()
                         Tab.People -> ContactsScreen(contacts, contactsError) { reload++ }
@@ -710,6 +790,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
                             onChange = { settings = it }, onSignedOut = onSignedOut, onOpenLog = { showLog = true }, onOpenLocker = { showLocker = true },
                             onOpenChat = { showChat = true }, onPractice = { showPractice = true }, onWatchInstall = { showWatchInstall = true },
                             onBetaConsent = { showBetaConsent = true }, onBetaReport = { showBetaReport = true },
+                            onGuide = { showGuide = true },
                         )
                     }
                 }
@@ -723,12 +804,8 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
                     "test_text" -> TestTextStep(settings, onChange = { settings = it; it.save(ctx) }) { sheet = null }
                     "watch" -> WatchStep(watch) { sheet = null }
                     "sms" -> {
-                        SmsUnlockSteps()
-                        Spacer(Modifier.height(14.dp))
-                        ChunkyButton("Open settings", tone = Tone.Danger) {
-                            runCatching { ctx.startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}"))) }
-                            sheet = null
-                        }
+                        SmsAccessCard(onGranted = { resumed++ })
+                        TextButton(onClick = { sheet = null }, modifier = Modifier.fillMaxWidth()) { Text(if (Sms.allowed(ctx)) "Done" else "Close", color = Muted) }
                     }
                 }
             }
@@ -760,7 +837,7 @@ private fun ActionSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.
 }
 
 @Composable
-private fun PinStep(settings: Settings, onSave: (Settings) -> Unit) {
+internal fun PinStep(settings: Settings, onSave: (Settings) -> Unit) {
     val ctx = LocalContext.current
     var pin by remember { mutableStateOf(settings.pin) }
     Text("Set a safety PIN", style = MaterialTheme.typography.headlineSmall)
@@ -799,7 +876,7 @@ private fun PinStep(settings: Settings, onSave: (Settings) -> Unit) {
 }
 
 @Composable
-private fun TestTextStep(settings: Settings, onChange: (Settings) -> Unit, onDone: () -> Unit) {
+internal fun TestTextStep(settings: Settings, onChange: (Settings) -> Unit, doneLabel: String = "Close", onDone: () -> Unit) {
     val ctx = LocalContext.current
     val status by Sms.testStatus.collectAsStateWithLifecycle()
     Text("Send a test text", style = MaterialTheme.typography.headlineSmall)
@@ -813,16 +890,13 @@ private fun TestTextStep(settings: Settings, onChange: (Settings) -> Unit, onDon
     }
     Spacer(Modifier.height(16.dp))
     val canSms = Sms.allowed(ctx)
-    if (!canSms) { Spacer(Modifier.height(4.dp)); SmsUnlockSteps(); Spacer(Modifier.height(12.dp)) }
+    if (!canSms) { Spacer(Modifier.height(4.dp)); SmsAccessCard(); Spacer(Modifier.height(12.dp)) }
     ChunkyButton(if (canSms) "Send test text" else "Send it from Messages", enabled = settings.demoNumber.count(Char::isDigit) >= 3) {
         if (canSms) Sms.sendTest(ctx, settings.demoNumber)
         else Sms.compose(ctx, listOf(settings.demoNumber), "Security4Her test: this phone can text you in an SOS. No action needed.")
         Progress.mark(ctx, "test_text")
     }
-    if (!canSms) TextButton(onClick = {
-        ctx.startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")))
-    }, modifier = Modifier.fillMaxWidth()) { Text("Open settings", color = Lilac) }
-    TextButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text("Close", color = Muted) }
+    TextButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text(doneLabel, color = Muted) }
 }
 
 @Composable
@@ -913,7 +987,7 @@ private fun tipFor(s: SetupStep) = when (s.key) {
 private fun HomeScreen(
     profile: Profile, contacts: List<Contact>?, settings: Settings, facts: ReadyFacts, watch: Boolean,
     onTab: (Tab) -> Unit, onJourney: () -> Unit, onStep: (SetupStep) -> Unit, onChat: () -> Unit, onFixSms: () -> Unit,
-    onFakeCall: () -> Unit, onSiren: () -> Unit,
+    onFakeCall: () -> Unit, onSiren: () -> Unit, onGuide: () -> Unit,
 ) {
     val ctx = LocalContext.current
     val tick by Progress.tick.collectAsStateWithLifecycle()
@@ -980,6 +1054,19 @@ private fun HomeScreen(
                     Text("Fix", color = Color.White, fontFamily = Baloo, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp,
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp))
                 }
+            }
+        }
+        if (!Guide.done(ctx)) {
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Surface1).clickable(onClickLabel = "Open the setup guide", onClick = onGuide).padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Finish setting up", style = MaterialTheme.typography.titleMedium)
+                    Text("A 3-minute guide that checks everything an SOS needs.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                }
+                Text("›", color = Lilac, fontSize = 26.sp)
             }
         }
         Spacer(Modifier.height(14.dp))
@@ -1194,7 +1281,7 @@ internal fun Avatar(name: String, size: androidx.compose.ui.unit.Dp) {
 // ---------------------------------------------------------------- Contacts
 
 @Composable
-private fun ContactsScreen(contacts: List<Contact>?, error: String?, onChanged: () -> Unit) {
+internal fun ContactsScreen(contacts: List<Contact>?, error: String?, onChanged: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf<Contact?>(null) }
@@ -1351,7 +1438,7 @@ private fun ContactDialog(c: Contact, onDismiss: () -> Unit, onSave: (Contact) -
 
 @Composable
 private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit, onOpenLocker: () -> Unit, onOpenChat: () -> Unit, onPractice: () -> Unit, onWatchInstall: () -> Unit,
-    onBetaConsent: () -> Unit = {}, onBetaReport: () -> Unit = {}) {
+    onBetaConsent: () -> Unit = {}, onBetaReport: () -> Unit = {}, onGuide: () -> Unit = {}) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var linkMsg by remember { mutableStateOf<String?>(null) }
@@ -1363,44 +1450,38 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
     }
     val switchColors = SwitchDefaults.colors(checkedTrackColor = Lilac, checkedThumbColor = OnLilac, uncheckedTrackColor = Surface2, uncheckedBorderColor = Line)
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 20.dp)) {
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+    val openSection = rememberSaveable { mutableStateOf<String?>(null) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Box(contentAlignment = Alignment.BottomEnd) {
-                Avatar(profile.displayName ?: "?", 96.dp)
-                Box(Modifier.size(32.dp).clip(CircleShape).background(Mint).border(3.dp, Night, CircleShape), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Check, "Verified", tint = OnMint, modifier = Modifier.size(18.dp))
+                Avatar(profile.displayName ?: "?", 56.dp)
+                Box(Modifier.size(22.dp).clip(CircleShape).background(Mint).border(2.dp, Night, CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Check, "Verified", tint = OnMint, modifier = Modifier.size(13.dp))
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            Text(profile.displayName ?: "You", style = MaterialTheme.typography.headlineMedium)
-            Text(if (profile.verificationMethod == "digilocker") "Verified woman, via DigiLocker" else "Verified", color = Lilac, style = MaterialTheme.typography.bodyMedium)
-        }
-        Spacer(Modifier.height(20.dp))
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Surface1).clickable(onClick = onOpenChat).padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(ImageVector.vectorResource(R.drawable.ic_chat), null, tint = Lilac, modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text("Ask Security4Her", style = MaterialTheme.typography.titleMedium)
-                Text("Questions about SOS, journeys, the map and more", color = Muted, style = MaterialTheme.typography.bodySmall)
+            Column {
+                Text(profile.displayName ?: "You", style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(if (profile.verificationMethod == "digilocker") "Verified woman, via DigiLocker" else "Verified", color = Lilac, style = MaterialTheme.typography.bodySmall)
             }
-            Text("›", color = Lilac, fontSize = 26.sp)
         }
-        Spacer(Modifier.height(28.dp))
-        Text("Settings", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(14.dp))
-        Section("Colours") { PalettePicker() }
-        Section("App updates") { UpdateSection() }
-        Section("Pocket SOS") {
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Tile("Ask Security4Her", ImageVector.vectorResource(R.drawable.ic_chat), onOpenChat, Modifier.weight(1f))
+            Tile("Setup guide", Icons.Filled.Check, onGuide, Modifier.weight(1f))
+        }
+        CompositionLocalProvider(LocalOpenSection provides openSection) {
+        GroupLabel("Safety")
+        Section(
+            "Pocket SOS",
+            if (`in`.security4her.app.sos.PocketSos.enabled(ctx)) "On: knock 3 times with the screen off" else "Off: knock 3 times to start an SOS",
+        ) {
             var pocketOn by remember { mutableStateOf(`in`.security4her.app.sos.PocketSos.enabled(ctx)) }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Knock 3 times to start SOS")
                     Text(
-                        "No watch? With the screen off, knock firmly on your phone three times through your pocket or bag. " +
-                            "You feel a tick per knock and a strong buzz when it's armed, then 5 seconds to cancel before the SOS starts. Uses a little extra battery.",
+                        "With the screen off, knock firmly 3 times through your pocket or bag. A long buzz means it's armed: you then have 5 seconds to cancel.",
                         color = Muted, style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -1430,9 +1511,16 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
             OutlinedButton(onClick = onPractice, border = androidx.compose.foundation.BorderStroke(1.dp, Lilac)) {
                 Text("Practise and adjust strength", color = Lilac)
             }
+            Spacer(Modifier.height(6.dp))
+            ScreenOffTestCard()
+            var gemini by remember { mutableStateOf(false) }
+            TextButton(onClick = { gemini = !gemini }, contentPadding = PaddingValues(0.dp)) {
+                Text(if (gemini) "Hide" else "Gemini or the Assistant opens when I knock?", color = Lilac)
+            }
+            if (gemini) BackTapNote()
         }
 
-        Section("Test Mode") {
+        Section("Test Mode", if (settings.testMode) "On: texts and calls go to your test number" else "Off") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Send police texts and calls to a test number", modifier = Modifier.weight(1f))
                 Switch(
@@ -1466,7 +1554,7 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
         }
         EvidenceSection(onOpenLocker)
         SafeJourneySection()
-        Section("Location updates") {
+        Section("Location updates", if (settings.smsUpdates) "Texts your location every 5 minutes in an SOS" else "Off") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Text my location every 5 minutes")
@@ -1479,9 +1567,8 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
                 Switch(checked = settings.smsUpdates, onCheckedChange = { set(settings.copy(smsUpdates = it)) }, colors = switchColors)
             }
         }
-        Section("During SOS") { DuringSosEditor(settings) { set(it) } }
-        Section("Beta testing") { `in`.security4her.app.beta.BetaSection(onEdit = onBetaConsent, onReport = onBetaReport) }
-        Section("Watch") {
+        Section("During SOS", "Countdown, the call and what gets recorded") { DuringSosEditor(settings) { set(it) } }
+        Section("Watch", "Install, update or re-link your watch") {
             ChunkyButton("Install or update the watch app", tone = Tone.Plain, onClick = onWatchInstall)
             Spacer(Modifier.height(14.dp))
             Text("Your watch links to this account automatically. Re-link if it shows the wrong name.", color = Muted, style = MaterialTheme.typography.bodyMedium)
@@ -1497,17 +1584,13 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
             }, border = androidx.compose.foundation.BorderStroke(1.dp, Lilac)) { Text("Re-link watch", color = Lilac) }
             linkMsg?.let { Spacer(Modifier.height(6.dp)); Text(it, color = Muted, style = MaterialTheme.typography.bodySmall) }
         }
-        Section("Activity log") {
-            val count = AppLog.entries.collectAsStateWithLifecycle().value.size
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onOpenLog).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Open the activity log")
-                    Text("Every SOS step, text, location fix and error ($count entries). Share it when something doesn't work.", color = Muted, style = MaterialTheme.typography.bodySmall)
-                }
-                Text("›", color = Lilac, fontSize = 26.sp, modifier = Modifier.padding(start = 12.dp))
-            }
-        }
-        Section("Account") {
+        GroupLabel("App")
+        Section("Colours", Palettes.current.value.name) { PalettePicker() }
+        Section("App updates", "Version ${Updater.versionName}") { UpdateSection() }
+        Section("Beta testing", "Test data and problem reports") { `in`.security4her.app.beta.BetaSection(onEdit = onBetaConsent, onReport = onBetaReport) }
+        val logCount = AppLog.entries.collectAsStateWithLifecycle().value.size
+        LinkRow("Activity log", "Every SOS step, text and error ($logCount entries)", onOpenLog)
+        Section("Account", profile.displayName ?: "Signed in") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Avatar(profile.displayName ?: "?", 40.dp)
                 Spacer(Modifier.width(12.dp))
@@ -1520,6 +1603,27 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
                 }
                 TextButton(onClick = { scope.launch { runCatching { Backend.signOut() }; onSignedOut() } }) { Text("Sign out", color = SosRed) }
             }
+        }
+        Section("About", "Version, the team and privacy") {
+            Text("Security4Her Beta ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium)
+            Text("Free and open source, made for women's safety.", color = Muted, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(14.dp))
+            Text("MADE BY", color = Lilac, style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.height(6.dp))
+            listOf("Atharva Lakhe", "Sanskar Dwivedi", "Mohit Hadap", "Ashay Malode").forEach { name ->
+                Row(Modifier.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(name, 30.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(name)
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Row {
+                TextButton(onClick = { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://security4her.vercel.app/"))) }) { Text("Website", color = Lilac) }
+                TextButton(onClick = { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://security4her.vercel.app/privacy.html"))) }) { Text("Privacy", color = Lilac) }
+                TextButton(onClick = { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://security4her.vercel.app/beta.html"))) }) { Text("Beta", color = Lilac) }
+            }
+        }
         }
     }
 }
@@ -1640,10 +1744,58 @@ private fun SaveBar(changed: Boolean, valid: Boolean, onDiscard: () -> Unit, onS
 }
 
 @Composable
-internal fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Text(title, color = Muted, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Surface1).padding(16.dp), content = content)
-    Spacer(Modifier.height(22.dp))
+internal fun Section(title: String, summary: String? = null, content: @Composable ColumnScope.() -> Unit) {
+    val shared = LocalOpenSection.current
+    var own by rememberSaveable(title) { mutableStateOf(false) }
+    val open = if (shared != null) shared.value == title else own
+    fun toggle() { if (shared != null) shared.value = if (open) null else title else own = !own }
+    val turn by androidx.compose.animation.core.animateFloatAsState(if (open) 90f else 0f, label = "chevron")
+    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(18.dp)).background(Surface1).animateContentSize()) {
+        Row(
+            Modifier.fillMaxWidth().clickable(onClickLabel = if (open) "Close $title" else "Open $title") { toggle() }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                if (summary != null && !open) Text(summary, color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Text("›", color = Lilac, fontSize = 24.sp, modifier = Modifier.graphicsLayer { rotationZ = turn })
+        }
+        if (open) Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp), content = content)
+    }
+}
+
+/** Which settings row is open. One at a time keeps the screen short. */
+internal val LocalOpenSection = androidx.compose.runtime.staticCompositionLocalOf<MutableState<String?>?> { null }
+
+@Composable
+private fun GroupLabel(text: String) =
+    Text(text, color = Muted, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 4.dp, top = 14.dp, bottom = 8.dp))
+
+/** A settings row that opens another screen. */
+@Composable
+private fun LinkRow(title: String, summary: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(18.dp)).background(Surface1).clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(summary, color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text("›", color = Lilac, fontSize = 24.sp)
+    }
+}
+
+@Composable
+private fun Tile(title: String, icon: ImageVector, onClick: () -> Unit, modifier: Modifier) {
+    Column(modifier.clip(RoundedCornerShape(18.dp)).background(Surface1).clickable(onClick = onClick).padding(14.dp)) {
+        Icon(icon, null, tint = Lilac, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.height(10.dp))
+        Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
 }
 
 // ---------------------------------------------------------------- Active SOS

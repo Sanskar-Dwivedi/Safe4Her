@@ -11,17 +11,18 @@ import kotlin.random.Random
 class KnockDetectorTest {
     private fun run(
         signal: (t: Long) -> Float, ms: Long = 7_000, stepMs: Long = 10, threshold: Float = KnockDetector.DEFAULT_THRESHOLD,
-        handShake: Float = 0.3f,
+        handShake: Float = 0.3f, flat: Boolean = false, covered: Boolean? = null,
     ): Int {
         var fired = 0
-        val d = KnockDetector(threshold = threshold, onTriple = { fired++ })
+        val d = KnockDetector(threshold = threshold, onTriple = { fired++ }).also { it.covered = covered }
         val rnd = Random(7)
         var t = 0L
         while (t < ms) {
             // A hand-held phone drifts slowly and has sensor noise
-            val drift = (0.8 * sin(t / 700.0)).toFloat()
+            val drift = if (flat) 0f else (0.8 * sin(t / 700.0)).toFloat()
             val n = { (rnd.nextFloat() - 0.5f) * handShake }
-            d.feed(drift + n(), 9.81f + signal(t) + n(), n(), t)
+            if (flat) d.feed(n(), n(), 9.81f + signal(t) + n(), t) // lying screen up: gravity on z, knocks into the surface
+            else d.feed(drift + n(), 9.81f + signal(t) + n(), n(), t)
             t += stepMs
         }
         return fired
@@ -76,4 +77,22 @@ class KnockDetectorTest {
     @Test fun knocksWhileWalkingFire() = assertEquals(1, run({ walking(it) + knocks(2_050, 2_500, 2_950, size = 6f)(it) }))
 
     @Test fun aShoveOrFallDoesNothing() = assertEquals(0, run({ t -> if (t in 2_000..2_900) 20f * sin(t / 25.0).toFloat() else 0f }))
+
+    // A phone lying still on a table: only sensor noise. Light taps there spike hard, so normal knocks don't count.
+    private val tableNoise = 0.04f
+
+    @Test fun tapsOnAPhoneLyingOnATableDoNothing() =
+        assertEquals(0, run(knocks(4_000, 4_500, 5_000, size = 5f), handShake = tableNoise, flat = true))
+
+    @Test fun hardKnocksOnATableStillFire() =
+        assertEquals(1, run(knocks(4_000, 4_500, 5_000, size = 12f), handShake = tableNoise, flat = true))
+
+    @Test fun flatAndStillInAPocketFires() = // proximity says covered: sitting still, phone flat in a pocket
+        assertEquals(1, run(knocks(4_000, 4_500, 5_000, size = 5f), handShake = tableNoise, flat = true, covered = true))
+
+    @Test fun flatInAHandFires() = // a hand's tremor means it isn't resting on anything
+        assertEquals(1, run(knocks(4_000, 4_500, 5_000, size = 5f), flat = true))
+
+    @Test fun knocksRightAfterPuttingItDownFire() = // not still for long enough to count as resting
+        assertEquals(1, run(knocks(1_200, 1_700, 2_200, size = 5f), handShake = tableNoise, flat = true))
 }

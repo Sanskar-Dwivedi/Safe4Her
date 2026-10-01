@@ -49,6 +49,10 @@ import kotlin.math.sqrt
  * knock (at or above [threshold]) or too soft. Nothing is counted for 200 ms after a knock, and by then the phone must
  * have settled (a shove or a fall keeps moving). The threshold rises with ongoing movement, so she can knock while
  * walking. Exactly three knocks, 0.2-1.1 s apart, then 0.7 s with no fourth; longer runs (running, bumps) are rejected.
+ *
+ * A phone lying flat and dead still, with nothing over its screen, is on a table, not in a pocket: a hard surface turns
+ * even a light tap into a sharp spike, so a sequence that starts there needs knocks [TABLE_FACTOR] times as hard. When
+ * the proximity sensor says the screen is covered ([covered]), it's in a pocket or bag and normal knocks count.
  */
 class KnockDetector(
     @Volatile var threshold: Float = DEFAULT_THRESHOLD,
@@ -73,6 +77,15 @@ class KnockDetector(
     private val knocks = ArrayList<Long>(4)
     private var fireAt = 0L
     private var blockedUntil = 0L
+    private val grav = FloatArray(3) // slow average of the readings: which way is down
+    private var stillSince = 0L // when the phone last stopped moving
+    private var onTable = false // the current sequence started with the phone resting flat
+
+    /** From the proximity sensor: true in a pocket or bag, false in the open, null when the phone can't tell. */
+    @Volatile var covered: Boolean? = null
+
+    /** True while one or two knocks have been counted and the rest may follow. */
+    val inProgress get() = knocks.isNotEmpty() || fireAt != 0L
 
     /** The latest jump, for a live meter. */
     @Volatile var level = 0f
@@ -85,7 +98,7 @@ class KnockDetector(
 
     /** [t] in milliseconds. */
     fun feed(x: Float, y: Float, z: Float, t: Long) {
-        if (!primed) { prev[0] = x; prev[1] = y; prev[2] = z; primed = true; lastT = t; return }
+        if (!primed) { prev[0] = x; prev[1] = y; prev[2] = z; grav[0] = x; grav[1] = y; grav[2] = z; primed = true; lastT = t; stillSince = t; return }
         val dt = (t - lastT).coerceIn(1, 100).toFloat()
         lastT = t
         val dx = x - prev[0]; val dy = y - prev[1]; val dz = z - prev[2]
@@ -93,14 +106,19 @@ class KnockDetector(
         val d = sqrt(dx * dx + dy * dy + dz * dz)
         level = d
         recent += (d - recent) * dt / (50f + dt)
+        val g = dt / (400f + dt)
+        grav[0] += (x - grav[0]) * g; grav[1] += (y - grav[1]) * g; grav[2] += (z - grav[2]) * g
 
         if (fireAt != 0L && t >= fireAt) { fireAt = 0L; knocks.clear(); onTriple(); return }
         if (fireAt == 0L && knocks.isNotEmpty() && t - knocks.last() > MAX_GAP) { knocks.clear(); onReject(Reject.TooSlow) }
 
         when (phase) {
             Phase.Idle -> {
+                val resting = resting(t)
                 activity += (d - activity) * dt / (500f + dt)
-                val b = maxOf(threshold, activity * 4f)
+                if (activity > STILL) stillSince = t
+                if (knocks.isEmpty() && fireAt == 0L) onTable = resting && covered != true
+                val b = maxOf(threshold * (if (onTable) TABLE_FACTOR else 1f), activity * 4f)
                 if (d > maxOf(FLOOR, activity * 2.5f, b * 0.35f)) { phase = Phase.Peak; crossT = t; peak = d; bar = b }
             }
             Phase.Peak -> {
@@ -119,6 +137,12 @@ class KnockDetector(
         }
     }
 
+    /** Flat (screen up or down) and without even a hand's tremor for 2 s. */
+    private fun resting(t: Long): Boolean {
+        val flat = kotlin.math.abs(grav[2]) > 8.8f && sqrt(grav[0] * grav[0] + grav[1] * grav[1]) < 3.5f
+        return flat && activity < STILL && t - stillSince > 2_000
+    }
+
     private fun knock(t: Long, strength: Float) {
         if (t < blockedUntil) { blockedUntil = t + 1_000; return }
         if (fireAt != 0L) { // a fourth knock: a rhythm, not the signal
@@ -135,6 +159,9 @@ class KnockDetector(
         /** Smallest jump shown as a (too soft) knock. */
         const val FLOOR = 1.0f
         private const val MAX_GAP = 1_100L
+        /** Movement (m/s^2 per sample) below which the phone is lying still: under a hand's tremor, above sensor noise. */
+        private const val STILL = 0.12f
+        const val TABLE_FACTOR = 2.2f
     }
 }
 
@@ -153,14 +180,53 @@ object PocketSos {
 
     fun enabled(ctx: Context) = Store.prefs(ctx).getBoolean(PREF, false)
 
+    // ---- screen-off test: the real thing (screen off, background service), except it never starts an SOS ----
+
+    /** What the phone felt during a screen-off test. */
+    data class ScreenOffTest(
+        val until: Long, // elapsedRealtime when the test window closes
+        val screenWentOff: Boolean = false,
+        val offMs: Long = 0, // how long the screen was off
+        val samples: Int = 0, // motion readings received while it was off
+        val knocks: Int = 0, // most knocks counted in one go
+        val soft: Int = 0, // jolts felt but too soft to count
+        val strongest: Float = 0f,
+        val reject: KnockDetector.Reject? = null,
+        val passed: Boolean = false,
+    ) {
+        val rateHz get() = if (offMs > 0) (samples * 1000L / offMs).toInt() else 0
+    }
+
+    private val _test = MutableStateFlow<ScreenOffTest?>(null)
+    val test: StateFlow<ScreenOffTest?> = _test.asStateFlow()
+
+    fun testing() = _test.value?.let { !it.passed && android.os.SystemClock.elapsedRealtime() < it.until } == true
+
+    internal fun updateTest(f: (ScreenOffTest) -> ScreenOffTest) { _test.value?.let { _test.value = f(it) } }
+
+    fun startTest(ctx: Context) {
+        _test.value = ScreenOffTest(until = android.os.SystemClock.elapsedRealtime() + 90_000)
+        AppLog.info("Pocket", "Screen-off knock test started")
+        runCatching { ContextCompat.startForegroundService(ctx, Intent(ctx, PocketSosService::class.java)) }
+            .onFailure { AppLog.warn("Pocket", "Couldn't start knock detection", it) }
+    }
+
+    fun endTest(ctx: Context) {
+        _test.value = null
+        if (!enabled(ctx)) ctx.stopService(Intent(ctx, PocketSosService::class.java))
+    }
+
     // ---- how hard a knock must be (m/s^2 of jolt) ----
     enum class Sensitivity(val label: String, val threshold: Float) { High("Light", 2.8f), Normal("Normal", 4.5f), Low("Firm", 7.5f) }
 
     @Volatile var threshold = KnockDetector.DEFAULT_THRESHOLD
         private set
 
+    /** Nothing is ever more sensitive than Light: below it, ordinary bumps in a pocket start counting as knocks. */
+    private const val MIN_THRESHOLD = 2.8f
+
     fun loadThreshold(ctx: Context): Float {
-        threshold = Store.prefs(ctx).getFloat("pocket_threshold", KnockDetector.DEFAULT_THRESHOLD)
+        threshold = Store.prefs(ctx).getFloat("pocket_threshold", KnockDetector.DEFAULT_THRESHOLD).coerceAtLeast(MIN_THRESHOLD)
         return threshold
     }
 
@@ -168,15 +234,18 @@ object PocketSos {
     fun calibrated(ctx: Context) = Store.prefs(ctx).contains("pocket_threshold")
 
     fun setThreshold(ctx: Context, t: Float) {
-        threshold = t.coerceIn(1.8f, 14f)
+        threshold = t.coerceIn(MIN_THRESHOLD, 14f)
         Store.prefs(ctx).edit().putFloat("pocket_threshold", threshold).apply()
         AppLog.info("Pocket", "Knock strength set to %.1f".format(java.util.Locale.US, threshold))
     }
 
-    /** Sets the threshold from her own knocks: a bit below her usual knock, so a slightly softer one still counts. */
+    /**
+     * Sets the threshold from her own knocks: a bit below her usual knock, so a slightly softer one still counts, but never
+     * below Light (taught with gentle taps in the hand, it used to end up so low that a bump in a pocket counted).
+     */
     fun calibrate(ctx: Context, strengths: List<Float>): Float {
         val median = strengths.sorted()[strengths.size / 2]
-        setThreshold(ctx, median * 0.55f)
+        setThreshold(ctx, median * 0.6f)
         return threshold
     }
 
@@ -318,32 +387,59 @@ object PocketSos {
 class PocketSosService : Service(), SensorEventListener {
     private var detector: KnockDetector? = null
     private lateinit var power: PowerManager
+    private lateinit var keyguard: android.app.KeyguardManager
     private var awake: PowerManager.WakeLock? = null
+    private var accel: Sensor? = null
+    private var proximity: Sensor? = null
+    private var wasInteractive = true
+    private var screenOnAt = 0L
+    private var screenOffAt = 0L
+    private var wokeMidSequence = false
+    private var offSamples = 0
+    private var rateSent = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         power = getSystemService(PowerManager::class.java)
+        keyguard = getSystemService(android.app.KeyguardManager::class.java)
+        wasInteractive = power.isInteractive
         detector = KnockDetector(
             threshold = PocketSos.loadThreshold(this),
-            onKnock = { n, _ -> if (n < 3) PocketSos.buzz(this, PocketSos.Buzz.Knock) },
-            onTriple = { PocketSos.trigger(this) },
+            onKnock = { n, str ->
+                if (n < 3) PocketSos.buzz(this, PocketSos.Buzz.Knock)
+                PocketSos.updateTest { it.copy(knocks = maxOf(it.knocks, n), strongest = maxOf(it.strongest, str), reject = null) }
+            },
+            onSoft = { str -> PocketSos.updateTest { it.copy(soft = it.soft + 1, strongest = maxOf(it.strongest, str)) } },
+            onReject = { r -> PocketSos.updateTest { it.copy(reject = r) } },
+            onTriple = {
+                if (PocketSos.testing()) {
+                    PocketSos.updateTest { it.copy(passed = true, knocks = 3) }
+                    PocketSos.buzz(this, PocketSos.Buzz.Armed)
+                    AppLog.ok("Pocket", "Screen-off knock test passed")
+                } else PocketSos.trigger(this)
+            },
         )
         // With the screen off many phones sleep the processor and stop the motion sensor; keep it awake to listen
         awake = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "s4h:pocket-listen").apply { setReferenceCounted(false); acquire() }
         val sm = getSystemService(SensorManager::class.java)
-        val acc = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        // The wake-up version keeps arriving on phones that pause ordinary sensors with the screen off
+        val acc = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER, true) ?: sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         if (acc == null) {
             AppLog.error("Pocket", "This phone has no motion sensor, so Pocket SOS can't work")
             stopSelf(); return
         }
-        sm.registerListener(this, acc, 5_000) // ask for 200 Hz; phones give what they can, knocks last 20-40 ms
+        accel = acc
+        sm.registerListener(this, acc, 5_000, 0) // ask for 200 Hz, unbatched; phones give what they can, knocks last 20-40 ms
+        // Covered (pocket, bag) or not (on a table): tells the detector when a tap on a hard surface is likely
+        proximity = sm.getDefaultSensor(Sensor.TYPE_PROXIMITY, true) ?: sm.getDefaultSensor(Sensor.TYPE_PROXIMITY)
+        proximity?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!PocketSos.enabled(this)) { stopSelf(); return START_NOT_STICKY }
-        val n = build(this)
+        if (!PocketSos.enabled(this) && !PocketSos.testing()) { stopSelf(); return START_NOT_STICKY }
+        val n = build(this, testing = !PocketSos.enabled(this))
         try {
             if (Build.VERSION.SDK_INT >= 34) startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE) else startForeground(ID, n)
         } catch (e: Exception) {
@@ -354,12 +450,40 @@ class PocketSosService : Service(), SensorEventListener {
     }
 
     override fun onSensorChanged(e: SensorEvent) {
-        // Screen on means she's using the phone: taps on glass must never count
         val d = detector ?: return
-        if (power.isInteractive || PocketSos.practicing) { d.reset(); return }
-        if (android.os.SystemClock.elapsedRealtime() < PocketSos.mutedUntil) { d.cancelJolt(); return } // our own buzz
+        if (e.sensor.type == Sensor.TYPE_PROXIMITY) {
+            d.covered = e.values[0] < minOf(5f, e.sensor.maximumRange)
+            return
+        }
+        val now = android.os.SystemClock.elapsedRealtime()
+        val interactive = power.isInteractive
+        if (interactive != wasInteractive) { wasInteractive = interactive; screenChanged(interactive, now, d) }
+        if (!interactive) offSamples++
+        // Screen on means she's using the phone: taps on glass must never count. Except on phones where knocking on the
+        // glass switches the screen on (tap to wake): a sequence that woke it keeps going briefly while it's still locked.
+        val wokeByKnocks = interactive && wokeMidSequence && now - screenOnAt < 1_500 && keyguard.isKeyguardLocked
+        if ((interactive && !wokeByKnocks) || PocketSos.practicing) { d.reset(); return }
+        if (now < PocketSos.mutedUntil) { d.cancelJolt(); return } // our own buzz
         d.threshold = PocketSos.threshold
         d.feed(e.values[0], e.values[1], e.values[2], e.timestamp / 1_000_000)
+    }
+
+    private fun screenChanged(on: Boolean, now: Long, d: KnockDetector) {
+        if (!on) { screenOffAt = now; offSamples = 0; PocketSos.updateTest { it.copy(screenWentOff = true) }; return }
+        screenOnAt = now
+        wokeMidSequence = d.inProgress
+        val offMs = now - screenOffAt
+        if (screenOffAt == 0L || offMs < 3_000) return
+        PocketSos.updateTest { it.copy(offMs = it.offMs + offMs, samples = it.samples + offSamples) }
+        val hz = (offSamples * 1000L / offMs).toInt()
+        if (hz == 0 && offMs > 10_000) AppLog.warn("Pocket", "No motion readings while the screen was off; this phone pauses the sensor")
+        if (!rateSent) { // once per run: what this phone really delivers with the screen off
+            rateSent = true
+            `in`.security4her.app.beta.Beta.record(
+                `in`.security4her.app.beta.BetaCategory.PERFORMANCE, "info", "pocket_screen_off_rate", null,
+                mapOf("hz" to hz, "wakeup_sensor" to (accel?.isWakeUpSensor == true), "proximity" to (proximity != null)),
+            )
+        }
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
@@ -374,15 +498,15 @@ class PocketSosService : Service(), SensorEventListener {
         private const val ID = 130
         private const val CH = "pocket"
 
-        private fun build(ctx: Context): Notification {
+        private fun build(ctx: Context, testing: Boolean = false): Notification {
             val nm = ctx.getSystemService(NotificationManager::class.java)
             if (nm.getNotificationChannel(CH) == null) nm.createNotificationChannel(NotificationChannel(CH, "Pocket SOS", NotificationManager.IMPORTANCE_MIN))
             val off = PendingIntent.getBroadcast(ctx, 42, Intent(ctx, PocketReceiver::class.java).setAction(PocketReceiver.TURN_OFF), PendingIntent.FLAG_IMMUTABLE)
             val open = PendingIntent.getActivity(ctx, 43, Intent(ctx, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
             return NotificationCompat.Builder(ctx, CH)
                 .setSmallIcon(R.drawable.ic_notif_security4her)
-                .setContentTitle("Pocket SOS is on")
-                .setContentText("Knock 3 times on your phone to start an SOS.")
+                .setContentTitle(if (testing) "Testing knocks" else "Pocket SOS is on")
+                .setContentText(if (testing) "Turn the screen off and knock 3 times. Nothing is sent." else "Knock 3 times on your phone to start an SOS.")
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_MIN)
                 .setContentIntent(open)
@@ -411,6 +535,7 @@ class PocketReceiver : BroadcastReceiver() {
 class PocketBootReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) `in`.security4her.app.SmsUnlock.afterReinstall(ctx)
         if (PocketSos.enabled(ctx)) runCatching { ContextCompat.startForegroundService(ctx, Intent(ctx, PocketSosService::class.java)) }
     }
 }

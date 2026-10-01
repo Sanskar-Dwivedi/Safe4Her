@@ -1,7 +1,12 @@
 package `in`.security4her.app
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings as AndroidSettings
@@ -17,7 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import `in`.security4her.app.core.AppLog
 import `in`.security4her.app.core.Store
@@ -145,18 +149,116 @@ object Updater {
             }
             return
         }
-        val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file)
-        runCatching {
-            ctx.startActivity(
-                Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-        }.onFailure { AppLog.warn("Update", "Couldn't open the installer", it) }
+        // Installed through a PackageInstaller session, not by opening the file: Android 15 blocks SMS for apps whose last
+        // install came from a file (a download or the system installer), and an install marked as coming from an app
+        // store or updater lifts that block.
+        val app = ctx.applicationContext
+        scope.launch { runCatching {
+            val installer = app.packageManager.packageInstaller
+            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+                setAppPackageName(app.packageName)
+                if (Build.VERSION.SDK_INT >= 33) setPackageSource(PackageInstaller.PACKAGE_SOURCE_OTHER)
+            }
+            val id = installer.createSession(params)
+            installer.openSession(id).use { session ->
+                session.openWrite("base.apk", 0, file.length()).use { out ->
+                    file.inputStream().use { it.copyTo(out) }
+                    session.fsync(out)
+                }
+                val done = PendingIntent.getBroadcast(
+                    app, id, Intent(app, InstallReceiver::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+                )
+                session.commit(done.intentSender)
+            }
+        }.onFailure {
+            AppLog.warn("Update", "Couldn't open the installer", it)
+            _state.value = UpdateState.Failed("Android couldn't start the install. Try again.")
+        } }
+    }
+
+    internal fun onInstallResult(ctx: Context, intent: Intent) {
+        when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+            PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                @Suppress("DEPRECATION")
+                val confirm = (if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+                else intent.getParcelableExtra(Intent.EXTRA_INTENT)) ?: return
+                runCatching { ctx.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    .onFailure { AppLog.warn("Update", "Couldn't show Android's install confirmation", it) }
+            }
+            PackageInstaller.STATUS_SUCCESS -> _state.value = UpdateState.UpToDate
+            else -> {
+                val msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+                Store.prefs(ctx).edit().remove(SmsUnlock.PENDING).apply()
+                if (status == PackageInstaller.STATUS_FAILURE_ABORTED) AppLog.info("Update", "Install cancelled")
+                else AppLog.warn("Update", "Install failed (status $status: $msg)")
+                _state.value = UpdateState.Failed(
+                    if (status == PackageInstaller.STATUS_FAILURE_ABORTED) "Install cancelled." else "Android couldn't install it. Try again.",
+                )
+            }
+        }
     }
 
     private fun get(url: String): String {
         val c = (URL(url).openConnection() as HttpURLConnection).apply { connectTimeout = 10_000; readTimeout = 10_000; useCaches = false }
         return c.inputStream.bufferedReader().use { it.readText() }
+    }
+}
+
+/** Results of our PackageInstaller sessions (not exported: only Android's installer calls it, through our PendingIntent). */
+class InstallReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) = Updater.onInstallResult(context, intent)
+}
+
+/**
+ * Android 15 refuses SMS ("App was denied access… restricted permission") to an app whose last install came from a
+ * file, which is how everyone installs from the website. Reinstalling the same copy through a PackageInstaller session
+ * marked as an updater install lifts it, with one tap on Android's confirmation and no data lost. Tested on Android 15.
+ */
+object SmsUnlock {
+    const val PENDING = "sms_unlock_pending"
+
+    /** True when SMS is off and Android will refuse it because of how the app was installed. */
+    fun blocked(ctx: Context): Boolean {
+        if (Build.VERSION.SDK_INT < 33 || `in`.security4her.app.sos.Sms.allowed(ctx)) return false
+        val source = runCatching { ctx.packageManager.getInstallSourceInfo(ctx.packageName).packageSource }.getOrNull()
+        return source == PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE || source == PackageInstaller.PACKAGE_SOURCE_DOWNLOADED_FILE
+    }
+
+    /** True between the reinstall and SMS being allowed; clears itself once it is. */
+    fun pending(ctx: Context): Boolean {
+        val p = Store.prefs(ctx)
+        if (!p.getBoolean(PENDING, false)) return false
+        if (!`in`.security4her.app.sos.Sms.allowed(ctx)) return true
+        p.edit().remove(PENDING).apply()
+        AppLog.ok("SMS", "Texting allowed after the reinstall")
+        return false
+    }
+
+    /** Android has to allow installs from Security4Her once before it can reinstall itself. */
+    fun needsInstallPermission(ctx: Context) = !Updater.canInstall(ctx)
+
+    fun start(ctx: Context) {
+        if (needsInstallPermission(ctx)) { Updater.install(ctx, File(ctx.applicationInfo.sourceDir)); return } // opens the toggle
+        Store.prefs(ctx).edit().putBoolean(PENDING, true).apply()
+        AppLog.info("SMS", "Reinstalling this copy so Android allows texting")
+        Updater.install(ctx, File(ctx.applicationInfo.sourceDir))
+    }
+
+    /** After the reinstall: a notification to come back and allow SMS (the app was restarted by the install). */
+    fun afterReinstall(ctx: Context) {
+        val p = Store.prefs(ctx)
+        if (!p.getBoolean(PENDING, false)) return
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        if (nm.getNotificationChannel("setup") == null) nm.createNotificationChannel(NotificationChannel("setup", "Setup", NotificationManager.IMPORTANCE_HIGH))
+        val open = PendingIntent.getActivity(ctx, 77, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
+        runCatching {
+            nm.notify(
+                77, androidx.core.app.NotificationCompat.Builder(ctx, "setup").setSmallIcon(R.drawable.ic_notif_security4her)
+                    .setContentTitle("Texting is unlocked").setContentText("Tap to finish: allow SMS so an SOS texts your contacts by itself.")
+                    .setAutoCancel(true).setContentIntent(open).build(),
+            )
+        }
     }
 }
 

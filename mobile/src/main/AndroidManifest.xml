@@ -105,6 +105,7 @@
                 android:value="Detects three knocks on the phone (through a pocket or bag) to start an emergency SOS" />
         </service>
         <receiver android:name=".sos.PocketReceiver" android:exported="false" />
+        <receiver android:name=".InstallReceiver" android:exported="false" />
         <receiver android:name=".sos.PocketBootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

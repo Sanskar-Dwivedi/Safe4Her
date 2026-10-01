@@ -108,7 +108,7 @@ fun EvidenceSection(onOpen: () -> Unit) {
     var s by remember { mutableStateOf(Settings.load(ctx)) }
     val colors = SwitchDefaults.colors(checkedTrackColor = Lilac, checkedThumbColor = OnLilac, uncheckedTrackColor = Surface2, uncheckedBorderColor = Line)
     fun set(n: Settings) { n.save(ctx); s = n }
-    Section("Evidence") {
+    Section("Evidence", "Recording during an SOS, and your evidence locker") {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Record audio during an SOS")

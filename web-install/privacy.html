@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Security4Her privacy notice</title>
+<meta name="description" content="What Security4Her shares, when, and with whom; what stays on your phone; and how beta test data is handled.">
+<meta name="author" content="Atharva Lakhe, Sanskar Dwivedi, Mohit Hadap, Ashay Malode">
+<link rel="canonical" href="https://security4her.vercel.app/privacy.html">
+<meta name="theme-color" content="#050505">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Security4Her">
+<meta property="og:title" content="Security4Her privacy notice">
+<meta property="og:description" content="What Security4Her shares, when, and with whom; what stays on your phone; and how beta test data is handled.">
+<meta property="og:image" content="https://security4her.vercel.app/og.jpg">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preload" href="fonts/baloo2.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face{font-family:"Baloo 2";src:url(fonts/baloo2.woff2) format("woff2");font-weight:400 800;font-display:swap}
+@font-face{font-family:"Instrument Sans";src:url(fonts/instrument-sans.woff2) format("woff2");font-weight:400 700;font-display:swap}
+:root{--night:#050505;--plum:#141414;--plum2:#1F1F1F;--line:#2C2C2C;--ink:#F5F5F5;--muted:#9A9A9A;--lilac:#FFFFFF;--on-lilac:#0A0A0A;--sos:#FF4D5E;--green:#5EE0A0;
+  --display:"Baloo 2","Instrument Sans",system-ui,sans-serif;--body:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--night);color:var(--ink);font:400 17px/1.6 var(--body);-webkit-font-smoothing:antialiased;overflow-x:clip}
+a{color:var(--lilac)}
+.wrap{max-width:820px;margin:0 auto;padding:0 20px}
+header{border-bottom:1px solid var(--line)}
+header .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;height:72px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font:800 21px/1 var(--display)}
+.brand img{width:34px;height:34px;border-radius:9px}
+.tag{font:700 11px/1 var(--body);letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--line);border-radius:99px;padding:5px 9px;color:var(--muted)}
+.btn{display:inline-flex;align-items:center;gap:8px;background:var(--lilac);color:var(--on-lilac);font-weight:700;font-size:15px;text-decoration:none;padding:11px 18px;border-radius:14px;white-space:nowrap}
+.btn.ghost{background:none;color:var(--ink);border:1px solid var(--line)}
+main{padding:56px 0 24px}
+h1,h2,h3{font-family:var(--display);font-weight:800;margin:0;letter-spacing:-.01em;line-height:1.05}
+h1{font-size:clamp(40px,8vw,64px)}
+.lead{color:var(--muted);font-size:19px;max-width:36em;margin:18px 0 0}
+.hero .tag{display:inline-block;margin-bottom:18px}
+.hero .row{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
+section{padding-top:56px}
+section>h2{font-size:clamp(28px,5vw,36px);margin-bottom:18px}
+h3{font-size:22px;margin:30px 0 10px}
+p{margin:0 0 14px}
+.muted{color:var(--muted)}
+ol.steps{list-style:none;counter-reset:s;padding:0;margin:0;display:grid;gap:14px}
+ol.steps li{counter-increment:s;display:grid;grid-template-columns:40px minmax(0,1fr);gap:4px 16px;background:var(--plum);border:1px solid var(--line);border-radius:18px;padding:18px}
+ol.steps li::before{content:counter(s);grid-row:span 2;width:40px;height:40px;border-radius:12px;background:var(--plum2);display:grid;place-items:center;font:800 20px/1 var(--display)}
+ol.steps b{font:700 19px/1.25 var(--display)}
+ol.steps span{color:var(--muted);font-size:15.5px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.card{background:var(--plum);border:1px solid var(--line);border-radius:18px;padding:18px}
+.card b{display:block;font:700 18px/1.25 var(--display);margin-bottom:4px}
+.card p{color:var(--muted);font-size:15px;margin:0}
+.never{border-color:rgba(255,77,94,.35)}
+.never ul{margin:8px 0 0;padding-left:20px;color:var(--muted);font-size:15.5px}
+.ok{border-color:rgba(94,224,160,.35)}
+.team{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.person{background:var(--plum);border:1px solid var(--line);border-radius:18px;padding:18px;text-align:center}
+.person i{display:grid;place-items:center;width:52px;height:52px;margin:0 auto 10px;border-radius:50%;background:var(--plum2);font:800 20px/1 var(--display);font-style:normal}
+.person b{font-weight:600;font-size:15.5px}
+.doc table{width:100%;border-collapse:collapse;font-size:15px;margin:6px 0 18px;display:block;overflow-x:auto}
+.doc th,.doc td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line)}
+.doc th{color:var(--muted);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.05em}
+.doc ul{padding-left:20px}.doc li{margin-bottom:6px}
+.doc h2{font-size:clamp(26px,4.5vw,32px);margin:44px 0 14px}
+.doc h3{margin-top:28px}
+.hero+.doc{margin-top:22px;color:var(--muted)}
+.hero+.doc td{color:var(--ink)}
+.doc code{font:500 14px var(--mono)}
+.doc strong{color:var(--ink)}
+footer{border-top:1px solid var(--line);margin-top:64px;padding:28px 0 44px;color:var(--muted);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:10px 28px;justify-content:space-between}
+footer nav{display:flex;flex-wrap:wrap;gap:6px 18px}
+footer a{text-decoration:none}footer a:hover{text-decoration:underline}
+@media (max-width:640px){.grid{grid-template-columns:1fr}.team{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding-top:36px}header .btn{display:none}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <a class="brand" href="./"><img src="logo.webp" alt="" width="34" height="34">Security4Her <span class="tag">Beta</span></a>
+  <a class="btn" href="./#phone">Install the app</a>
+</div></header>
+<main><div class="wrap">
+
+<div class="hero">
+  <span class="tag">Privacy</span>
+  <h1>Your privacy</h1>
+</div>
+<div class="doc">
+<p>Security4Her is built to share as little as possible, and only when she decides to. There are no ads and no
+third-party trackers in either app. During the beta, testers can choose to share anonymous test data (below).</p>
+<h2>What leaves the phone, and when</h2>
+<table>
+<thead>
+<tr>
+<th>Data</th>
+<th>When</th>
+<th>Where it goes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Her location (a Google Maps link) and name</td>
+<td>During an SOS</td>
+<td>By SMS to the trusted contacts she chose</td>
+</tr>
+<tr>
+<td>Her live location</td>
+<td>During an SOS, a Safe Journey, or when she taps <em>Live location</em></td>
+<td>A private, randomly named topic on <a href="https://ntfy.sh">ntfy.sh</a>, shown on the live-map page linked in the SMS. Sharing stops when she ends it.</td>
+</tr>
+<tr>
+<td>A call</td>
+<td>After the SOS countdown</td>
+<td>The number she set (or her test number while Test Mode is on)</td>
+</tr>
+<tr>
+<td>Approximate map area</td>
+<td>When the map looks for nearby hospitals, police and routes</td>
+<td>OpenStreetMap services (Nominatim, Overpass, OSRM). Coordinates only, no identity.</td>
+</tr>
+<tr>
+<td>Places she adds to the safety map, and where SOS alerts happen</td>
+<td>When she adds a report, and once per SOS</td>
+<td>A shared community topic on ntfy.sh. SOS locations are rounded to about 100 m and carry no name or number.</td>
+</tr>
+<tr>
+<td>Account, contacts and incidents</td>
+<td>Only if the app is connected to a Supabase backend</td>
+<td>That backend, protected by row-level security</td>
+</tr>
+<tr>
+<td>Update checks</td>
+<td>Every few hours</td>
+<td><code>security4her.vercel.app</code>, an ordinary web request for <code>version.json</code></td>
+</tr>
+</tbody>
+</table>
+<h2>What stays on the device</h2>
+<ul>
+<li><strong>Evidence</strong>: audio and video recorded during an SOS stay on the phone, fingerprinted with SHA-256 and
+  locked against deletion for 24 hours. They leave only if she exports them.</li>
+<li><strong>Voice SOS</strong>: speech is recognised entirely on the watch. Nothing is recorded, stored or sent; the app
+  only reacts to "HELP HELP HELP".</li>
+<li><strong>Knock and shake detection</strong>: motion data is processed on the device and discarded.</li>
+<li><strong>The in-app assistant</strong> runs offline.</li>
+<li><strong>Contacts</strong> stay on the phone unless a backend is connected. Phone contacts are read only when she picks one.</li>
+<li><strong>Verification</strong>: DigiLocker verification keeps only whether she is verified. No Aadhaar number, address,
+  photo or document is stored.</li>
+</ul>
+<h2>Beta test data</h2>
+<p>Security4Her 1.1 is a beta. On first launch the app asks whether you want to share anonymous test data, and
+which kinds: crash reports, errors, security events, false alarms, feature use, speed and phone model. Nothing is
+sent unless you agree, and the app works the same if you don't.</p>
+<ul>
+<li>You are identified only by a random tester ID, never by name, number or account.</li>
+<li>Location, phone numbers, contact names, messages, recordings and Aadhaar are never included. Numbers, places,
+  links and names are removed on your phone before anything is queued.</li>
+<li>Data goes over an encrypted connection to a private database that only the Security4Her team can read, and the
+  server rejects anything you haven't agreed to.</li>
+<li>It is used only to fix the app during the beta and is deleted when the beta ends.</li>
+<li>Change your choices or delete everything you've sent at any time: <strong>Me → Beta testing</strong> on the phone, or <strong>Beta
+  test data</strong> on the watch.</li>
+</ul>
+<h2>Permissions</h2>
+<p>Location (SOS, journeys, map), SMS and phone (sending the SOS and the call), microphone and camera (evidence;
+Voice SOS on the watch), contacts (picking trusted contacts), notifications, and installing updates. Each is
+asked for when the feature first needs it, and the app keeps working without the optional ones.</p>
+<h2>Deleting data</h2>
+<p>Uninstalling removes everything the apps keep on the phone and watch. Messages on ntfy.sh expire on their own
+within a day. If a Supabase backend is connected, signing out and asking the operator removes the account.</p>
+</div>
+
+</div></main>
+<footer><div class="wrap">
+  <span>Made by Atharva Lakhe · Sanskar Dwivedi · Mohit Hadap · Ashay Malode</span>
+  <nav><a href="./">Install</a><a href="beta.html">Beta testing</a><a href="privacy.html">Privacy</a><a href="beta.html#whats-new">What's new</a></nav>
+</div></footer>
+</body>
+</html>

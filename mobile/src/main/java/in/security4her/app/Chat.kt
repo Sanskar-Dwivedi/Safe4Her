@@ -65,8 +65,8 @@ private val TOPICS = listOf(
     Topic(listOf("internet", "offline", "data", "network", "signal", "wifi")) {
         "SOS texts are ordinary SMS, so they reach your contacts without mobile data. Each text includes a Google Maps link to where you are. The live-location page needs internet, and it catches up as soon as you're back online."
     },
-    Topic(listOf("sms", "text", "texts", "restricted", "blocked", "permission", "automatic")) {
-        "For SOS texts to go out automatically, Android has to allow SMS once. If you installed from a download: Settings → Apps → Security4Her → ⋮ (top right) → Allow restricted settings → Permissions → SMS → Allow. Until then, an SOS opens Messages with everything filled in."
+    Topic(listOf("sms", "text", "texts", "restricted", "blocked", "permission", "automatic", "denied")) {
+        "For SOS texts to go out automatically, Android has to allow SMS once. Android blocks it for apps installed from a download (\"App was denied access\"). Fix it in one tap: Home → Fix → Fix texting, then Update when Android asks; open the app again and tap Allow. Until then, an SOS opens Messages with everything filled in."
     },
     Topic(listOf("live", "location", "share", "sharing", "link", "track", "follow")) {
         "Tap Live location on Home to share a link. Anyone with it sees where you are on a map, updated every 20 seconds, until you tap Stop sharing. During an SOS the link is sent automatically."

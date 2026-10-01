@@ -1,5 +1,49 @@
 # Changelog
 
+## 1.1.0-beta.6 (2026-10-01)
+
+### Fixed
+- Report a problem: the "How bad is it?" buttons were squeezed four to a row, splitting "Annoying" across two lines.
+  They're now two to a row like the problem types, all the same size, with shorter labels that always fit.
+
+## 1.1.0-beta.5 (2026-10-01)
+
+### Added
+- **Setup guide** (opens once after sign-up; Me → Setup guide): contacts, permissions, background running, safety
+  PIN, a test text, Pocket SOS, the watch and the extras, one page at a time, each with a live check.
+- **Fix texting in one tap.** Android 15 refuses SMS to apps installed from a download ("App was denied access").
+  The app now reinstalls itself through Android's installer as an updater would, which lifts the block; then SMS can
+  be allowed normally. Tested on Android 15.
+- **Pocket SOS screen-off test** (Me → Pocket SOS): the real thing with the screen off, without an SOS, and a plain
+  answer about what the phone felt (paused sensor, too soft, too slow).
+- Help for phones whose own Quick Tap or Back tap opens Gemini when knocked.
+
+### Changed
+- Phone app updates install through Android's installer API, so updating never brings the SMS block back.
+- Settings are folded into short rows that open one at a time.
+
+### Fixed
+- Pocket SOS went off from light taps: knocks taught gently could set it far too sensitive. Nothing is now more
+  sensitive than Light, and taps on a phone lying still on a table need to be much harder (unless the proximity
+  sensor says it's in a pocket or bag).
+- Pocket SOS missed knocks on phones that wake the screen on a tap, and on phones that pause ordinary sensors with
+  the screen off.
+- The manual steps for allowing SMS were in an order Android doesn't allow.
+
+## 1.1.0-beta.4 (2026-10-01)
+
+### Added
+- **Beta testing** and **Privacy** pages on the website, linked from the app's About section and the site footer.
+
+### Fixed
+- The Privacy link in About opened a page testers couldn't see.
+
+## 1.1.0-beta.3 (2026-10-01)
+
+### Added
+- **About** in the phone app (Me → About) and on the website: the team behind Security4Her — Atharva Lakhe,
+  Sanskar Dwivedi, Mohit Hadap and Ashay Malode — with links to the website and privacy notice.
+
 ## 1.1.0-beta.1 (2026-10-01)
 
 Public beta for testing before a commercial launch.

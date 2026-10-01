@@ -108,8 +108,8 @@ fun BetaConsentScreen(onDone: () -> Unit, editing: Boolean = false) {
     }
 }
 
-private val KINDS = listOf("bug" to "Something didn't work", "crash" to "The app closed", "false_alarm" to "False alarm",
-    "security" to "Security or privacy worry", "design" to "Hard to use", "idea" to "Idea")
+private val KINDS = listOf("bug" to "Didn't work", "crash" to "App closed", "false_alarm" to "False alarm",
+    "security" to "Privacy worry", "design" to "Hard to use", "idea" to "Idea")
 
 @Composable
 fun BetaReportScreen(onClose: () -> Unit) {
@@ -142,12 +142,13 @@ fun BetaReportScreen(onClose: () -> Unit) {
                 row.forEach { (k, label) -> Chip(label, kind == k, Modifier.weight(1f)) { kind = k } }
             }
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
         Text("How bad is it?", style = MaterialTheme.typography.titleSmall)
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("info" to "Minor", "warning" to "Annoying", "error" to "Serious", "critical" to "Blocks SOS").forEach { (k, l) ->
-                Chip(l, severity == k, Modifier.weight(1f)) { severity = k }
+        // Two per row, like the kinds above: four in one row squeezed "Annoying" onto two lines
+        listOf("info" to "Minor", "warning" to "Annoying", "error" to "Serious", "critical" to "Blocks SOS").chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+                row.forEach { (k, l) -> Chip(l, severity == k, Modifier.weight(1f)) { severity = k } }
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -169,7 +170,12 @@ private fun Chip(label: String, on: Boolean, modifier: Modifier, onClick: () -> 
         modifier.clip(RoundedCornerShape(14.dp)).background(if (on) Lilac else Surface1).border(1.dp, if (on) Lilac else Line, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center,
-    ) { Text(label, color = if (on) OnLilac else Ink, style = MaterialTheme.typography.labelLarge, maxLines = 2) }
+    ) {
+        Text(
+            label, color = if (on) OnLilac else Ink, style = MaterialTheme.typography.labelLarge,
+            maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        )
+    }
 }
 
 /** Me → Beta testing. */
