@@ -3,18 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Install Security4Her</title>
-<meta name="description" content="Install Security4Her, the free women's safety app for Android and Wear OS. SOS, live location, Safe Journey and a community safety map.">
+<title>Security4Her: free women's safety app for Android and Wear OS</title>
+<meta name="description" content="Install Security4Her, the free women's safety app for Android and Wear OS. One press, three knocks or three spoken words send your location to your people, with live tracking, evidence and a community safety map.">
+<link rel="canonical" href="https://security4her.vercel.app/">
 <meta name="theme-color" content="#050505">
-<meta property="og:title" content="Install Security4Her">
-<meta property="og:description" content="Free women's safety app for Android and Wear OS. Install it in about a minute.">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Security4Her">
+<meta property="og:url" content="https://security4her.vercel.app/">
+<meta property="og:title" content="Security4Her: help is one long press away">
+<meta property="og:description" content="Free women's safety app for Android and Wear OS. SOS, live location, evidence and Safe Journey. Install it in about a minute.">
+<meta property="og:image" content="https://security4her.vercel.app/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Security4Her on a phone: Help is one long press away.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Security4Her: help is one long press away">
+<meta name="twitter:description" content="Free women's safety app for Android and Wear OS.">
+<meta name="twitter:image" content="https://security4her.vercel.app/og.jpg">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<meta property="og:image" content="https://security4her.vercel.app/logo.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preload" href="fonts/baloo2.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Security4Her",
+ "description":"A women's safety app for Android and Wear OS: SOS by press, knock or voice, live location, evidence recording and a community safety map.",
+ "operatingSystem":"Android 8.0+, Wear OS 3+","applicationCategory":"LifestyleApplication","softwareVersion":"1.0.0",
+ "url":"https://security4her.vercel.app/","image":"https://security4her.vercel.app/og.jpg",
+ "offers":{"@type":"Offer","price":"0","priceCurrency":"INR"}}
+</script>
 <style>
+@font-face{font-family:"Baloo 2";src:url(fonts/baloo2.woff2) format("woff2");font-weight:400 800;font-display:swap}
+@font-face{font-family:"Instrument Sans";src:url(fonts/instrument-sans.woff2) format("woff2");font-weight:400 700;font-display:swap}
 :root{
   --night:#050505; --plum:#141414; --plum2:#1F1F1F; --line:#2C2C2C;
   --ink:#F5F5F5; --muted:#9A9A9A; --lilac:#FFFFFF; --lilac-deep:#BDBDBD; --on-lilac:#0A0A0A;
@@ -429,7 +449,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
       <circle cx="44.7" cy="56.8" r="2.5" fill="#fff"/><circle cx="66.5" cy="56.8" r="2.5" fill="#fff"/>
     </g>
     <symbol id="logo" viewBox="0 0 108 108">
-      <image href="logo.png" width="108" height="108"/>
+      <image href="logo.webp" width="108" height="108"/>
     </symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   </defs>
@@ -1071,6 +1091,8 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
     if (device !== "desktop") return;
     if (!window.QRCode) { $("#qr").textContent = "Connect to the internet to show the code"; return; }
     new QRCode($("#qr"), { text: pageUrl, width: 212, height: 212, colorDark: "#1E0E33", colorLight: "#FFF6EC", correctLevel: QRCode.CorrectLevel.M });
+    // The library adds the code as an image with no description.
+    setTimeout(() => $$("#qr img, #qr canvas").forEach(el => { el.setAttribute("alt", "QR code to open this page on your phone"); el.setAttribute("role", "img"); el.setAttribute("aria-label", "QR code to open this page on your phone"); }), 0);
   });
 
   // ---------- cats: eyes follow the pointer ----------

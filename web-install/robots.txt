@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /version.json
+
+Sitemap: https://security4her.vercel.app/sitemap.xml
