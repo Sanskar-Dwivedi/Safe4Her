@@ -126,7 +126,8 @@ object WatchBeta {
     }
 
     private fun config(): Pair<String, String>? {
-        if (System.currentTimeMillis() - prefs.getLong("cfg_at", 0) > 6 * 3600_000L) runCatching {
+        val every = if (prefs.getString("url", "").isNullOrBlank()) 15 * 60_000L else 6 * 3600_000L
+        if (System.currentTimeMillis() - prefs.getLong("cfg_at", 0) > every) runCatching {
             val c = (URL(BuildConfig.UPDATE_URL + "?b=" + System.currentTimeMillis()).openConnection() as HttpURLConnection)
                 .apply { connectTimeout = 15_000; readTimeout = 15_000; useCaches = false }
             val beta = JSONObject(c.inputStream.bufferedReader().use { it.readText() }).optJSONObject("beta")

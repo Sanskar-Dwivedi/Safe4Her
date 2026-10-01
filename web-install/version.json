@@ -1,15 +1,19 @@
 {
-  "versionCode": 11,
-  "versionName": "1.1.0-beta.1",
+  "beta": {
+    "url": "https://udjoctuzlbmtdhhujjqr.supabase.co",
+    "key": "sb_publishable_1G6X_hBx9qrw5TaBKK7LXA_8xpd1yMJ"
+  },
+  "versionCode": 12,
+  "versionName": "1.1.0-beta.2",
   "apk": "Security4Her-phone.apk",
-  "sha256": "d9e2919f6fcf9f8c2527cdbed096b6c793930293d166982522028e9f7d16c517",
-  "bytes": 10950455,
-  "notes": "Security4Her Beta: choose to share anonymous test data, and report problems from Me \u2192 Beta testing.",
+  "sha256": "526e5192efbc92369ddf0d95e323e1beabe57a14c3ef397828f25ff933391d7f",
+  "bytes": 10950643,
+  "notes": "Beta 2: test data now reaches the team's private database.",
   "watch": {
-    "versionCode": 9,
-    "versionName": "1.1.0-beta.1",
+    "versionCode": 10,
+    "versionName": "1.1.0-beta.2",
     "apk": "Security4Her-watch.apk",
-    "sha256": "86201fea3950ba132e868e0dd54458d17531ecfb7da08e1e0181071b642110a1",
-    "bytes": 53136556
+    "sha256": "1f6a8c3b775bbd6213de42ae0bf7c852ce11d72e901e47b31876eefb55595cf3",
+    "bytes": 53136408
   }
 }

@@ -300,7 +300,9 @@ object Beta {
     /** The test server's address comes from the website's version.json, so it can be set without a new app build. */
     private fun config(): Pair<String, String>? {
         val p = Store.prefs(app)
-        val fresh = System.currentTimeMillis() - p.getLong("beta_cfg_at", 0) < 6 * 3600_000L
+        // Re-check every 6 h once configured; every 15 min while the test server isn't set up yet.
+        val every = if (p.getString("beta_url", "").isNullOrBlank()) 15 * 60_000L else 6 * 3600_000L
+        val fresh = System.currentTimeMillis() - p.getLong("beta_cfg_at", 0) < every
         if (!fresh) runCatching {
             val c = (URL(BuildConfig.UPDATE_URL + "?b=" + System.currentTimeMillis()).openConnection() as HttpURLConnection)
                 .apply { connectTimeout = 10_000; readTimeout = 10_000; useCaches = false }
