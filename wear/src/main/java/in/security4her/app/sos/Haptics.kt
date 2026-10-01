@@ -26,4 +26,8 @@ object Haptics {
     fun failure(context: Context) {
         vibrator(context)?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 1000), -1))
     }
+
+    fun fakeCallAccepted(context: Context) {
+        vibrator(context)?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 120, 90, 120), -1))
+    }
 }

@@ -27,6 +27,8 @@ Note pass or fail and the time taken for each.
 | 6 | SOS active, PIN set | Tap I'm safe and enter the PIN | SOS ends; contacts get an "I'm safe" text; the live page says she is safe |
 | 7 | Safe Journey running | Ignore the check-in | SOS starts with the reason in the text |
 | 8 | Watch linked | Hold SOS on the watch | The phone runs the SOS; the watch shows the delivery status |
+| 8a | Watch linked, Fake call twist on, no SOS active | Twist wrist out and back twice | The phone opens the ringing fake-call screen when allowed, or posts an incoming-call alert that can be tapped. The watch confirms the phone accepted the request. Check both unlocked and locked states. |
+| 8b | As #8a, then disconnect the phone | Twist wrist out and back twice | No call appears; the watch reports that the phone is not reachable. Ordinary wrist movement must not trigger a call. |
 | 9 | Watch, Voice SOS on | Say "HELP! HELP! HELP!" | Watch vibrates and counts down 5 s, then the SOS runs |
 | 10 | Watch, Voice SOS on | Normal conversation, TV, "help desk", "hello hello hello" for 5 minutes | No countdown |
 | 11 | Watch, Voice SOS on | Restart the watch | A *Tap to resume* notification; one tap and it listens again |

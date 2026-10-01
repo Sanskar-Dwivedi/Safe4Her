@@ -71,7 +71,7 @@ private fun Context.vibrator(): Vibrator =
 private enum class CallPhase { Setup, Waiting, Ringing, Talking }
 
 @Composable
-fun FakeCallScreen(onClose: () -> Unit) {
+fun FakeCallScreen(onClose: () -> Unit, startImmediately: Boolean = false) {
     val ctx = LocalContext.current
     val prefs = remember { Store.prefs(ctx) }
     var caller by remember { mutableStateOf(prefs.getString("fake_caller", "Mom")!!) }
@@ -85,6 +85,10 @@ fun FakeCallScreen(onClose: () -> Unit) {
         AppLog.info("Fake call", "Incoming call from ${caller.trim()} in $after s")
         waitLeft = after
         phase = if (after == 0) CallPhase.Ringing else CallPhase.Waiting
+    }
+
+    LaunchedEffect(startImmediately) {
+        if (startImmediately) ring(0)
     }
 
     LaunchedEffect(phase) {

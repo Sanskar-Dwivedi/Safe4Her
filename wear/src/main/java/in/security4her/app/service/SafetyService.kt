@@ -20,8 +20,10 @@ import `in`.security4her.app.data.ActiveIncident
 import `in`.security4her.app.data.WatchStore
 import `in`.security4her.app.sos.Locator
 import `in`.security4her.app.sos.ShakeDetector
+import `in`.security4her.app.sos.FakeCallController
 import `in`.security4her.app.sos.SosController
 import `in`.security4her.app.sos.WatchRecorder
+import `in`.security4her.app.sos.WristTwistDetector
 import `in`.security4her.app.voice.VoiceListener
 import `in`.security4her.app.voice.VoiceSos
 import kotlinx.coroutines.CoroutineScope
@@ -34,17 +36,19 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Foreground service (type location + microphone) that runs while Safety Mode or Voice SOS is on, or an
- * incident is live:
+ * Foreground service (type location + microphone) that runs while Safety Mode, Voice SOS, or the opt-in
+ * fake-call twist is on, or an incident is live:
  * - Safety Mode: shake detection → the same 5 s countdown as the gesture launch.
  * - Voice SOS: listens for "HELP HELP HELP" → the same countdown. Pauses during a countdown or SOS (the SOS
  *   recorder needs the microphone) and while the practice screen is open.
+ * - Fake-call twist: watches for two deliberate wrist twists and asks the phone to show its fake call.
  * - Live incident: location heartbeat every 30 s + re-delivery to phone/server until acknowledged.
  * Stops itself when none applies.
  */
 class SafetyService : LifecycleService() {
 
     private var shake: ShakeDetector? = null
+    private var twist: WristTwistDetector? = null
     private var voice: VoiceListener? = null
     /** Whether we hold the microphone type. Android only grants it while the app is on screen. */
     private var micClaimed = false
@@ -52,7 +56,7 @@ class SafetyService : LifecycleService() {
     private var lastState: State? = null
 
     private data class State(
-        val safety: Boolean, val voice: Boolean, val practicing: Boolean,
+        val safety: Boolean, val voice: Boolean, val fakeCallTwist: Boolean, val practicing: Boolean,
         val incident: ActiveIncident?, val countdown: SosController.Countdown?,
     )
     private var heartbeatJob: Job? = null
@@ -62,13 +66,17 @@ class SafetyService : LifecycleService() {
         running = true
         val store = WatchStore.get(this)
         lifecycleScope.launch {
-            combine(store.safetyMode, store.voiceSos, VoiceSos.practicing, store.incident, SosController.countdown) {
-                    safety, voiceOn, practicing, incident, countdown ->
-                State(safety, voiceOn, practicing, incident?.takeIf { !it.ended }, countdown)
+            val modes = combine(store.safetyMode, store.voiceSos, store.fakeCallTwist) { safety, voiceOn, fakeCallTwist ->
+                Triple(safety, voiceOn, fakeCallTwist)
+            }
+            combine(modes, VoiceSos.practicing, store.incident, SosController.countdown) {
+                    mode, practicing, incident, countdown ->
+                State(mode.first, mode.second, mode.third, practicing, incident?.takeIf { !it.ended }, countdown)
             }.distinctUntilChanged().collect { state ->
                 lastState = state
-                val (safety, voiceOn, practicing, incident, countdown) = state
+                val (safety, voiceOn, fakeCallTwist, practicing, incident, countdown) = state
                 setShake(safety)
+                setTwist(fakeCallTwist && incident == null && countdown == null)
                 // Voice first: it must let go of the microphone before the SOS recorder starts.
                 setVoice(voiceOn && !practicing && incident == null && countdown == null, voiceOn)
                 setHeartbeat(incident != null)
@@ -79,11 +87,11 @@ class SafetyService : LifecycleService() {
                 } else if (incident == null && WatchRecorder.recording) {
                     WatchRecorder.stop(this@SafetyService)
                 }
-                if (!safety && !voiceOn && incident == null && countdown == null) {
+                if (!safety && !voiceOn && !fakeCallTwist && incident == null && countdown == null) {
                     stopSelf()
                 } else if (foreground) {
                     // Only while really running: a refused start must not leave a "listening" notification behind.
-                    notify(buildNotification(safety, incident, countdown, voiceOn, listening = voice != null))
+                    notify(buildNotification(safety, incident, countdown, voiceOn, fakeCallTwist, listening = voice != null))
                 }
             }
         }
@@ -105,7 +113,8 @@ class SafetyService : LifecycleService() {
             if (voice?.isRunning == false) { voice = null }
             lastState?.let { s ->
                 setVoice(s.voice && !s.practicing && s.incident == null && s.countdown == null, s.voice)
-                if (s.safety || s.voice || s.incident != null) notify(buildNotification(s.safety, s.incident, s.countdown, s.voice, listening = voice != null))
+                if (s.safety || s.voice || s.fakeCallTwist || s.incident != null)
+                    notify(buildNotification(s.safety, s.incident, s.countdown, s.voice, s.fakeCallTwist, listening = voice != null))
             }
         }
         // If Android stops us for memory, come back (and ask for a tap if the microphone can't be reclaimed).
@@ -120,6 +129,8 @@ class SafetyService : LifecycleService() {
         voice = null
         shake?.stop()
         shake = null
+        twist?.stop()
+        twist = null
         running = false
         super.onDestroy()
     }
@@ -156,6 +167,16 @@ class SafetyService : LifecycleService() {
         } else if (!on && shake != null) {
             shake?.stop()
             shake = null
+        }
+    }
+
+    private fun setTwist(on: Boolean) {
+        if (on && twist == null) {
+            val detector = WristTwistDetector(this) { FakeCallController.request(this) }
+            if (detector.start()) twist = detector else Log.w(TAG, "wrist twist needs a gyroscope and accelerometer")
+        } else if (!on && twist != null) {
+            twist?.stop()
+            twist = null
         }
     }
 
@@ -205,6 +226,7 @@ class SafetyService : LifecycleService() {
         incident: ActiveIncident?,
         countdown: SosController.Countdown?,
         voiceOn: Boolean = false,
+        fakeCallTwist: Boolean = false,
         listening: Boolean = true,
     ): Notification {
         val open = PendingIntent.getActivity(
@@ -218,9 +240,13 @@ class SafetyService : LifecycleService() {
             incident != null -> "SOS active — NOT SENT yet, retrying"
             voiceOn && !listening && VoiceSos.practicing.value -> "Practising Voice SOS"
             voiceOn && !listening -> "Voice SOS paused — tap to resume"
+            safety && voiceOn && fakeCallTwist -> "Shake or say HELP for SOS; twist twice for fake call"
+            safety && fakeCallTwist -> "Shake for SOS; twist twice for fake call"
+            voiceOn && fakeCallTwist -> "Say HELP for SOS; twist twice for fake call"
             safety && voiceOn -> "Shake 3 times, or say HELP HELP HELP, for SOS"
             safety -> "Safety Mode on — shake 3 times for SOS"
             voiceOn -> "Voice SOS on — say HELP HELP HELP"
+            fakeCallTwist -> "Twist wrist out and back twice for fake call"
             else -> "Security4Her"
         }
         val builder = NotificationCompat.Builder(this, WatchApp.CHANNEL_SAFETY)

@@ -45,8 +45,10 @@ import `in`.security4her.app.data.DeviceLink
 import `in`.security4her.app.data.PhoneStatus
 import `in`.security4her.app.data.WatchStore
 import `in`.security4her.app.sos.PhoneLink
+import `in`.security4her.app.sos.FakeCallController
 import `in`.security4her.app.sos.SosController
 import `in`.security4her.app.sos.WatchUpdater
+import `in`.security4her.app.sos.WristTwistDetector
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -59,6 +61,7 @@ interface WatchActions {
     fun dismiss()
     fun setSafetyMode(on: Boolean)
     fun setVoiceSos(on: Boolean)
+    fun setFakeCallTwist(on: Boolean)
 }
 
 private object C {
@@ -81,6 +84,8 @@ fun WatchUi(store: WatchStore, actions: WatchActions) {
     val link by store.link.collectAsStateWithLifecycle(initialValue = null)
     val safety by store.safetyMode.collectAsStateWithLifecycle(initialValue = false)
     val voiceOn by store.voiceSos.collectAsStateWithLifecycle(initialValue = false)
+    val fakeCallTwist by store.fakeCallTwist.collectAsStateWithLifecycle(initialValue = false)
+    val fakeCallStatus by FakeCallController.status.collectAsStateWithLifecycle()
     var showVoice by remember { mutableStateOf(false) }
     val betaAgreed by `in`.security4her.app.beta.WatchBeta.agreed.collectAsStateWithLifecycle()
     var showBeta by remember { mutableStateOf(false) }
@@ -104,7 +109,8 @@ fun WatchUi(store: WatchStore, actions: WatchActions) {
                 !setupDone -> SetupScreen(actions)
                 betaAgreed == null || showBeta -> BetaScreen { showBeta = false }
                 showVoice -> VoiceSosScreen(voiceOn, onToggle = { actions.setVoiceSos(it) }, onBack = { showVoice = false })
-                else -> HomeScreen(link, phoneReachable, safety, voiceOn, actions, onVoice = { showVoice = true }, onBeta = { showBeta = true })
+                else -> HomeScreen(link, phoneReachable, safety, voiceOn, fakeCallTwist, fakeCallStatus, actions,
+                    onVoice = { showVoice = true }, onBeta = { showBeta = true })
             }
         }
     }
@@ -202,7 +208,8 @@ private fun SetupScreen(actions: WatchActions) {
 
 @Composable
 private fun HomeScreen(
-    link: DeviceLink?, phoneReachable: Boolean?, safety: Boolean, voiceOn: Boolean, actions: WatchActions, onVoice: () -> Unit,
+    link: DeviceLink?, phoneReachable: Boolean?, safety: Boolean, voiceOn: Boolean,
+    fakeCallTwist: Boolean, fakeCallStatus: String?, actions: WatchActions, onVoice: () -> Unit,
     onBeta: () -> Unit = {},
 ) {
     Screen {
@@ -216,6 +223,14 @@ private fun HomeScreen(
             actions.setVoiceSos(!voiceOn)
         }
         VoiceHint(voiceOn, onVoice)
+        if (WristTwistDetector.available(LocalContext.current)) {
+            PillButton(if (fakeCallTwist) "Fake call twist: ON" else "Fake call twist: OFF",
+                if (fakeCallTwist) C.purple else Color(0xFF333333)) { actions.setFakeCallTwist(!fakeCallTwist) }
+            if (fakeCallTwist) Label("Twist wrist out and back twice to ring your phone", color = C.grey, size = 11.sp)
+        } else {
+            Label("Fake call twist needs a gyroscope on this watch", color = C.grey, size = 11.sp)
+        }
+        if (fakeCallStatus != null) Label(fakeCallStatus, color = if (fakeCallStatus == "Phone alert ready") C.green else C.coral, size = 11.sp)
         StatusRow(
             "Phone",
             when (phoneReachable) { true -> "connected"; false -> "not reachable"; null -> "checking…" },

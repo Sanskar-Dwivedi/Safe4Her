@@ -7,22 +7,32 @@ import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
 import `in`.security4her.app.data.DeviceLink
+import `in`.security4her.app.data.FakeCallAck
 import `in`.security4her.app.data.IncidentRef
 import `in`.security4her.app.data.Paths
 import `in`.security4her.app.data.PhoneStatus
 import `in`.security4her.app.data.S4hJson
 import `in`.security4her.app.data.WatchStore
 import `in`.security4her.app.sos.StatusSync
+import `in`.security4her.app.sos.FakeCallController
 import kotlinx.coroutines.runBlocking
 
 /** Receives phone → watch traffic (CONTRACT.md §2). Callbacks run on a background thread. */
 class WatchListenerService : WearableListenerService() {
 
     override fun onMessageReceived(event: MessageEvent) {
-        if (event.path != Paths.SOS_ACK) return
-        val ref = decode(String(event.data, Charsets.UTF_8)) { S4hJson.decodeFromString(IncidentRef.serializer(), it) } ?: return
-        runBlocking {
-            WatchStore.get(this@WatchListenerService).updateIncident(ref.incidentId) { it.copy(phoneAck = true) }
+        val json = String(event.data, Charsets.UTF_8)
+        when (event.path) {
+            Paths.SOS_ACK -> {
+                val ref = decode(json) { S4hJson.decodeFromString(IncidentRef.serializer(), it) } ?: return
+                runBlocking {
+                    WatchStore.get(this@WatchListenerService).updateIncident(ref.incidentId) { it.copy(phoneAck = true) }
+                }
+            }
+            Paths.FAKE_CALL_ACK -> {
+                val ack = decode(json) { S4hJson.decodeFromString(FakeCallAck.serializer(), it) } ?: return
+                FakeCallController.acknowledge(ack.requestId, ack.accepted)
+            }
         }
     }
 

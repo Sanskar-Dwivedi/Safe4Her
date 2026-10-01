@@ -11,6 +11,8 @@ object Paths {
     const val SOS_CANCEL = "/s4h/sos/cancel"
     const val SOS_ACK = "/s4h/sos/ack"
     const val LINK_REQUEST = "/s4h/link/request"
+    const val FAKE_CALL_START = "/s4h/fake-call/start"
+    const val FAKE_CALL_ACK = "/s4h/fake-call/ack"
     const val STATUS = "/s4h/status"
     const val DEVICE = "/s4h/device"
     const val DATA_KEY_JSON = "json"
@@ -46,6 +48,12 @@ data class SosLocationMsg(
 
 @Serializable
 data class IncidentRef(val incidentId: String)
+
+@Serializable
+data class FakeCallRequest(val requestId: String, val createdAt: Long)
+
+@Serializable
+data class FakeCallAck(val requestId: String, val accepted: Boolean)
 
 @Serializable
 data class PhoneStatus(

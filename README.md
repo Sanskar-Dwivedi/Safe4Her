@@ -58,7 +58,7 @@ without mobile data, and keeps a record that holds up afterwards.
 2. **Quick actions** share her live location, start a Safe Journey, call 112 or find the nearest safe place.
 3. **Not an emergency yet?** A **fake call** rings in seconds so she can step away, with a voice on the line when she answers. The **siren** draws attention instantly.
 
-On the watch, the same SOS starts from a button, a shake, or *"HELP HELP HELP"*.
+On the watch, the same SOS starts from a button, a shake, or *"HELP HELP HELP"*. An optional double wrist twist asks a reachable phone to start the fake call.
 
 </td>
 </tr>

@@ -69,7 +69,9 @@ Times are epoch milliseconds. Lat/lng are doubles and accuracy is a float in met
 | watch → phone | Message | `/s4h/sos/location` | `{"incidentId","lat","lng","accuracyM","fixAt"}` |
 | watch → phone | Message | `/s4h/sos/cancel` | `{"incidentId"}`, sent when the user cancels or says "I'm safe" on the watch; the phone ends the incident as `resolved` |
 | watch → phone | Message | `/s4h/link/request` | `{}`: asks the phone to (re)write `/s4h/device` |
+| watch → phone | Message | `/s4h/fake-call/start` | `{"requestId":"uuid","createdAt":1727}`: request an immediate fake call; stale requests are ignored |
 | phone → watch | Message | `/s4h/sos/ack` | `{"incidentId"}`, sent **immediately** on receiving start, before any SMS/network work |
+| phone → watch | Message | `/s4h/fake-call/ack` | `{"requestId":"uuid","accepted":true}`: the phone opened the call or posted its notification; this does not mean the call screen is visible |
 | phone → watch | DataItem | `/s4h/status` | key `json` → `{"incidentId","state":"active"\|"cancelled"\|"resolved","smsSent":2,"smsFailed":0,"serverAccepted":true,"callPlaced":false,"shareUrl":"https://…","updatedAt":1727}` |
 | phone → watch | DataItem | `/s4h/device` | key `json` → `{"userId","displayName","deviceToken","testMode":true}`, written after login + `register_watch()` and whenever Test Mode changes |
 

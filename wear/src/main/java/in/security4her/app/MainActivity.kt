@@ -13,6 +13,7 @@ import `in`.security4her.app.service.SafetyService
 import `in`.security4her.app.sos.Locator
 import `in`.security4her.app.sos.PhoneLink
 import `in`.security4her.app.sos.SosController
+import `in`.security4her.app.sos.WristTwistDetector
 import `in`.security4her.app.ui.WatchActions
 import `in`.security4her.app.ui.WatchUi
 import kotlinx.coroutines.flow.first
@@ -79,6 +80,14 @@ class MainActivity : ComponentActivity() {
                 if (on) SafetyService.send(this@MainActivity, SafetyService.ACTION_ENSURE)
             }
         }
+
+        override fun setFakeCallTwist(on: Boolean) {
+            if (on && !WristTwistDetector.available(this@MainActivity)) return
+            lifecycleScope.launch {
+                store.setFakeCallTwist(on)
+                if (on) SafetyService.send(this@MainActivity, SafetyService.ACTION_ENSURE)
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -97,8 +106,9 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         lifecycleScope.launch {
             PhoneLink.syncFromPhone(this@MainActivity)
-            // Re-arm protection (e.g. after a restart): the microphone can only be claimed while the app is visible.
-            if (store.voiceSos.first() || store.safetyModeNow()) SafetyService.send(this@MainActivity, SafetyService.ACTION_ENSURE)
+            // Re-arm enabled watch features (e.g. after a restart); the microphone needs the app visible.
+            if (store.voiceSos.first() || store.safetyModeNow() || store.fakeCallTwistNow())
+                SafetyService.send(this@MainActivity, SafetyService.ACTION_ENSURE)
         }
         // Just look: the background job installs at a moment that won't interrupt her.
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { `in`.security4her.app.sos.WatchUpdater.run(this@MainActivity, install = false) }

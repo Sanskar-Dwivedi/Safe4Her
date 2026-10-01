@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * Brings protection back after the watch restarts or the app updates. Safety Mode and Voice SOS stay switched on in
+ * Brings protection back after the watch restarts or the app updates. Safety Mode, Voice SOS, and fake-call twist stay switched on in
  * WatchStore, but Android stops the service; this restarts it. Android doesn't let an app open the microphone from
  * the background, so when Voice SOS can't come back by itself the watch shows one notification: tap to resume.
  */
@@ -43,13 +43,15 @@ class Rearm : BroadcastReceiver() {
 
         suspend fun armed(ctx: Context): Boolean {
             val store = WatchStore.get(ctx)
-            return store.safetyModeNow() || store.voiceSos.first() || store.incidentNow()?.ended == false
+            return store.safetyModeNow() || store.voiceSos.first() || store.fakeCallTwistNow() || store.incidentNow()?.ended == false
         }
 
         /** One tap opens the app, which re-arms everything while it's on screen. */
         suspend fun askToResume(ctx: Context) {
             val store = WatchStore.get(ctx)
             val what = when {
+                store.fakeCallTwistNow() && (store.voiceSos.first() || store.safetyModeNow()) -> "Watch protection is"
+                store.fakeCallTwistNow() -> "Fake call wrist twist is"
                 store.voiceSos.first() && store.safetyModeNow() -> "Voice SOS and Safety Mode are"
                 store.voiceSos.first() -> "Voice SOS is"
                 else -> "Safety Mode is"
