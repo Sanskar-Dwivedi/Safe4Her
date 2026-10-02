@@ -296,12 +296,15 @@ object SosEngine {
         }
     }
 
-    private fun sendSms(phone: String, body: String, incidentId: String) {
-        val err = Sms.send(app, phone, body, incidentId)
+    /** [update]: a repeat location text, skipped rather than risk Android holding the texts. Returns true if sent. */
+    private fun sendSms(phone: String, body: String, incidentId: String, update: Boolean = false): Boolean {
+        val err = Sms.send(app, phone, body, incidentId, budgeted = update)
+        if (err == Sms.OVER_BUDGET) return false
         if (err != null) {
             setRecipient(phone, "failed", err)
             log("Text to $phone failed: $err", "fail")
         }
+        return err == null
     }
 
     fun onSmsResult(id: String, phone: String, action: String, ok: Boolean, code: Int) {
@@ -330,10 +333,12 @@ object SosEngine {
         val to = inc.recipients.filter { it.state != "failed" }
         if (to.isEmpty()) return
         val time = SimpleDateFormat("HH:mm", Locale.US).format(Date(inc.fixAt ?: System.currentTimeMillis()))
-        val body = "Update from ${userName()}: ${mapsLink(inc.lat, inc.lng)} (accuracy ${inc.acc?.toInt() ?: "?"}m, $time)" +
-            (inc.liveUrl?.let { " Live: $it" } ?: "") + if (inc.test) " [TEST]" else ""
-        to.forEach { sendSms(it.phone, body, inc.id) }
-        log("Location update texted to ${to.size}", "ok")
+        // One SMS part: they already have the live link from the first text.
+        val body = "Update from ${userName()}: ${mapsLink(inc.lat, inc.lng)} (${inc.acc?.toInt() ?: "?"}m, $time)" + if (inc.test) " [TEST]" else ""
+        // Contacts before the police/test number; updates stop before Android's SMS limit would hold the texts.
+        val sent = to.sortedBy { it.police }.count { sendSms(it.phone, body, inc.id, update = true) }
+        if (sent > 0) log("Location update texted to $sent", "ok")
+        if (sent < to.size) log("Text updates paused for ${to.size - sent} to stay under Android's texting limit. The live link keeps updating.", "fail")
     }
 
     private fun hasFreshFix(): Boolean {
@@ -410,7 +415,7 @@ object SosEngine {
             false
         }
         update { it.copy(call = if (ok) "placed" else "failed") }
-        log(if (ok) "Call placed to $number" else "Couldn't place the call. Tap Call 112.", if (ok) "ok" else "fail")
+        log(if (ok) "Call placed to $number" else "Couldn't place the call. Tap Call 100.", if (ok) "ok" else "fail")
         SosService.refresh(app)
     }
 
@@ -698,7 +703,7 @@ class SosService : androidx.lifecycle.LifecycleService() {
                 ctx, 0, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE,
             )
             val dial112 = PendingIntent.getActivity(
-                ctx, 1, Intent(Intent.ACTION_DIAL, Uri.parse("tel:112")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE,
+                ctx, 1, Intent(Intent.ACTION_DIAL, Uri.parse("tel:100")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE,
             )
             val b = NotificationCompat.Builder(ctx, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notif_security4her)
@@ -714,7 +719,7 @@ class SosService : androidx.lifecycle.LifecycleService() {
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
                 .setContentIntent(open)
-                .addAction(0, "Call 112", dial112)
+                .addAction(0, "Call 100", dial112)
             if (inc?.call == "waiting" && inc.callAt != null) {
                 val cancel = PendingIntent.getBroadcast(
                     ctx, 2, Intent(ctx, SosReceiver::class.java).setAction(SosReceiver.CANCEL_CALL), PendingIntent.FLAG_IMMUTABLE,
@@ -768,7 +773,27 @@ object Sms {
     }
 
     /** Queues the text; returns null when handed to the radio, else a reason it couldn't be. */
-    fun send(ctx: Context, phone: String, body: String, id: String): String? {
+    const val OVER_BUDGET = "over the texting limit"
+
+    /**
+     * Android holds an app's texts behind an "allow?" dialog once it sends about 30 in 30 minutes, which no one can
+     * answer mid-emergency. First alerts always go; repeat updates ([budgeted]) only while the last 30 minutes stay
+     * under 26 SMS parts.
+     */
+    private val sentParts = ArrayDeque<Pair<Long, Int>>()
+    private const val WINDOW_MS = 30 * 60_000L
+    private const val BUDGET = 26
+
+    @Synchronized
+    private fun allow(parts: Int, budgeted: Boolean): Boolean {
+        val now = System.currentTimeMillis()
+        while (sentParts.isNotEmpty() && now - sentParts.first().first > WINDOW_MS) sentParts.removeFirst()
+        if (budgeted && sentParts.sumOf { it.second } + parts > BUDGET) return false
+        sentParts.addLast(now to parts)
+        return true
+    }
+
+    fun send(ctx: Context, phone: String, body: String, id: String, budgeted: Boolean = false): String? {
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
             return "SMS permission is off"
         }
@@ -777,6 +802,7 @@ object Sms {
         return try {
             val sms = manager(ctx)
             val parts = sms.divideMessage(body)
+            if (!allow(parts.size, budgeted)) return OVER_BUDGET
             fun pi(action: String, i: Int) = PendingIntent.getBroadcast(
                 ctx, (to + action + id + i).hashCode(),
                 Intent(ctx, SosReceiver::class.java).setAction(action).putExtra("phone", phone).putExtra("id", id),

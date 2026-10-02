@@ -130,10 +130,13 @@ data class Settings(
     companion object {
         fun load(ctx: Context): Settings = with(Store.prefs(ctx)) {
             Pin.migrate(ctx)
+            if (!getBoolean("police_100", false)) {
+                edit().apply { if (getString("police_number", null) == "112") putString("police_number", "100") }.putBoolean("police_100", true).apply()
+            }
             Settings(
                 testMode = getBoolean("test_mode", true), // on until she turns it off: police texts and the auto-call go to her test number
                 demoNumber = getString("demo_number", "")!!,
-                policeNumber = getString("police_number", "112")!!,
+                policeNumber = getString("police_number", "100")!!,
                 autoCallNumber = getString("auto_call_number", "")!!,
                 countdownSec = getInt("countdown_sec", 10),
                 pin = "", // only a salted hash is kept (Pin); this field carries a NEW PIN to save

@@ -731,7 +731,6 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
     var showBetaConsent by rememberSaveable { mutableStateOf(false) }
     var showBetaReport by rememberSaveable { mutableStateOf(false) }
     var showFakeCall by rememberSaveable { mutableStateOf(false) }
-    var showSiren by rememberSaveable { mutableStateOf(false) }
     var showGuide by rememberSaveable { mutableStateOf(!Guide.seen(ctx)) } // opens by itself once, after sign-up
     // Back after reinstalling to unlock texting: bring the SMS card straight up
     LaunchedEffect(Unit) { if (SmsUnlock.pending(ctx)) sheet = "sms" }
@@ -756,7 +755,6 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
         showBetaConsent -> { `in`.security4her.app.beta.BetaConsentScreen(onDone = { showBetaConsent = false }, editing = true); return }
         showBetaReport -> { `in`.security4her.app.beta.BetaReportScreen(onClose = { showBetaReport = false }); return }
         showFakeCall -> { FakeCallScreen(onClose = { showFakeCall = false }); return }
-        showSiren -> { SirenScreen(onClose = { showSiren = false }); return }
         showGuide -> {
             SetupGuideScreen(
                 contacts, contactsError, onContactsChanged = { reload++ },
@@ -782,7 +780,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
                         Tab.Home -> HomeScreen(
                             profile, contacts, settings, facts, watch, onTab = { tab = it }, onJourney = { showJourney = true },
                             onStep = ::open, onChat = { showChat = true }, onFixSms = { sheet = "sms" },
-                            onFakeCall = { showFakeCall = true }, onSiren = { showSiren = true }, onGuide = { showGuide = true },
+                            onFakeCall = { showFakeCall = true }, onGuide = { showGuide = true },
                         )
                         Tab.Map -> SafeMapScreen()
                         Tab.People -> ContactsScreen(contacts, contactsError) { reload++ }
@@ -988,7 +986,7 @@ private fun tipFor(s: SetupStep) = when (s.key) {
 private fun HomeScreen(
     profile: Profile, contacts: List<Contact>?, settings: Settings, facts: ReadyFacts, watch: Boolean,
     onTab: (Tab) -> Unit, onJourney: () -> Unit, onStep: (SetupStep) -> Unit, onChat: () -> Unit, onFixSms: () -> Unit,
-    onFakeCall: () -> Unit, onSiren: () -> Unit, onGuide: () -> Unit,
+    onFakeCall: () -> Unit, onGuide: () -> Unit,
 ) {
     val ctx = LocalContext.current
     val tick by Progress.tick.collectAsStateWithLifecycle()
@@ -1111,15 +1109,14 @@ private fun HomeScreen(
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            QuickTile(Modifier.weight(1f), Icons.Filled.Call, "Call 112", "Police, fire, ambulance", SosRed) {
-                ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:112")))
+            QuickTile(Modifier.weight(1f), Icons.Filled.Call, "Call 100", "Police", SosRed) {
+                ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:100")))
             }
             QuickTile(Modifier.weight(1f), ImageVector.vectorResource(R.drawable.ic_shield), "Safe places", "Nearby and open", Lilac) { onTab(Tab.Map) }
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             QuickTile(Modifier.weight(1f), Icons.Filled.Phone, "Fake call", "A call to step away", Mint, onClick = onFakeCall)
-            QuickTile(Modifier.weight(1f), Icons.Filled.Notifications, "Siren", "Loud alarm and flash", SosRed, onClick = onSiren)
         }
         Spacer(Modifier.height(16.dp))
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Surface1).padding(18.dp)) {
@@ -1671,7 +1668,7 @@ private fun DuringSosEditor(settings: Settings, onSave: (Settings) -> Unit) {
     val pinCtx = LocalContext.current
     val pinSet = remember { `in`.security4her.app.core.Pin.isSet(pinCtx) }
 
-    val policeErr = if (digits(police) < 3) "Enter the number to text, for example 112." else null
+    val policeErr = if (digits(police) < 3) "Enter the number to text, for example 100." else null
     val callErr = if (call.isNotBlank() && digits(call) < 3) "Enter a full phone number, or leave it blank." else null
     val secsN = secs.toIntOrNull()
     val secsErr = if (secsN == null || secsN !in 3..60) "Choose between 3 and 60 seconds." else null
@@ -1875,12 +1872,12 @@ private fun ActiveSosScreen(inc: Incident) {
                         }
                     }
                     Button(
-                        onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:112"))) },
+                        onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:100"))) },
                         colors = ButtonDefaults.buttonColors(containerColor = SosRed, contentColor = Color.White),
                     ) {
                         Icon(Icons.Filled.Call, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Call 112")
+                        Text("Call 100")
                     }
                 }
             }

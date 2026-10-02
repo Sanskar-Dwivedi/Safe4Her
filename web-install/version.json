@@ -3,17 +3,17 @@
     "url": "https://udjoctuzlbmtdhhujjqr.supabase.co",
     "key": "sb_publishable_1G6X_hBx9qrw5TaBKK7LXA_8xpd1yMJ"
   },
-  "versionCode": 17,
-  "versionName": "1.1.0-beta.7",
+  "versionCode": 18,
+  "versionName": "1.1.0-beta.8",
   "apk": "Security4Her-phone.apk",
-  "sha256": "171956ae6af45e802b021aafcc4a2725800959fbd9f7eb66cd3453c0f4d6c7fb",
-  "bytes": 11013162,
-  "notes": "Security fixes, evidence that survives the app being deleted, a faster map.",
+  "sha256": "63fe776a2742d5e95f343ca710deb22eee9eb74b903ea3036c4fc1aa7508ee89",
+  "bytes": 11025450,
+  "notes": "Evidence opens only in the app, safer SOS texting, police number 100.",
   "watch": {
     "versionCode": 13,
     "versionName": "1.1.0-beta.7",
     "apk": "Security4Her-watch.apk",
-    "sha256": "0a292f27a54add032f4ffa709a240e8e607b0b49900497819910b8c641b78e48",
+    "sha256": "ee90d71433bb8d4a69dc80e3aefca50abff5b5e988e0fe51af45e05863ee95ae",
     "bytes": 53854126
   }
 }

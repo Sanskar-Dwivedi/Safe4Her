@@ -142,8 +142,10 @@ third-party trackers in either app. During the beta, testers can choose to share
 <ul>
 <li><strong>Evidence</strong>: audio and video recorded during an SOS stay on the phone, fingerprinted with SHA-256 and
   locked against deletion in the app for 24 hours. A copy is saved in Downloads/Security4Her evidence/ so it
-  survives the app being deleted; after 24 hours only that copy is kept. Other apps allowed to read your media can
-  see those files. They leave the phone only if she exports them.</li>
+  survives the app being deleted; after 24 hours only that copy is kept. That copy is encrypted (AES-256-GCM, a new
+  key for every hour of every SOS): galleries, file managers and other apps see only opaque .s4he files. It opens in
+  Security4Her on this phone, or after a reinstall with her recovery code, which never leaves the phone unless she
+  writes it down. Anyone holding both the files and the code can open them. They leave the phone only if she exports them.</li>
 <li><strong>Voice SOS</strong>: speech is recognised entirely on the watch. Nothing is recorded, stored or sent; the app
   only reacts to "HELP HELP HELP".</li>
 <li><strong>Knock and shake detection</strong>: motion data is processed on the device and discarded.</li>

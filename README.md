@@ -55,8 +55,8 @@ without mobile data, and keeps a record that holds up afterwards.
 **The home screen is built for the worst moment.** SOS is the biggest thing on it, and every other action is one tap away.
 
 1. **Hold SOS** for 1.5 s. Texts, the live map, evidence and the call all start together.
-2. **Quick actions** share her live location, start a Safe Journey, call 112 or find the nearest safe place.
-3. **Not an emergency yet?** A **fake call** rings in seconds so she can step away, with a voice on the line when she answers. The **siren** draws attention instantly.
+2. **Quick actions** share her live location, start a Safe Journey, call the police (100) or find the nearest safe place.
+3. **Not an emergency yet?** A **fake call** rings in seconds so she can step away, with a voice on the line when she answers.
 
 On the watch, the same SOS starts from a button, a dedicated SOS shortcut, a shake, or *"HELP HELP HELP"*.
 Opening the watch app starts a cancellable five-second SOS countdown, including launches from Knock Knock.
@@ -98,7 +98,6 @@ with a safe practice screen and adjustable strength. See [watch setup](docs/WATC
 
 ### 🛡️ Before it becomes an emergency
 - **Fake call**: a realistic incoming call to step away, with a voice on the line
-- **Siren**: a loud alarm, even on silent, with a flashing screen and torch
 - **Safe Journey**: real-route arrival estimates and check-ins if she's late, stopped or off-route
 - **Community safety map**: hospitals, police, places women recommend, and red zones from reports and repeated SOS alerts
 
@@ -157,7 +156,6 @@ sequenceDiagram
 <td align="center"><img src="docs/screenshots/safety-map.png" width="190" alt="Safety map"><br><sub><b>Safety map</b><br>Safe places and red zones</sub></td>
 <td align="center"><img src="docs/screenshots/pocket-countdown.png" width="190" alt="Pocket SOS countdown"><br><sub><b>Pocket SOS</b><br>Countdown over the lock screen</sub></td>
 <td align="center"><img src="docs/screenshots/knock-practice.png" width="190" alt="Knock practice"><br><sub><b>Knock tuning</b><br>Learns her knock</sub></td>
-<td align="center"><img src="docs/screenshots/siren.png" width="190" alt="Siren"><br><sub><b>Siren</b><br>Loud, flashing, torch strobe</sub></td>
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/watch-install.png" width="190" alt="Install on the watch"><br><sub><b>Watch install</b><br>From the phone, over Wi-Fi</sub></td>
@@ -282,7 +280,7 @@ and [privacy notice](PRIVACY.md#beta-test-data).
 
 ## ⚠️ Known limitations
 
-- Android doesn't let apps dial **112** automatically: the countdown calls her chosen number and shows a one-tap *Call 112*.
+- Android doesn't let apps dial emergency numbers like **100** automatically: the countdown calls her chosen number and shows a one-tap *Call 100*.
 - **SMS needs the phone's SIM.** Without the phone, the watch can only reach the server over Wi-Fi.
 - **Installs from outside the Play Store** need SMS allowed once, and the watch needs Wireless debugging once for the first install.
 - After the watch restarts, Android only lets **Voice SOS** use the microphone again after one tap on its notification.

@@ -463,7 +463,6 @@ private fun ExtrasPage(settings: Settings, onSettings: (Settings) -> Unit) {
     listOf(
         "Safe Journey" to "Tell it where you're going. If you don't check in or arrive on time, your contacts are alerted with your location.",
         "Fake call" to "A realistic incoming call from Mom, Dad or any name, now or in 10 or 30 seconds. A polite way out.",
-        "Siren" to "A loud alarm that plays even on silent, with a flashing screen and torch.",
         "Live location" to "Share a live map link with anyone, for as long as you choose.",
     ).forEach { (t, d) -> GuideCard { Text(t, style = MaterialTheme.typography.titleMedium); Text(d, color = Muted, style = MaterialTheme.typography.bodySmall) } }
     GuideCard {

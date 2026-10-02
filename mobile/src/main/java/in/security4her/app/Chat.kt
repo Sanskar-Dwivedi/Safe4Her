@@ -86,9 +86,6 @@ private val TOPICS = listOf(
     Topic(listOf("fake call", "fake", "excuse", "uncomfortable", "get away", "leave")) {
         "Fake call makes your phone ring with a real-looking call (from Mom, Dad or any name you type) so you can step away. Answer it and a voice talks to you. Home → Fake call; it can ring now, in 10 s or in 30 s. Nobody is actually called."
     },
-    Topic(listOf("siren", "alarm", "loud", "noise", "attention", "flash", "torch")) {
-        "Siren plays a loud alarm (even on silent), flashes the screen and strobes the torch to draw attention. Home → Siren; tap anywhere to stop. It doesn't contact anyone, so use SOS too if you need help."
-    },
     Topic(listOf("install watch", "watch app", "install on watch", "update watch", "watch update", "put on watch")) {
         "Your phone installs the watch app for you, no computer needed. On the watch turn on Developer options, then Wireless debugging, and tap Pair new device. Then open Me → Install or update the watch app here, type the 6-digit code and tap Pair and install. After that the watch updates itself."
     },
@@ -108,7 +105,7 @@ private val TOPICS = listOf(
         "Test Mode (in Me) sends the police text and the automatic call to a test number, like a friend's phone, instead of the police. Use it to try an SOS safely."
     },
     Topic(listOf("112", "181", "1091", "helpline", "number", "call", "numbers", "ambulance")) {
-        "Emergency numbers in India:\n• 112: all emergencies (police, fire, ambulance)\n• 181: Women Helpline\n• 1091: Women Police Helpline\n• 100: Police\nCall 112 is also on Home and on the SOS screen."
+        "Emergency numbers in India:\n• 112: all emergencies (police, fire, ambulance)\n• 181: Women Helpline\n• 1091: Women Police Helpline\n• 100: Police\nCall 100 (police) is on Home and on the SOS screen."
     },
     Topic(listOf("private", "privacy", "data", "store", "stored", "secure", "who can see")) {
         "Your location is shared only during an SOS, a Safe Journey or when you share it yourself. Recordings stay on your phone unless you export them. Contacts only get what you send them."

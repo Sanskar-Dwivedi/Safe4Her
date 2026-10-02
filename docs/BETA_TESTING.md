@@ -30,7 +30,7 @@ or delete anything (19 automated checks cover this). Never share the **service_r
 | `error` | A text that failed, GPS that didn't answer, an update that didn't install | error / warning |
 | `security` | Wrong safety PIN, evidence that fails its integrity check, a download with the wrong fingerprint | warning / critical |
 | `false_alarm` | A pocket or watch countdown the tester cancelled, an automatic call cancelled | warning / info |
-| `usage` | SOS started (and how: button, knock, watch, voice), Safe Journey, Fake call, Siren | info |
+| `usage` | SOS started (and how: button, knock, watch, voice), Safe Journey, Fake call | info |
 | `performance` | App start time, SOS to first text, watch to phone delivery time (`detail.ms`) | info |
 | `device` | Phone or watch brand, model, Android version, screen size | info |
 | `feedback` | A problem the tester reported in **Me → Beta testing → Report a problem** | as she chose |

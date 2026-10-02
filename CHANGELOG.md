@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.0-beta.8 (2026-10-02)
+
+### Security
+- **Evidence opens only in Security4Her.** The copies in Downloads are now encrypted .s4he packages (AES-256-GCM,
+  a fresh key for every hour of every SOS, protected by a 256-bit recovery secret kept in the Android Keystore).
+  Galleries, file managers and other apps can't play them; the readable fingerprints.txt is gone. Copies saved by
+  beta.7 are encrypted and the plain ones deleted automatically.
+- **Recovery code and restore.** The evidence locker shows a recovery code (PIN-protected) and restores evidence
+  from Downloads after a reinstall, offline. Tested: record, uninstall, reinstall, restore, all pieces intact.
+- **SOS texts can't trip Android's SMS limit.** Android holds an app's texts behind an "allow?" prompt after about 30
+  in 30 minutes. First alerts always go; repeat location updates are one SMS long and pause before the limit, while
+  the live link keeps updating.
+
+### Changed
+- The police number is **100** (call buttons, the SOS screen and the default police text number).
+
+### Removed
+- The Siren.
+
 ## 1.1.0-beta.7 (2026-10-02)
 
 ### Security
