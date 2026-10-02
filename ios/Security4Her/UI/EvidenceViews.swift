@@ -6,8 +6,8 @@ struct EvidenceListView: View {
     var body: some View {
         List {
             Section { Text("Saved privately on this iPhone. In-app deletion is locked for 24 hours. Exported ZIP files are unencrypted; uninstalling removes local evidence.").font(.callout).foregroundStyle(.secondary) }
-            if model.evidence.cases.isEmpty { ContentUnavailableView("No evidence yet", systemImage: "lock.doc", description: Text("Audio and video captured during an SOS appear here.")) }
-            ForEach(model.evidence.cases) { item in
+            if !model.evidence.cases.contains(where: { $0.ownerId == model.profile?.id }) { ContentUnavailableView("No evidence yet", systemImage: "lock.doc", description: Text("Audio and video captured during an SOS appear here.")) }
+            ForEach(model.evidence.cases.filter { $0.ownerId == model.profile?.id }) { item in
                 NavigationLink { EvidenceDetailView(caseID: item.id) } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(item.startedAt.formatted()).font(.headline)
@@ -24,6 +24,7 @@ struct EvidenceDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let caseID: String
     @State private var share: SharedFile?
+    @State private var exportedURL: URL?
     @State private var media: SharedFile?
     @State private var confirmDelete = false
     @State private var pin = ""
@@ -31,7 +32,7 @@ struct EvidenceDetailView: View {
     @State private var exporting = false
     var body: some View {
         List {
-            if let item = model.evidence.cases.first(where: { $0.id == caseID }) {
+            if let item = model.evidence.cases.first(where: { $0.id == caseID && $0.ownerId == model.profile?.id }) {
                 Section("Case") {
                     Text(item.startedAt.formatted())
                     Text(item.id).font(.caption.monospaced()).textSelection(.enabled)
@@ -40,7 +41,11 @@ struct EvidenceDetailView: View {
                     Button(exporting ? "Preparing export…" : "Export unencrypted ZIP") {
                         exporting = true
                         Task {
-                            do { share = SharedFile(url: try await model.evidence.export(item)) } catch { model.report(error) }
+                            do {
+                                let url = try await model.evidence.export(item)
+                                exportedURL = url
+                                share = SharedFile(url: url)
+                            } catch { model.report(error) }
                             exporting = false
                         }
                     }.disabled(exporting || item.endedAt == nil)
@@ -58,12 +63,15 @@ struct EvidenceDetailView: View {
                 }
             }
         }.navigationTitle("Evidence case")
-            .sheet(item: $share, onDismiss: { if let share { try? FileManager.default.removeItem(at: share.url) }; share = nil }) { ShareSheet(items: [$0.url]) }
+            .sheet(item: $share, onDismiss: {
+                if let exportedURL { try? FileManager.default.removeItem(at: exportedURL) }
+                exportedURL = nil
+            }) { ShareSheet(items: [$0.url]) }
             .sheet(item: $media) { EvidencePlayer(url: $0.url) }
             .alert("Delete evidence?", isPresented: $confirmDelete) {
                 if SecureStore.hasPIN { SecureField("Safety PIN", text: $pin).keyboardType(.numberPad) }
                 Button("Delete", role: .destructive) {
-                    guard let item = model.evidence.cases.first(where: { $0.id == caseID }) else { return }
+                    guard let item = model.evidence.cases.first(where: { $0.id == caseID && $0.ownerId == model.profile?.id }) else { return }
                     do { try model.evidence.delete(item, pin: pin); dismiss() } catch { model.report(error) }
                     pin = ""
                 }

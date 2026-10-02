@@ -133,6 +133,17 @@ cloud project. All RPCs are called via PostgREST `rpc/<name>` with named paramet
 - The manifest must declare `ACCESS_FINE_LOCATION`, `CALL_PHONE` and the Maps API key meta-data.
 
 ## Change requests
+
+- 2026-10-03: add the separate iPhone source target `in.security4her.ios` (iOS 17+, SwiftUI; no watch target).
+  Existing Android/Wear identity and data-layer contracts are unchanged. iPhone uses existing REST auth,
+  contacts, verification and map RPCs. New authenticated Edge Function `ios-safety` accepts `action` values
+  `capabilities`, `sos`, `end`, `journeyStart`, `journeyStatus`, `journeyExtend`, `journeyEnd` and delegates to
+  owner-checked `ios_safety(p_action text, p_data jsonb)`. SOS fields: `incidentId`, `trigger`, `test`, optional
+  `lat`, `lng`, `accuracyM`, ISO-8601 `fixAt`. Journey fields: `journeyId`, and for start `incidentId`, `name`,
+  ISO-8601 `deadline`; extension supplies `deadline`. Responses contain optional `state`, `shareUrl`,
+  `accepted`, `pending`, `schedulerReady`. Scheduled requests authenticate with `x-s4h-dispatch-secret`,
+  invoke service-only leased delivery/deadline RPCs and record scheduler health. No client receives the
+  dispatcher, Telegram or service-role secret. See `ios/README.md` for deployment and platform constraints.
 _(append: date, who, what, why)_
 - 2026-09-28: wrote the `mobile/` app. Offline mode when `SUPABASE_URL` is blank (local backend on the phone); the map uses OpenStreetMap without a Maps key.
 - 2026-09-28: `wear/build.gradle.kts` and the §1 snippet — `java.util.Properties()` doesn't resolve in module scripts (the `java` extension shadows the package). Fixed with `import java.util.Properties`. Build on JDK 17 (Gradle 8.14.3 can't run on JDK 25).

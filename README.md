@@ -187,6 +187,14 @@ sequenceDiagram
 
 ## 🏗️ Architecture
 
+### iPhone source port
+
+A native **iPhone / iOS 17+** source port is available in [`ios/`](ios/README.md), alongside Android and
+Wear OS. Open `ios/Security4Her.xcodeproj` on a Mac. The port includes SwiftUI phone screens, native
+recording/location services and a Supabase extension for Telegram alerts and journey deadlines.
+It still requires an Xcode SDK build, signing, backend deployment and on-device validation; it is not
+an available IPA. See the [iPhone behavior and setup guide](ios/README.md) for platform differences.
+
 ```mermaid
 flowchart LR
     W["⌚ Wear OS watch<br/><sub>SOS · shake · Voice SOS · audio</sub>"] <-->|Data Layer| P["📱 Android phone<br/><sub>Compose · services · CameraX · sensors</sub>"]

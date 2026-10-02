@@ -6,8 +6,8 @@ interface State { state?: string; shareToken?: string; accepted?: number; pendin
 async function deliver(env: Env, f: Fetch, user: string | null): Promise<void> {
   const token = required(env, "TELEGRAM_BOT_TOKEN");
   const jobs = await rpc<AlertJob[]>(env, f, "ios_claim_alerts", { p_user: user });
-  // Sequential to avoid flooding Telegram; the database leases prevent concurrent workers claiming the same row.
-  for (const job of jobs) {
+  // Batches are capped at ten in SQL. Bound network waits without serializing emergency recipients.
+  await Promise.all(jobs.map(async (job) => {
     let sent = false, retry = 60;
     try {
       const link = shareUrl(env, job.token);
@@ -23,7 +23,7 @@ async function deliver(env: Env, f: Fetch, user: string | null): Promise<void> {
       retry = result.parameters?.retry_after ?? (response.status === 403 ? 3600 : 60);
     } catch { /* Keep only the delivery state, never log contact details or message bodies. */ }
     await rpc(env, f, "ios_finish_alert", { p_id: job.id, p_sent: sent, p_retry_seconds: retry });
-  }
+  }));
 }
 
 export async function handler(req: Request, env: Env, f: Fetch = fetch): Promise<Response> {

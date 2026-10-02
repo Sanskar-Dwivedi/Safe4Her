@@ -35,7 +35,7 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
     private var lastLive = Date.distantPast
     private var authSession: ASWebAuthenticationSession?
     private var observers = Set<AnyCancellable>()
-    private var launched = false
+    private var launchTask: Task<Void, Never>?
     private var startInProgress = false
     private var livePublishing = false
     override private init() {
@@ -54,15 +54,27 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
         }
     }
     func launch() async {
-        guard !launched else { return }; launched = true
+        if let launchTask { await launchTask.value; return }
+        let task = Task { await initializeSession() }
+        launchTask = task
+        await task.value
+    }
+    private func initializeSession() async {
         // Keychain credentials may survive uninstall. A new installation requires a fresh sign-in.
         if !UserDefaults.standard.bool(forKey: "installationInitialized") {
             backend.clearLocalSession(); SecureStore.remove("safety-pin")
             UserDefaults.standard.set(true, forKey: "installationInitialized")
         }
         if backend.config.configured, backend.session != nil {
-            do { profile = try await backend.profile(); try await loadContacts() }
-            catch { self.error = error.localizedDescription }
+            if let cached: Profile = Disk.read("profile.json"), cached.id == backend.session?.user.id {
+                profile = cached
+                contacts = Disk.read("contacts-\(cached.id).json") ?? []
+            }
+            do {
+                profile = try await backend.profile()
+                if let profile { persist(profile, "profile.json") }
+                if profile?.verifiedFemale == true { try await loadContacts() }
+            } catch { log("Server connection unavailable. Saved local setup remains available; remote actions will retry.") }
         }
         loading = false
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
@@ -83,6 +95,7 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
         do {
             profile = try await (creating ? backend.signUp(name: name, email: email, password: password) : backend.signIn(email: email, password: password))
             demo = false
+            if let profile { persist(profile, "profile.json") }
             if profile?.verifiedFemale == true { try await loadContacts() }
         } catch { report(error) }
     }
@@ -103,7 +116,11 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
                           components.queryItems?.first(where: { $0.name == "ok" })?.value == "1" else {
                         self.error = "Verification did not complete. The deployment must have DigiLocker configured."; return
                     }
-                    do { self.profile = try await self.backend.profile(); try await self.loadContacts() }
+                    do {
+                        self.profile = try await self.backend.profile()
+                        if let profile = self.profile { self.persist(profile, "profile.json") }
+                        try await self.loadContacts()
+                    }
                     catch { self.report(error) }
                 }
             }
@@ -118,6 +135,7 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
     func loadContacts() async throws {
         if demo { return }
         contacts = try await backend.contacts()
+        if let profile { persist(contacts, "contacts-\(profile.id).json"); persist(profile, "profile.json") }
     }
     func saveContact(_ contact: TrustedContact, isNew: Bool) async {
         guard !contact.name.trimmingCharacters(in: .whitespaces).isEmpty, !contact.phone.isEmpty else { error = "Enter a name and phone number."; return }
@@ -137,6 +155,7 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
             error = "End and synchronize active safety sessions before signing out."; return
         }
         if !demo { await backend.signOut() }
+        Disk.remove("profile.json")
         profile = nil; contacts = []; demo = false; incident = nil; journey = nil
         Disk.remove("incident.json"); Disk.remove("journey.json"); stopLive()
     }
@@ -166,7 +185,7 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
         location.start("sos"); log(current.test ? "Test SOS started; automatic contact delivery is disabled." : "SOS started; connecting to Telegram alert service.")
         Task { await synchronize() }
         if UIApplication.shared.applicationState == .active {
-            await evidence.start(id: current.id, audio: settings.audioEvidence, video: settings.videoEvidence)
+            await evidence.start(id: current.id, ownerId: profile?.id ?? "demo", audio: settings.audioEvidence, video: settings.videoEvidence)
         } else { log("Open the app to start evidence recording. SOS delivery is independent of recording.") }
     }
     func endSOS(pin: String) async {
@@ -189,8 +208,8 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
         }
         if Date().timeIntervalSince(lastSync) > 20 { Task { await synchronize() } }
         if let journey, journey.state == "active", !journey.endPending {
-            if let until = journey.checkUntil, until <= Date(), !journey.serverArmed { Task { await overdueJourney() } }
-            else if journey.deadline <= Date(), !journey.serverArmed { Task { await overdueJourney() } }
+            if let until = journey.checkUntil, until <= Date(), !journey.serverArmed, !journey.serverPending { Task { await overdueJourney() } }
+            else if journey.deadline <= Date(), !journey.serverArmed, !journey.serverPending { Task { await overdueJourney() } }
         }
         if let end = liveUntil, end <= Date() { stopLive() }
         publishLiveIfNeeded()
@@ -209,20 +228,29 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
                 incident?.serverAccepted = true; incident?.shareURL = response.shareUrl
                 incident?.telegramAccepted = response.accepted ?? 0; incident?.telegramPending = response.pending ?? 0
                 incident?.error = nil; incident?.endPending = false
+                if let state = response.state, state != "active" {
+                    incident?.state = state; evidence.stop(); location.stop("sos")
+                }
                 if let incident { persist(incident, "incident.json") }
             } catch {
                 if incident?.id == current.id { incident?.error = error.localizedDescription }
             }
         }
-        if let current = journey, current.serverArmed || current.endPending {
+        if let current = journey, current.serverArmed || current.serverPending || current.endPending {
             do {
                 var body: [String: Any] = ["journeyId": current.id]
                 if let fix = location.fix { body["lat"] = fix.lat; body["lng"] = fix.lng; body["accuracyM"] = fix.accuracy; body["fixAt"] = ISO8601DateFormatter().string(from: fix.at) }
                 let result = try await backend.safety(current.endPending ? "journeyEnd" : "journeyStatus", body)
                 guard journey?.id == current.id else { return }
-                if current.endPending { journey?.endPending = false; journey?.serverArmed = false }
+                if current.endPending { journey?.endPending = false; journey?.serverArmed = false; journey?.serverPending = false }
+                else if result.state == "active" { journey?.serverArmed = true; journey?.serverPending = false }
+                else if result.state == "ended" {
+                    journey?.state = "ended"; journey?.serverArmed = false; journey?.serverPending = false
+                    location.stop("journey"); Notifications.shared.cancel("journey")
+                }
                 if result.state == "alerted" {
                     journey?.state = "alerted"; location.stop("journey")
+                    journey?.serverPending = false
                     if incident?.state != "active" {
                         incident = Incident(id: current.incidentId, trigger: "journey", test: settings.testMode, shareURL: result.shareUrl, serverAccepted: true, lastFix: location.fix)
                         if let incident { persist(incident, "incident.json") }
@@ -276,10 +304,13 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
             do {
                 let readiness = try await backend.safety("capabilities")
                 guard readiness.schedulerReady == true else { throw AppFailure.message("Server journey monitoring is not configured. Use Test Mode for an on-screen practice journey.") }
+                // Persist the ID before the request: a timed-out response must not orphan an armed deadline.
+                current.serverPending = true; journey = current; persist(current, "journey.json")
                 let response = try await backend.safety("journeyStart", ["journeyId": current.id, "incidentId": current.incidentId, "name": name,
                     "lat": coordinate.latitude, "lng": coordinate.longitude, "deadline": ISO8601DateFormatter().string(from: current.deadline)])
                 current.serverArmed = response.state == "active"
                 guard current.serverArmed else { throw AppFailure.message("Journey monitoring was not confirmed.") }
+                current.serverPending = false
             } catch { report(error); return }
         }
         journey = current; persist(current, "journey.json"); location.start("journey")
@@ -302,12 +333,12 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
     }
     func endJourney() async {
         guard var current = journey else { return }
-        current.state = "ended"; current.endPending = current.serverArmed
+        current.state = "ended"; current.endPending = current.serverArmed || current.serverPending
         journey = current; persist(current, "journey.json"); location.stop("journey"); Notifications.shared.cancel("journey")
         await synchronize()
     }
     private func evaluateJourney(_ fix: Fix) {
-        guard var current = journey, current.state == "active", fix.isFresh else { return }
+        guard var current = journey, current.state == "active", !current.serverPending, fix.isFresh else { return }
         let here = CLLocation(latitude: fix.lat, longitude: fix.lng)
         let distance = here.distance(from: .init(latitude: current.lat, longitude: current.lng))
         if distance < 150 { Task { await endJourney() }; return }

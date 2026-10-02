@@ -1,0 +1,21 @@
+name: iPhone build
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile iPhone simulator application
+        run: >-
+          xcodebuild -project ios/Security4Her.xcodeproj -scheme Security4Her
+          -configuration '${{ matrix.configuration }}' -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator' -derivedDataPath ios/DerivedData
+          CODE_SIGNING_ALLOWED=NO build

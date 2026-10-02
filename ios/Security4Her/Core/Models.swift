@@ -74,6 +74,7 @@ struct JourneyState: Codable, Identifiable {
     var lng: Double
     var deadline: Date
     var serverArmed = false
+    var serverPending = false
     var state = "active"
     var incidentId = UUID().uuidString
     var lastDistance: Double?
@@ -116,7 +117,8 @@ enum Disk {
     static var root: URL {
         let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Security4Her", isDirectory: true)
-        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true,
+            attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
         var resourceURL = url
         var values = URLResourceValues(); values.isExcludedFromBackup = true
         try? resourceURL.setResourceValues(values)

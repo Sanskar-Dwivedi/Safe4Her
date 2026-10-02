@@ -1,5 +1,16 @@
 # Changelog
 
+## iPhone source port (2026-10-03, unreleased)
+
+- Add a separate native SwiftUI iPhone target (iOS 17+) with accounts/verification, trusted contacts,
+  SOS, location sharing, journeys, maps/community, evidence, fake calls, siren, shortcuts and local help.
+- Adapt SMS, calling, background capture and gestures to iOS restrictions with explicit status messages.
+- Add owner-checked iPhone backend RPCs, durable Telegram alert jobs and server-monitored journey deadlines.
+- Include an Xcode project, local configuration example, privacy manifest, deployment guide and manual
+  macOS simulator-build workflow. No backend deployment or iPhone installation was performed.
+- The encrypted recovery/Telegram evidence plan and Apple Watch app are excluded from this port.
+- iOS SDK compilation, signing and real-device behavior remain unverified on the Windows development host.
+
 ## 1.1.0-beta.7 (2026-10-02)
 
 ### Security

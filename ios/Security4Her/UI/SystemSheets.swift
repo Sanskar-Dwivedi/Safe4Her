@@ -1,6 +1,7 @@
 import SwiftUI
 import MessageUI
 import ContactsUI
+import Contacts
 
 struct MessageComposer: UIViewControllerRepresentable {
     let draft: MessageDraft

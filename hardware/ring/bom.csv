@@ -1,0 +1,13 @@
+Item,Part_or_implementation,Quantity,Low_INR,High_INR,Price_status
+BLE MCU,nRF52832-CIAA-G-R7,1,400,700,Planning allowance; G revision quote unverified
+Charger,BQ25101YFPR,1,100,220,Planning allowance
+Regulator,TPS7A0230PDQNR,1,40,80,Planning allowance
+Cell protection,1S protection IC and dual MOSFET - selection pending,1,60,150,Planning allowance
+Trigger,SKTAAAE010 plus membrane,1,40,80,Planning allowance
+Support circuit,Crystals RF matching passives NTC programming pads,1,120,250,Planning allowance
+Status light,LED resistor light pipe,1,10,25,Planning allowance
+Battery,GRP170726 18.5mAh 4.2V version,1,400,1000,Custom supplier quotation and geometry confirmation required
+Board,Custom rigid-flex,1,500,1500,Planning allowance excludes setup and MOQ
+Body,Shell liner seals contact feedthroughs,1,500,1500,Planning allowance excludes tooling
+Assembly,Fine-pitch assembly programming and test,1,500,1500,Planning allowance
+Charging dock,USB-C protected 5V and two pogo contacts,1,250,650,Planning allowance

@@ -80,6 +80,7 @@ begin
       on conflict (id) do nothing;
   end if;
   select * into j from public.ios_journeys where id = jid and user_id = uid for update;
+  if not found and p_action = 'journeyEnd' then return jsonb_build_object('state', 'ended'); end if;
   if not found then raise exception 'journey not found'; end if;
   if p_action = 'journeyExtend' then
     if j.state <> 'active' then raise exception 'journey is no longer active'; end if;
@@ -125,7 +126,7 @@ begin
     select a.id from public.ios_alert_jobs a
     where a.state = 'pending' and a.retry_at <= now() and (a.lease_until is null or a.lease_until < now())
       and (p_user is null or a.user_id = p_user)
-    order by a.created_at limit 20 for update skip locked
+    order by a.created_at limit 10 for update skip locked
   ), leased as (
     update public.ios_alert_jobs a set lease_until = now() + interval '2 minutes', attempts = attempts + 1
       from picked where a.id = picked.id returning a.*

@@ -17,6 +17,7 @@ struct EvidencePiece: Codable, Identifiable {
 }
 struct EvidenceCase: Codable, Identifiable {
     let id: String
+    let ownerId: String
     let startedAt: Date
     var endedAt: Date?
     var pieces: [EvidencePiece] = []
@@ -34,7 +35,6 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
     private let capture = AVCaptureSession()
     private let video = AVCaptureMovieFileOutput()
     private let captureQueue = DispatchQueue(label: "in.security4her.camera")
-    private var videoTimer: Timer?
     private var audioStart = Date()
     private var videoStart = Date()
     private var wantsAudio = false
@@ -71,15 +71,18 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
     }
     private func save(_ item: EvidenceCase) {
         do {
-            try FileManager.default.createDirectory(at: directory(item.id), withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: directory(item.id), withIntermediateDirectories: true,
+                attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
             try JSONEncoder().encode(item).write(to: directory(item.id).appendingPathComponent("manifest.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
             cases.removeAll { $0.id == item.id }; cases.append(item); cases.sort { $0.startedAt > $1.startedAt }
         } catch { self.error = "Evidence could not be saved: \(error.localizedDescription)" }
     }
-    func start(id: String, audio enabledAudio: Bool, video enabledVideo: Bool) async {
+    func start(id: String, ownerId: String, audio enabledAudio: Bool, video enabledVideo: Bool) async {
         guard recordingId == nil else { return }
-        recordingId = id; sequence = 0
-        save(.init(id: id, startedAt: Date()))
+        recordingId = id; sequence = 0; error = nil
+        if var previous = cases.first(where: { $0.id == id && $0.ownerId == ownerId }) {
+            previous.endedAt = nil; save(previous)
+        } else { save(.init(id: id, ownerId: ownerId, startedAt: Date())) }
         wantsAudio = enabledAudio; wantsVideo = enabledVideo
         do {
             try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .mixWithOthers])
@@ -100,9 +103,10 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
     private func nextURL(_ kind: String, extension ext: String) -> URL? {
         guard let id = recordingId else { return nil }
         sequence += 1
-        return directory(id).appendingPathComponent(String(format: "%@-%05d.%@", kind, sequence, ext))
+        return directory(id).appendingPathComponent("\(kind)-\(UUID().uuidString).\(ext)")
     }
     private func nextAudio() {
+        if reachedLimit() { stop(); return }
         guard wantsAudio, let url = nextURL("audio", extension: "m4a") else { return }
         do {
             audioStart = Date()
@@ -123,24 +127,35 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
             capture.addInput(input); capture.addOutput(video)
             // Audio is captured separately, avoiding competing microphone capture inputs.
             video.maxRecordedDuration = CMTime(seconds: 30, preferredTimescale: 600)
-            captureQueue.async { [capture] in capture.startRunning() }
         } catch { problem(error.localizedDescription) }
     }
     private func nextVideo() {
-        guard wantsVideo, foreground, !capture.inputs.isEmpty, !video.isRecording,
+        if reachedLimit() { stop(); return }
+        guard wantsVideo, foreground, pendingVideoCase == nil, !capture.inputs.isEmpty,
               let url = nextURL("video", extension: "mov") else { return }
         videoStart = Date(); pendingVideoCase = recordingId
-        video.startRecording(to: url, recordingDelegate: self); videoOn = true
+        captureQueue.async { [capture, video] in
+            if !capture.isRunning { capture.startRunning() }
+            video.startRecording(to: url, recordingDelegate: self)
+        }
+    }
+    private func reachedLimit() -> Bool {
+        guard let id = recordingId, let item = cases.first(where: { $0.id == id }) else { return false }
+        return Date().timeIntervalSince(item.startedAt) >= 3600
+    }
+    nonisolated func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
+        Task { @MainActor in self.videoOn = self.recordingId != nil && self.foreground }
     }
     func setForeground(_ value: Bool) {
         foreground = value
         if !value {
-            if video.isRecording { video.stopRecording() }
             videoOn = false
-            captureQueue.async { [capture] in capture.stopRunning() }
-        } else if recordingId != nil && wantsVideo {
+            captureQueue.async { [capture, video] in
+                if video.isRecording { video.stopRecording() }
+                capture.stopRunning()
+            }
+        } else if recordingId != nil && wantsVideo && AVCaptureDevice.authorizationStatus(for: .video) == .authorized {
             if capture.inputs.isEmpty { configureCamera() }
-            else { captureQueue.async { [capture] in capture.startRunning() } }
             nextVideo()
         }
     }
@@ -152,9 +167,11 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
             add(id: id, url: audio.url, kind: "audio", start: audioStart)
         }
         audio = nil; audioOn = false
-        if video.isRecording { video.stopRecording() }
         videoOn = false
-        captureQueue.async { [capture] in capture.stopRunning() }
+        captureQueue.async { [capture, video] in
+            if video.isRecording { video.stopRecording() }
+            capture.stopRunning()
+        }
         if var item = cases.first(where: { $0.id == id }) { item.endedAt = Date(); save(item) }
         recordingId = nil
     }
@@ -188,7 +205,7 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
             if let id = self.pendingVideoCase, completed { self.add(id: id, url: outputFileURL, kind: "video", start: self.videoStart) }
             else if let error { self.problem(error.localizedDescription) }
             self.videoOn = false; self.pendingVideoCase = nil
-            self.nextVideo()
+            if completed { self.nextVideo() } else { self.wantsVideo = false }
         }
     }
     static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }

@@ -29,7 +29,8 @@ final class Deterrents: ObservableObject {
     }
     func stopSiren() {
         player?.stop(); player = nil; sirenOn = false
-        setTorch(false); UIApplication.shared.isIdleTimerDisabled = false
+        if torchOn { setTorch(false) }
+        UIApplication.shared.isIdleTimerDisabled = false
     }
     private func audioSession() throws {
         try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .mixWithOthers])

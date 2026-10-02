@@ -26,6 +26,14 @@ struct HomeView: View {
                         StatusLine(title: "Telegram", detail: incident.test ? "Disabled in Test Mode" : "\(incident.telegramAccepted) accepted · \(incident.telegramPending) queued", good: incident.telegramAccepted > 0)
                         StatusLine(title: "Evidence", detail: "Audio \(model.evidence.audioOn ? "recording" : "off") · video \(model.evidence.videoOn ? "recording" : "off")", good: model.evidence.audioOn || model.evidence.videoOn)
                         if let failure = model.evidence.error { Text(failure).font(.caption).foregroundStyle(.orange) }
+                        if !model.evidence.audioOn && !model.evidence.videoOn {
+                            Button("Start or resume evidence") {
+                                Task {
+                                    model.evidence.stop()
+                                    await model.evidence.start(id: incident.id, ownerId: model.profile?.id ?? "demo", audio: model.settings.audioEvidence, video: model.settings.videoEvidence)
+                                }
+                            }
+                        }
                         Button("Send SOS text") { model.composeSOS() }.buttonStyle(.borderedProminent)
                         Button("Open phone call") { model.dial() }.buttonStyle(.bordered)
                         if let raw = incident.shareURL, let url = URL(string: raw) { ShareLink("Share live map", item: url) }
