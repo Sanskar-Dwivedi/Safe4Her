@@ -24,6 +24,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -99,7 +101,7 @@ fun FakeCallScreen(onClose: () -> Unit, startImmediately: Boolean = false) {
     }
 
     when (phase) {
-        CallPhase.Setup -> Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 8.dp)) {
+        CallPhase.Setup -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp)) {
             Box(Modifier.size(44.dp).clip(CircleShape).clickable(onClickLabel = "Back", onClick = onClose), contentAlignment = Alignment.Center) {
                 Icon(Icons.Filled.ArrowBack, "Back", tint = Muted)
             }
@@ -110,7 +112,9 @@ fun FakeCallScreen(onClose: () -> Unit, startImmediately: Boolean = false) {
                 "Your phone rings with a real-looking call so you can step away. Answer it and a voice talks to you. Nobody is actually called.",
                 color = Muted, style = MaterialTheme.typography.bodyLarge,
             )
-            Spacer(Modifier.height(22.dp))
+            Spacer(Modifier.height(16.dp))
+            WatchFakeCallAccess()
+            Spacer(Modifier.height(16.dp))
             Field(caller, { caller = it.take(24) }, "Who's calling")
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -123,7 +127,7 @@ fun FakeCallScreen(onClose: () -> Unit, startImmediately: Boolean = false) {
                     )
                 }
             }
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(24.dp))
             ChunkyButton("Ring now", icon = Icons.Filled.Call) { ring(0) }
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

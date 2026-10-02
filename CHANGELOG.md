@@ -1,5 +1,34 @@
 # Changelog
 
+## Watch build 12 / Phone build 17 (2026-10-02, local builds)
+
+- Restore automatic five-second SOS countdown on normal watch opening after setup, covering Samsung
+  Knock Knock launches that resolve to the default launcher. Status notifications remain dashboard-only.
+- Fix the watch setup/location page briefly flashing before the saved setup state loads.
+- Add optional **Appear on top** setup in the phone's Fake call screen. With this user-granted access,
+  watch requests can launch the existing call activity over other apps. Preserve the call notification
+  as a fallback; notification-only full-screen intents normally show a banner on an unlocked phone.
+- Handle new requests delivered to an already-running fake-call activity.
+
+This update requires both APKs and one-time phone permission setup. Phone code changes are restricted
+to fake calls. On-device presentation remains to be verified.
+
+## Watch 1.1.0-beta.3 — version code 11 (2026-10-02, local build)
+
+### Changed
+- Ordinary watch app opening shows the dashboard. Configure Knock Knock to the separate **Security4Her SOS** entry.
+- Wrist twist uses all three gyroscope axes and measured rotation, with three saved strength settings,
+  safe practice, live sample/readiness feedback and an explicit awake-screen requirement.
+- Gesture monitoring has its own foreground service, independent of location/microphone permissions.
+- Fake-call requests have a bounded send/ack deadline, duplicate-tap protection and a retained result.
+
+### Added
+- **Fake call now** button, **Security4Her Fake Call** launcher entry, SOS/fake-call tile and complications.
+- In-app setup guidance for shortcuts and Samsung Universal Gestures; accessible button roles.
+- Dashboard disclosure when direct watch SOS lacks backend configuration or an account link.
+
+Phone code and protocol unchanged. Hardware checks remain pending; see [watch setup and limitations](docs/WATCH_GESTURES.md).
+
 ## 1.1.0-beta.6 (2026-10-01)
 
 ### Fixed

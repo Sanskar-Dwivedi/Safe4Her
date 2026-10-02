@@ -23,8 +23,8 @@ android {
         minSdk = 30
         targetSdk = 35
         // Bump both for every release; the watch compares versionCode with the "watch" entry in web-install/version.json.
-        versionCode = 10
-        versionName = "1.1.0-beta.2"
+        versionCode = 12
+        versionName = "1.1.0-beta.4"
         buildConfigField("String", "SUPABASE_URL", cfg("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", cfg("SUPABASE_ANON_KEY"))
         buildConfigField("String", "TRACK_BASE_URL", cfg("TRACK_BASE_URL"))
@@ -90,6 +90,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-process:2.10.0")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.work:work-runtime-ktx:2.10.1")
+    implementation("androidx.wear.tiles:tiles:1.5.0")
+    implementation("androidx.wear.protolayout:protolayout:1.3.0")
+    implementation("androidx.wear.watchface:watchface-complications-data-source:1.2.1")
+    implementation("androidx.concurrent:concurrent-futures:1.1.0")
     implementation("com.google.android.gms:play-services-wearable:19.0.0")
     implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")

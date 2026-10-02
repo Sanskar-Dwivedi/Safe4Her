@@ -13,6 +13,7 @@ import `in`.security4her.app.data.PhoneStatus
 import `in`.security4her.app.data.S4hJson
 import `in`.security4her.app.data.WatchStore
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.CancellationException
 
 /** Wear Data Layer transport to the phone app (path A). */
 object PhoneLink {
@@ -26,6 +27,7 @@ object PhoneLink {
                 .await()
                 .nodes
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.w(TAG, "capability lookup failed", e)
             emptySet()
         }
@@ -36,6 +38,7 @@ object PhoneLink {
                 client.sendMessage(node.id, path, json.toByteArray(Charsets.UTF_8)).await()
                 sent++
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.w(TAG, "sendMessage $path to ${node.displayName} failed", e)
             }
         }
@@ -48,6 +51,7 @@ object PhoneLink {
             .await()
             .nodes.isNotEmpty()
     } catch (e: Exception) {
+        if (e is CancellationException) throw e
         false
     }
 
@@ -77,6 +81,7 @@ object PhoneLink {
             items.release()
         }
     } catch (e: Exception) {
+        if (e is CancellationException) throw e
         Log.w(TAG, "getDataItems $path failed", e)
         null
     }

@@ -7,9 +7,17 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import `in`.security4her.app.data.WatchStore
 import `in`.security4her.app.service.SafetyService
+import `in`.security4her.app.service.TwistService
+import `in`.security4her.app.sos.FakeCallController
+import `in`.security4her.app.sos.TwistStrength
+import `in`.security4her.app.sos.TwistRuntime
 import `in`.security4her.app.sos.Locator
 import `in`.security4her.app.sos.PhoneLink
 import `in`.security4her.app.sos.SosController
@@ -18,15 +26,13 @@ import `in`.security4her.app.ui.WatchActions
 import `in`.security4her.app.ui.WatchUi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * Entry point. Launched by the Samsung Knock Knock gesture (or the app icon — the two can't be told apart):
- * after setup, a launch starts the 5 s cancellable SOS countdown with no extra tap.
- * Opening from our own notification (EXTRA_STATUS_ONLY) or activity recreation only shows status.
- */
+/** Samsung may open the default launcher for Knock Knock, so ordinary launches start SOS after setup. */
 class MainActivity : ComponentActivity() {
 
     private val store by lazy { WatchStore.get(this) }
+    private var entryGeneration by mutableIntStateOf(0)
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -57,6 +63,12 @@ class MainActivity : ComponentActivity() {
 
         override fun sosNow() = SosController.beginCountdown(this@MainActivity, "button")
 
+        override fun fakeCallNow() = FakeCallController.request(this@MainActivity)
+
+        override fun setTwistStrength(strength: TwistStrength) {
+            lifecycleScope.launch { store.setTwistStrength(strength) }
+        }
+
         override fun cancelCountdown() = SosController.cancelCountdown()
 
         override fun imSafe() = SosController.end(this@MainActivity)
@@ -85,30 +97,33 @@ class MainActivity : ComponentActivity() {
             if (on && !WristTwistDetector.available(this@MainActivity)) return
             lifecycleScope.launch {
                 store.setFakeCallTwist(on)
-                if (on) SafetyService.send(this@MainActivity, SafetyService.ACTION_ENSURE)
+                if (on) TwistService.ensure(this@MainActivity)
             }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { WatchUi(store, actions) }
+        setContent { key(entryGeneration) { WatchUi(store, actions) } }
         if (savedInstanceState == null) handleEntry(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        // A shortcut must show its result, even if the previous visit ended on a help subpage.
+        if (!TwistRuntime.practice.value) entryGeneration++
         handleEntry(intent)
     }
 
     override fun onResume() {
         super.onResume()
+        lifecycleScope.launch { withTimeoutOrNull(8_000) { PhoneLink.syncFromPhone(this@MainActivity) } }
         lifecycleScope.launch {
-            PhoneLink.syncFromPhone(this@MainActivity)
             // Re-arm enabled watch features (e.g. after a restart); the microphone needs the app visible.
-            if (store.voiceSos.first() || store.safetyModeNow() || store.fakeCallTwistNow())
+            if (store.voiceSos.first() || store.safetyModeNow() || store.incidentNow()?.ended == false)
                 SafetyService.send(this@MainActivity, SafetyService.ACTION_ENSURE)
+            if (store.fakeCallTwistNow()) TwistService.ensure(this@MainActivity)
         }
         // Just look: the background job installs at a moment that won't interrupt her.
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { `in`.security4her.app.sos.WatchUpdater.run(this@MainActivity, install = false) }
@@ -116,16 +131,27 @@ class MainActivity : ComponentActivity() {
 
     private fun handleEntry(intent: Intent) {
         if (intent.getBooleanExtra(EXTRA_STATUS_ONLY, false)) return
-        if (intent.action != Intent.ACTION_MAIN) return
+        val action = intent.action
+        val startsSos = action == ACTION_SOS || action == Intent.ACTION_MAIN || action == null
+        if (!startsSos && action != ACTION_FAKE_CALL) return
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        // Consume it before suspension; neither recreation nor returning from recents repeats it.
+        intent.action = ACTION_STATUS
+        if (TwistRuntime.practice.value) return
         lifecycleScope.launch {
             if (!store.setupDoneNow()) return@launch
             val live = store.incidentNow()
             if (live != null && !live.ended) return@launch // show the live incident, never a second one
-            SosController.beginCountdown(this@MainActivity, "knock")
+            // Keep the existing wire trigger: the server contract allows knock/shake/button/voice.
+            if (startsSos) SosController.beginCountdown(this@MainActivity, "knock")
+            else FakeCallController.request(this@MainActivity)
         }
     }
 
     companion object {
         const val EXTRA_STATUS_ONLY = "in.security4her.app.STATUS_ONLY"
+        const val ACTION_SOS = "in.security4her.app.action.SOS"
+        const val ACTION_FAKE_CALL = "in.security4her.app.action.FAKE_CALL"
+        const val ACTION_STATUS = "in.security4her.app.action.STATUS"
     }
 }

@@ -30,7 +30,11 @@ class Rearm : BroadcastReceiver() {
         CoroutineScope(Dispatchers.Default).launch {
             try {
                 WatchUpdater.schedule(app)
-                if (armed(app) && !SafetyService.send(app, SafetyService.ACTION_ENSURE)) askToResume(app)
+                val store = WatchStore.get(app)
+                val safetyArmed = store.safetyModeNow() || store.voiceSos.first() || store.incidentNow()?.ended == false
+                val safetyStarted = !safetyArmed || SafetyService.send(app, SafetyService.ACTION_ENSURE)
+                val twistStarted = !store.fakeCallTwistNow() || TwistService.ensure(app)
+                if (!safetyStarted || !twistStarted) askToResume(app)
             } finally {
                 pending.finish()
             }
