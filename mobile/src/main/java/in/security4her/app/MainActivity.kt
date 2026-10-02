@@ -1472,50 +1472,10 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
         GroupLabel("Safety")
         Section(
             "Pocket SOS",
-            if (`in`.security4her.app.sos.PocketSos.enabled(ctx)) "On: knock 3 times with the screen off" else "Off: knock 3 times to start an SOS",
+            if (!`in`.security4her.app.sos.PocketSos.enabled(ctx)) "Off: press the power button 3 times to start an SOS"
+            else if (`in`.security4her.app.sos.PocketSos.powerMode(ctx)) "On: press the power button 3 times" else "On: knock 3 times with the screen off",
         ) {
-            var pocketOn by remember { mutableStateOf(`in`.security4her.app.sos.PocketSos.enabled(ctx)) }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Knock 3 times to start SOS")
-                    Text(
-                        "With the screen off, knock firmly 3 times through your pocket or bag. A long buzz means it's armed: you then have 5 seconds to cancel.",
-                        color = Muted, style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                Switch(
-                    checked = pocketOn,
-                    onCheckedChange = {
-                        pocketOn = it
-                        `in`.security4her.app.sos.PocketSos.setEnabled(ctx, it)
-                        if (it && !`in`.security4her.app.sos.PocketSos.calibrated(ctx)) onPractice() // first time: tune it to her knock
-                        if (it && !`in`.security4her.app.sos.PocketSos.canShowOverLockScreen(ctx)) `in`.security4her.app.sos.PocketSos.askForLockScreenAlerts(ctx)
-                    },
-                    colors = switchColors,
-                )
-            }
-            var lockOk by remember { mutableStateOf(`in`.security4her.app.sos.PocketSos.canShowOverLockScreen(ctx)) }
-            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { lockOk = `in`.security4her.app.sos.PocketSos.canShowOverLockScreen(ctx) }
-            if (pocketOn && !lockOk) {
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    "Allow full-screen alerts so the countdown and Cancel button appear over your lock screen.",
-                    color = Amber, style = MaterialTheme.typography.bodySmall,
-                )
-                TextButton(onClick = { `in`.security4her.app.sos.PocketSos.askForLockScreenAlerts(ctx) }) { Text("Allow full-screen alerts", color = Lilac) }
-            }
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(onClick = onPractice, border = androidx.compose.foundation.BorderStroke(1.dp, Lilac)) {
-                Text("Practise and adjust strength", color = Lilac)
-            }
-            Spacer(Modifier.height(6.dp))
-            ScreenOffTestCard()
-            var gemini by remember { mutableStateOf(false) }
-            TextButton(onClick = { gemini = !gemini }, contentPadding = PaddingValues(0.dp)) {
-                Text(if (gemini) "Hide" else "Gemini or the Assistant opens when I knock?", color = Lilac)
-            }
-            if (gemini) BackTapNote()
+            PocketControls(onPractice)
         }
 
         Section("Test Mode", if (settings.testMode) "On: texts and calls go to your test number" else "Off") {

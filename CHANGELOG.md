@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.1.0-beta.11 (2026-10-02)
+
+### Fixed
+- **The phone's own Emergency SOS no longer starts with Pocket SOS.** Android's built-in SOS (and the double-press
+  camera) only counts power presses that come within about half a second of each other. Pocket SOS now asks for a
+  calm rhythm, about one press a second, and accepts presses up to 2 s apart. Tested on Android 15: three presses a
+  second apart arm Pocket SOS every time and the system counts no fast taps at all; five fast presses still start
+  the system SOS, as before.
+
+## 1.1.0-beta.10 (2026-10-02)
+
+### Fixed
+- **Pressing power 3 times no longer runs into the phone's own Emergency SOS.** Pocket SOS used to wait 0.8 s after
+  the third press to see if more were coming, so people kept pressing and reached the 5 presses that start Android's
+  built-in Emergency SOS. It now arms on the third press with a long buzz, and any extra presses count as the same
+  alarm. Me → Pocket SOS links straight to the phone's own Emergency SOS switch (tested on Android 15).
+- Three presses were sometimes missed: Android can deliver the screen on/off events bunched together (70 ms apart
+  for presses half a second apart), and those were taken for duplicates.
+- After cancelling a false alarm, Pocket SOS ignored the power button for 10 seconds. It's ready again at once.
+
+## 1.1.0-beta.9 (2026-10-02)
+
+### Changed
+- **Pocket SOS: press the power button 3 times** (about half a second apart, screen on or off). It replaces knocking
+  as the default; knocking stays available as an option. It uses no motion sensor and no always-on wake lock, so it
+  works on phones that pause sensors with the screen off and uses less battery. Presses during a phone call are
+  ignored (the screen flips against her ear), and the test in Me → Pocket SOS reports how many presses were noticed.
+
 ## 1.1.0-beta.8 (2026-10-02)
 
 ### Security

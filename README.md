@@ -2,7 +2,7 @@
 
 <img src="docs/banner.png" alt="Security4Her: help is one long press away" width="100%">
 
-<h3>A women's safety system for Android and Wear OS.<br>One press, one knock or three words, and help is on its way.</h3>
+<h3>A women's safety system for Android and Wear OS.<br>One press, three presses of the power button or three words, and help is on its way.</h3>
 
 <p>
 <a href="https://security4her.vercel.app"><img src="https://img.shields.io/badge/⬇_Install-security4her.vercel.app-FF4D5E?style=for-the-badge" alt="Install"></a>
@@ -88,7 +88,7 @@ with a safe practice screen and adjustable strength. See [watch setup](docs/WATC
 - **Hold SOS** for 1.5 s on the home screen
 - **Wear OS watch**: button, gesture or shake
 - **Voice SOS**: say *"HELP HELP HELP"* to the watch
-- **Pocket SOS**: knock 3 times through a pocket or bag, screen off
+- **Pocket SOS**: press the power button 3 times, even in a pocket or bag (or knock 3 times, if you prefer)
 - **Safe Journey**: missed check-ins raise it automatically
 
 </td>
@@ -135,7 +135,7 @@ sequenceDiagram
     She->>Watch: "HELP HELP HELP", shake, or hold SOS
     Watch->>Watch: 5 s countdown (cancel if it's a mistake)
     Watch->>Phone: SOS over the Wear Data Layer
-    Note over Phone: Or: hold SOS · knock ×3 · missed journey check-in
+    Note over Phone: Or: hold SOS · power button ×3 · missed journey check-in
     Phone->>Contacts: SMS with location and live link (no data needed)
     Phone->>Live: Live location every 20 s
     Phone->>Phone: Records audio and video evidence
@@ -178,7 +178,7 @@ sequenceDiagram
 2. Grant the permissions and add at least one trusted contact.
 3. Installs from outside the Play Store need SMS allowed once: **Settings → Apps → Security4Her → ⋮ → Allow
    restricted settings → Permissions → SMS → Allow**. The Home screen walks you through it.
-4. Optional: **Me → Pocket SOS**, then *Practise and adjust strength* to teach it your knock.
+4. Optional: **Me → Pocket SOS**, then *Test it* to check three presses of the power button arm it.
 5. Optional, on the watch: turn on **Voice SOS** from its home screen and try **Practise**.
 
 </details>

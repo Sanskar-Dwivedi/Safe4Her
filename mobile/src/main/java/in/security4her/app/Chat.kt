@@ -92,8 +92,8 @@ private val TOPICS = listOf(
     Topic(listOf("watch", "wear", "wrist", "smartwatch")) {
         "With the Wear OS app, press and hold SOS on your watch even when your phone is in a bag. The watch also records audio from your wrist. It links to your phone on its own once both apps are open."
     },
-    Topic(listOf("pocket", "knock", "knocks", "tap", "taps", "gesture", "triple", "bag", "without watch")) {
-        "Pocket SOS: turn it on in Me → Pocket SOS. With the screen off, knock firmly on your phone three times through your pocket or bag, about half a second apart. It buzzes, counts down 5 seconds (tap Cancel if it was a mistake), then starts a normal SOS with texts, live location, recording and the call. You feel a small tick for each knock and a strong buzz when the countdown starts. If it misses your knocks or reacts to light taps, open Practise and adjust strength and tap Set to my knocks; nothing is sent while practising."
+    Topic(listOf("pocket", "power button", "power", "press", "knock", "knocks", "tap", "taps", "gesture", "triple", "bag", "without watch")) {
+        "Pocket SOS: turn it on in Me → Pocket SOS. Press the power button 3 times, slowly (about one press a second), screen on or off, even in a pocket or bag. It buzzes on the third press, then counts down 5 seconds so you can cancel. Pressing fast starts your phone's own Emergency SOS too, so keep it slow. Prefer knocking? Choose Knock ×3 there instead."
     },
     Topic(listOf("voice", "shout", "say", "speak", "talk", "hands free", "hands-free", "scream")) {
         "Voice SOS is on the Wear OS watch. Turn it on from the watch's Home screen (Voice SOS), then saying HELP HELP HELP clearly, three times in a row, starts the same 5-second countdown as the other triggers: the watch vibrates, you can cancel, and then the full SOS goes out. It listens only while switched on, entirely on the watch; no audio is saved or sent. Use Practise on the watch to check it hears you."

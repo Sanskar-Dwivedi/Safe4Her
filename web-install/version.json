@@ -3,17 +3,17 @@
     "url": "https://udjoctuzlbmtdhhujjqr.supabase.co",
     "key": "sb_publishable_1G6X_hBx9qrw5TaBKK7LXA_8xpd1yMJ"
   },
-  "versionCode": 18,
-  "versionName": "1.1.0-beta.8",
+  "versionCode": 21,
+  "versionName": "1.1.0-beta.11",
   "apk": "Security4Her-phone.apk",
-  "sha256": "63fe776a2742d5e95f343ca710deb22eee9eb74b903ea3036c4fc1aa7508ee89",
-  "bytes": 11025450,
-  "notes": "Evidence opens only in the app, safer SOS texting, police number 100.",
+  "sha256": "e03f9ebf10a092cd49acf65b4102af3fe66914e025320c81dcbbe66102c8ae69",
+  "bytes": 11029546,
+  "notes": "Pocket SOS: press the power button slowly, about once a second.",
   "watch": {
     "versionCode": 13,
     "versionName": "1.1.0-beta.7",
     "apk": "Security4Her-watch.apk",
-    "sha256": "ee90d71433bb8d4a69dc80e3aefca50abff5b5e988e0fe51af45e05863ee95ae",
+    "sha256": "2ac7a6bda5c850dec4485bf72b6d618d622219ec2b8e5932a216231429dc5be2",
     "bytes": 53854126
   }
 }

@@ -51,7 +51,8 @@ fun PocketCountdownScreen(seconds: Int) {
         Text("SOS in", color = SosRed, style = MaterialTheme.typography.headlineMedium)
         Text("$seconds", color = SosRed, fontFamily = Baloo, fontWeight = FontWeight.ExtraBold, fontSize = 140.sp, lineHeight = 140.sp)
         Text(
-            "Three knocks were detected on your phone. Your contacts will be alerted unless you cancel.",
+            if (PocketSos.powerMode(ctx)) "The power button was pressed 3 times. Your contacts will be alerted unless you cancel."
+            else "Three knocks were detected on your phone. Your contacts will be alerted unless you cancel.",
             color = Muted, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center,
         )
         Spacer(Modifier.weight(1f))

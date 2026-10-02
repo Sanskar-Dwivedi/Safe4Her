@@ -814,7 +814,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
         <details><summary>Nothing happens when I tap the file</summary><p class="ans">Android needs permission for Chrome (or your Files app) to install apps. Open Settings, search for "Install unknown apps", pick the app you're opening the file from and turn on Allow from this source.</p></details>
         <details><summary>It says "App not installed"</summary><p class="ans">An older copy of Security4Her is probably still on the phone. Uninstall it, then open the file again. Also check you have about 80 MB free.</p></details>
         <details><summary>It says "App was denied access" for SMS</summary><p class="ans">Android 15 does this for every app installed from a download. The app fixes it in one tap: on Home tap <strong>Fix</strong>, then <strong>Fix texting</strong>, and tap <strong>Update</strong> when Android asks. Security4Her reinstalls itself the way an app store would, keeping everything. Open it again and tap <strong>Allow</strong>. Until then, an SOS still works: it opens Messages with your text and contacts filled in, so it's one tap to send.</p></details>
-        <details><summary>Knocking opens Gemini, or does nothing</summary><p class="ans">Pocket SOS only listens with the screen off, so knock after pressing the power button. If Gemini or the Assistant opens, your phone's own tap gesture caught it: in Settings, search for "Quick Tap" or "Back tap" and turn it off. To check your phone, open Me, then Pocket SOS, then <strong>Test it with the screen off</strong>. It tells you exactly what your phone felt.</p></details>
+        <details><summary>Pressing the power button 3 times opens the phone's own SOS or the camera</summary><p class="ans">Press slowly, about one press a second. Your phone's own Emergency SOS and the double-press camera only count fast presses, so a calm rhythm sets off only Security4Her. If the phone's SOS still opens, turn it off from Me, then Pocket SOS in the app. To check your phone, tap <strong>Test it</strong> there. Prefer knocking? Choose <strong>Knock ×3</strong> instead.</p></details>
         <details><summary>Why does it ask for so many permissions?</summary><p class="ans">Location to share where you are, SMS and phone to reach your contacts without internet, microphone and camera to record evidence during an SOS, and notifications to show the alert. Nothing is recorded or shared unless an SOS or Safe Journey is running.</p></details>
       </div>
       <div class="faq-group">
@@ -837,9 +837,9 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
   <div class="wrap foot">
     <a class="brand" href="#phone"><svg aria-hidden="true"><use href="#logo"/></svg>Security4Her</a>
     <div class="foot-meta">
-      <span>Phone app 1.1.0-beta.8 for Android 8 and newer. Watch app 1.1.0-beta.7 for Wear OS 3 and newer.</span>
+      <span>Phone app 1.1.0-beta.11 for Android 8 and newer. Watch app 1.1.0-beta.7 for Wear OS 3 and newer.</span>
       <span class="credits">Made by <b>Atharva Lakhe</b><i>·</i><b>Sanskar Dwivedi</b><i>·</i><b>Mohit Hadap</b><i>·</i><b>Ashay Malode</b></span>
-      <span class="hash">Phone app SHA-256 <code id="sha">63fe776a2742d5e95f343ca710deb22eee9eb74b903ea3036c4fc1aa7508ee89</code><button class="copy-btn" type="button" data-copy-from="sha">Copy</button></span>
+      <span class="hash">Phone app SHA-256 <code id="sha">e03f9ebf10a092cd49acf65b4102af3fe66914e025320c81dcbbe66102c8ae69</code><button class="copy-btn" type="button" data-copy-from="sha">Copy</button></span>
       <span class="foot-links"><a href="beta.html">Beta testing</a><a href="privacy.html">Privacy</a><a href="beta.html#whats-new">What's new</a><a href="beta.html#team">The team</a></span>
     </div>
   </div>
@@ -851,7 +851,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 44px;color:var(--muted);f
 <script src="vendor/qrcode.min.js" defer></script>
 <script>
 (() => {
-  const APK = { url: "Security4Her-phone.apk", name: "Security4Her-phone.apk", bytes: 11025450 };
+  const APK = { url: "Security4Her-phone.apk", name: "Security4Her-phone.apk", bytes: 11029546 };
   const CANONICAL = "https://security4her.vercel.app/";
   const TABS = ["phone", "watch", "inside", "help"];
   const $ = (s, r = document) => r.querySelector(s);
