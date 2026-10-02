@@ -13,6 +13,7 @@ import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -60,7 +61,7 @@ data class SosStartMsg(
 data class SosLocationMsg(val incidentId: String, val lat: Double, val lng: Double, val accuracyM: Float? = null, val fixAt: Long)
 
 @Serializable
-data class IncidentRef(val incidentId: String)
+data class IncidentRef(val incidentId: String, val pin: String? = null) // pin: typed on the watch to end an SOS
 
 @Serializable
 data class FakeCallRequest(val requestId: String, val createdAt: Long)
@@ -81,7 +82,11 @@ data class PhoneStatus(
 )
 
 @Serializable
-data class DeviceLink(val userId: String, val displayName: String = "", val deviceToken: String, val testMode: Boolean = true)
+data class DeviceLink(
+    val userId: String, val displayName: String = "", val deviceToken: String, val testMode: Boolean = true,
+    // A salted hash of the safety PIN (never the PIN), so the watch can ask for it before ending an SOS.
+    val pinHash: String = "", val pinSalt: String = "", val pinIter: Int = 0,
+)
 
 // ---- Supabase rows (CONTRACT.md §3) ----
 
@@ -124,13 +129,14 @@ data class Settings(
 ) {
     companion object {
         fun load(ctx: Context): Settings = with(Store.prefs(ctx)) {
+            Pin.migrate(ctx)
             Settings(
                 testMode = getBoolean("test_mode", true), // on until she turns it off: police texts and the auto-call go to her test number
                 demoNumber = getString("demo_number", "")!!,
                 policeNumber = getString("police_number", "112")!!,
                 autoCallNumber = getString("auto_call_number", "")!!,
                 countdownSec = getInt("countdown_sec", 10),
-                pin = getString("pin", "")!!,
+                pin = "", // only a salted hash is kept (Pin); this field carries a NEW PIN to save
                 smsUpdates = getBoolean("sms_updates", true),
                 evidence = getBoolean("evidence", true),
                 evidenceVideo = getBoolean("evidence_video", true),
@@ -138,13 +144,17 @@ data class Settings(
         }
     }
 
-    fun save(ctx: Context) = Store.prefs(ctx).edit()
+    fun save(ctx: Context) {
+        if (pin.length == 4 && pin.all(Char::isDigit)) Pin.set(ctx, pin)
+        saveRest(ctx)
+    }
+
+    private fun saveRest(ctx: Context) = Store.prefs(ctx).edit()
         .putBoolean("test_mode", testMode)
         .putString("demo_number", demoNumber.trim())
         .putString("police_number", policeNumber.trim())
         .putString("auto_call_number", autoCallNumber.trim())
         .putInt("countdown_sec", countdownSec.coerceIn(3, 60))
-        .putString("pin", pin)
         .putBoolean("sms_updates", smsUpdates)
         .putBoolean("evidence", evidence)
         .putBoolean("evidence_video", evidenceVideo)
@@ -386,5 +396,81 @@ object AppLog {
             appendLine("Security4Her activity log · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE}")
             list.forEach { appendLine("${fmt.format(java.util.Date(it.at))}  ${it.level.uppercase().padEnd(5)}  [${it.tag}] ${it.msg}") }
         }
+    }
+}
+
+
+/**
+ * The safety PIN. Stored only as a salted PBKDF2 hash, never as the digits. After 5 wrong tries it locks for 30 s,
+ * doubling each further miss (up to an hour), so it can't be guessed by going through all 10,000 PINs.
+ */
+object Pin {
+    sealed interface Check {
+        data object Ok : Check
+        data class Wrong(val left: Int) : Check
+        data class Locked(val seconds: Int) : Check
+    }
+
+    private const val ITER = 20_000
+    private const val FREE_TRIES = 5
+
+    fun isSet(ctx: Context) = Store.prefs(ctx).contains("pin_hash")
+
+    fun hash(pin: String, salt: ByteArray, iter: Int): ByteArray {
+        val spec = javax.crypto.spec.PBEKeySpec(pin.toCharArray(), salt, iter, 256)
+        return javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+    }
+
+    private fun hex(b: ByteArray) = b.joinToString("") { "%02x".format(it) }
+    private fun unhex(s: String) = ByteArray(s.length / 2) { s.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+
+    fun set(ctx: Context, pin: String) {
+        val salt = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
+        Store.prefs(ctx).edit().putString("pin_hash", hex(hash(pin, salt, ITER))).putString("pin_salt", hex(salt)).putInt("pin_iter", ITER)
+            .remove("pin").putInt("pin_fails", 0).remove("pin_locked_until").apply()
+        relinkWatch(ctx)
+    }
+
+    /** Earlier versions stored the digits themselves: hash them once and delete the plain copy. */
+    fun migrate(ctx: Context) {
+        val p = Store.prefs(ctx)
+        val old = p.getString("pin", null) ?: return
+        if (old.length == 4 && !isSet(ctx)) set(ctx, old) else p.edit().remove("pin").apply()
+    }
+
+    fun check(ctx: Context, entered: String): Check {
+        val p = Store.prefs(ctx)
+        val now = System.currentTimeMillis()
+        val until = p.getLong("pin_locked_until", 0)
+        if (now < until) return Check.Locked(((until - now) / 1000).toInt() + 1)
+        val stored = p.getString("pin_hash", null) ?: return Check.Ok
+        val ok = runCatching {
+            java.security.MessageDigest.isEqual(hash(entered, unhex(p.getString("pin_salt", "")!!), p.getInt("pin_iter", ITER)), unhex(stored))
+        }.getOrDefault(false)
+        if (ok) { p.edit().putInt("pin_fails", 0).remove("pin_locked_until").apply(); return Check.Ok }
+        val fails = p.getInt("pin_fails", 0) + 1
+        `in`.security4her.app.beta.Beta.record(`in`.security4her.app.beta.BetaCategory.SECURITY, "warning", "sos_pin_wrong", null, mapOf("fails" to fails))
+        if (fails < FREE_TRIES) { p.edit().putInt("pin_fails", fails).apply(); return Check.Wrong(FREE_TRIES - fails) }
+        val lockMs = (30_000L shl (fails - FREE_TRIES).coerceAtMost(7)).coerceAtMost(3_600_000L)
+        p.edit().putInt("pin_fails", fails).putLong("pin_locked_until", now + lockMs).apply()
+        AppLog.warn("Security", "Safety PIN entered wrongly $fails times; locked for ${lockMs / 1000} s")
+        return Check.Locked((lockMs / 1000).toInt())
+    }
+
+    fun message(c: Check) = when (c) {
+        Check.Ok -> ""
+        is Check.Wrong -> if (c.left == 1) "That PIN doesn't match. One more wrong try locks it for 30 seconds." else "That PIN doesn't match."
+        is Check.Locked -> "Too many wrong tries. Try again in ${if (c.seconds >= 120) "${c.seconds / 60} minutes" else "${c.seconds} seconds"}."
+    }
+
+    /** What the watch needs to check the PIN itself: the hash and salt, never the digits. */
+    fun forWatch(ctx: Context): Triple<String, String, Int> {
+        val p = Store.prefs(ctx)
+        return Triple(p.getString("pin_hash", "")!!, p.getString("pin_salt", "")!!, p.getInt("pin_iter", 0))
+    }
+
+    private fun relinkWatch(ctx: Context) {
+        val app = ctx.applicationContext
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { runCatching { `in`.security4her.app.sos.WearBridge.linkWatch(app) } }
     }
 }

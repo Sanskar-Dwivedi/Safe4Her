@@ -509,7 +509,8 @@ object WearBridge {
         val p = Backend.profile()
         if (!p.verifiedFemale) return@runCatching
         val token = Backend.registerWatch()
-        val link = DeviceLink(p.id, p.displayName.orEmpty(), token, Settings.load(ctx).testMode)
+        val (pinHash, pinSalt, pinIter) = `in`.security4her.app.core.Pin.forWatch(ctx)
+        val link = DeviceLink(p.id, p.displayName.orEmpty(), token, Settings.load(ctx).testMode, pinHash, pinSalt, pinIter)
         put(ctx, Paths.DEVICE, S4hJson.encodeToString(DeviceLink.serializer(), link))
     }.onSuccess { AppLog.ok("Watch", "Account details sent to the watch") }
         .onFailure {
@@ -568,7 +569,16 @@ class PhoneWearListenerService : WearableListenerService() {
                 Paths.SOS_LOCATION -> SosEngine.onWatchLocation(S4hJson.decodeFromString(SosLocationMsg.serializer(), json))
                 Paths.SOS_CANCEL -> {
                     val ref = S4hJson.decodeFromString(IncidentRef.serializer(), json)
-                    if (SosEngine.current.value?.id == ref.incidentId) SosEngine.end("resolved")
+                    if (SosEngine.current.value?.id != ref.incidentId) return
+                    // Someone holding her wrist must not be able to switch the SOS off: the watch has to send the PIN.
+                    if (`in`.security4her.app.core.Pin.isSet(this)) {
+                        val r = `in`.security4her.app.core.Pin.check(this, ref.pin.orEmpty())
+                        if (r !is `in`.security4her.app.core.Pin.Check.Ok) {
+                            AppLog.warn("SOS", "The watch asked to end the SOS without the right PIN, so it keeps going")
+                            return
+                        }
+                    }
+                    SosEngine.end("resolved")
                 }
                 Paths.LINK_REQUEST -> runBlocking { WearBridge.linkWatch(this@PhoneWearListenerService) }
                 Paths.FAKE_CALL_START -> {

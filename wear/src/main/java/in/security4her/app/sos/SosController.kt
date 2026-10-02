@@ -173,15 +173,15 @@ object SosController {
     }
 
     /** "I'm safe" on the watch: end locally first, then tell the phone and the server. */
-    fun end(context: Context) {
+    fun end(context: Context, pin: String? = null) {
         val app = context.applicationContext
         scope.launch {
             val store = WatchStore.get(app)
             val incident = store.incidentNow()?.takeIf { !it.ended } ?: return@launch
             store.updateIncident(incident.incidentId) { it.copy(ended = true, endedAt = System.currentTimeMillis()) }
             `in`.security4her.app.beta.WatchBeta.event("usage", "info", "sos_ended", null, mapOf("ms" to System.currentTimeMillis() - incident.createdAt)); `in`.security4her.app.beta.WatchBeta.flush()
-            val ref = S4hJson.encodeToString(IncidentRef.serializer(), IncidentRef(incident.incidentId))
-            PhoneLink.send(app, Paths.SOS_CANCEL, ref)
+            val ref = S4hJson.encodeToString(IncidentRef.serializer(), IncidentRef(incident.incidentId, pin))
+            PhoneLink.send(app, Paths.SOS_CANCEL, ref) // the phone checks the PIN again before it stops anything
             val link = store.linkNow()
             if (link != null && incident.serverAccepted) ServerLink.post(link, incident.serverRequest("cancel"))
         }

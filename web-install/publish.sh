@@ -14,8 +14,27 @@ export JAVA_HOME="${JAVA_HOME:-$LOCALAPPDATA/s4h-tools/jdk17}"
 ver() { grep -oE "$2 = \"?[^\"]+\"?" "$1/build.gradle.kts" | head -1 | sed -E "s/$2 = \"?([^\"]+)\"?/\1/"; }
 P_CODE=$(ver mobile versionCode); P_NAME=$(ver mobile versionName)
 W_CODE=$(ver wear versionCode);   W_NAME=$(ver wear versionName)
-cp mobile/build/outputs/apk/release/mobile-release.apk web-install/Security4Her-phone.apk
-cp wear/build/outputs/apk/release/wear-release.apk web-install/Security4Her-watch.apk
+# Release signing. The old key (keystore/debug.keystore) is public in this repo, so releases are signed with a private
+# key kept OUTSIDE the repo, in ~/.security4her/ (release.jks, release.pass, lineage.bin). The lineage is the old key's
+# signed proof that the new key replaces it, so installed copies update in place on Android 9+ and Wear OS, and an
+# APK signed only with the old key can no longer update them. Back that folder up: without it, no update can ever ship.
+KEYS="${S4H_KEYS:-$USERPROFILE/.security4her}"
+SIGNER="$LOCALAPPDATA/Android/Sdk/build-tools/36.0.0/lib/apksigner.jar"
+for f in "$KEYS/release.jks" "$KEYS/release.pass" "$KEYS/lineage.bin" "$SIGNER"; do
+  [ -f "$f" ] || { echo "Missing $f: can't sign a release." >&2; exit 1; }
+done
+win() { cygpath -w "$1" 2>/dev/null || echo "$1"; }
+sign() {
+  "$JAVA_HOME/bin/java" -jar "$(win "$SIGNER")" sign \
+    --ks "$(win keystore/debug.keystore)" --ks-pass pass:android --ks-key-alias androiddebugkey \
+    --next-signer --ks "$(win "$KEYS/release.jks")" --ks-pass "file:$(win "$KEYS/release.pass")" --ks-key-alias security4her \
+    --lineage "$(win "$KEYS/lineage.bin")" --rotation-min-sdk-version 28 \
+    --out "$(win "$2")" "$(win "$1")"
+  "$JAVA_HOME/bin/java" -jar "$(win "$SIGNER")" verify --min-sdk-version 28 "$(win "$2")" >/dev/null
+}
+sign mobile/build/outputs/apk/release/mobile-release.apk web-install/Security4Her-phone.apk
+sign wear/build/outputs/apk/release/wear-release.apk web-install/Security4Her-watch.apk
+rm -f web-install/*.idsig
 cd web-install
 
 python - "$P_CODE" "$P_NAME" "$W_CODE" "$W_NAME" "$NOTES" <<'PY'

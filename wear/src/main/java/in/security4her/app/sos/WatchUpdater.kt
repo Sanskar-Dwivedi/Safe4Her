@@ -140,7 +140,7 @@ object WatchUpdater {
                     }
                 }
                 val sha = md.digest().joinToString("") { "%02x".format(it) }
-                if (r.sha256.isNotBlank() && sha != r.sha256) {
+                if (r.sha256.length != 64 || sha != r.sha256) { // no fingerprint = no install
                     file.delete()
                     `in`.security4her.app.beta.WatchBeta.event("security", "critical", "update_fingerprint_mismatch", null)
                     _state.value = State.Failed("Download was damaged. Trying again later.", r)

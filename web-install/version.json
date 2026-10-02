@@ -3,17 +3,17 @@
     "url": "https://udjoctuzlbmtdhhujjqr.supabase.co",
     "key": "sb_publishable_1G6X_hBx9qrw5TaBKK7LXA_8xpd1yMJ"
   },
-  "versionCode": 16,
-  "versionName": "1.1.0-beta.6",
+  "versionCode": 17,
+  "versionName": "1.1.0-beta.7",
   "apk": "Security4Her-phone.apk",
-  "sha256": "423cb24e064ec0d62e84443413b49e252c12d8e7b4e0118f19f71c02ef2ab4c8",
-  "bytes": 10977715,
-  "notes": "Fixes and improvements.",
+  "sha256": "171956ae6af45e802b021aafcc4a2725800959fbd9f7eb66cd3453c0f4d6c7fb",
+  "bytes": 11013162,
+  "notes": "Security fixes, evidence that survives the app being deleted, a faster map.",
   "watch": {
-    "versionCode": 10,
-    "versionName": "1.1.0-beta.2",
+    "versionCode": 13,
+    "versionName": "1.1.0-beta.7",
     "apk": "Security4Her-watch.apk",
-    "sha256": "a59dacfac6793e929d129afcd6d10a77614045d2a8a77c60372303d269a06044",
-    "bytes": 53136408
+    "sha256": "0a292f27a54add032f4ffa709a240e8e607b0b49900497819910b8c641b78e48",
+    "bytes": 53854126
   }
 }

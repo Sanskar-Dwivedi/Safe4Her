@@ -474,7 +474,7 @@ class JourneyService : Service() {
             channels(ctx)
             val s = Journey.state.value ?: return
             // With a PIN set, "I'm OK" must go through the app so someone else can't dismiss it.
-            val ok = if (Settings.load(ctx).pin.isNotBlank()) open(ctx, 23) else action(ctx, 23, SosReceiver.JOURNEY_OK)
+            val ok = if (`in`.security4her.app.core.Pin.isSet(ctx)) open(ctx, 23) else action(ctx, 23, SosReceiver.JOURNEY_OK)
             val n = NotificationCompat.Builder(ctx, CHANNEL_ALERT)
                 .setSmallIcon(R.drawable.ic_notif_security4her)
                 .setContentTitle("Are you OK?")

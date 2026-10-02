@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.1.0-beta.7 (2026-10-02)
+
+### Security
+- **New private signing key.** Earlier releases were signed with a key that is public in the source repo, so anyone
+  could build a fake "update". Releases are now signed with a private key, rotated in with Android's signing lineage:
+  installed copies update in place, and APKs signed with the old key are refused (tested on Android 15).
+- **The safety PIN is stored as a salted hash**, never as digits, and locks for 30 seconds after 5 wrong tries,
+  doubling each further miss.
+- **The watch needs the PIN to end an SOS.** Before, "I'm safe" on the watch ended it without one; now the watch asks,
+  and the phone checks it again before stopping anything.
+- **The community map ignores junk:** malformed, oversized, future or month-old items, and more than 10 reports per
+  author. SOS pins are shared rounded to the hour, and test SOSs are no longer shared at all.
+- The watch refuses an update without a fingerprint. The website loads no third-party code and sends security headers.
+
+### Added
+- **Evidence survives the app being deleted.** Every recording and its fingerprint list are copied to
+  Downloads/Security4Her evidence/, checked against their fingerprints.
+
+### Changed
+- **Evidence takes less space.** Video records at 700 kbps (was 1.2 Mbps) and audio at 24 kbps. After the 24-hour
+  lock, the app keeps only the verified Downloads copy instead of two. Nothing already recorded is re-encoded, so
+  every fingerprint still matches.
+- **The map works on weak or no internet:** nearby places and map tiles are kept between visits, it opens at your last
+  known position straight away, and it no longer redraws the whole screen while you drag it.
+
+### Fixed
+- A commit had broken the build (`FontWeights` import in DigiLockerDemo.kt).
+
 ## Watch build 12 / Phone build 17 (2026-10-02, local builds)
 
 - Restore automatic five-second SOS countdown on normal watch opening after setup, covering Samsung

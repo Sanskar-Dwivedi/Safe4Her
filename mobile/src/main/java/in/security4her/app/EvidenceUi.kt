@@ -156,7 +156,7 @@ fun EvidenceLockerScreen(onClose: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) { TextButton(onClick = onClose) { Text("‹  Back", color = Lilac) } }
         Text("Evidence locker", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(horizontal = 20.dp))
         Text(
-            "Audio and video recorded during SOS alerts. Stored only in this app, not in your gallery.",
+            "Audio and video recorded during SOS alerts, each with a fingerprint. Copied to Downloads so they survive the app being deleted.",
             color = Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
         )
         val list = cases
@@ -220,7 +220,6 @@ private fun CaseScreen(c0: EvidenceCase, onBack: () -> Unit) {
             mapOf("pieces" to c.pieces.size))
     }
 
-    fun fileOf(p: EvidencePiece) = File(Evidence.dir(ctx, c.incidentId), p.file)
     fun play(p: EvidencePiece) {
         player[0]?.release()
         val queue = c.pieces.filter { it.kind == p.kind && it.seq >= p.seq }.sortedBy { it.seq }
@@ -228,7 +227,7 @@ private fun CaseScreen(c0: EvidenceCase, onBack: () -> Unit) {
             if (i >= queue.size) { playing = null; return }
             playing = queue[i].seq
             player[0] = MediaPlayer().apply {
-                setDataSource(fileOf(queue[i]).absolutePath)
+                setDataSource(ctx, Evidence.uri(ctx, c, queue[i]) ?: return)
                 setOnCompletionListener { it.release(); start(i + 1) }
                 prepare()
                 start()
@@ -237,7 +236,7 @@ private fun CaseScreen(c0: EvidenceCase, onBack: () -> Unit) {
         runCatching { start(0) }.onFailure { playing = null }
     }
     fun openVideo(p: EvidencePiece) {
-        val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", fileOf(p))
+        val uri = Evidence.uri(ctx, c, p) ?: return
         runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "video/mp4").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
     }
 
@@ -262,6 +261,11 @@ private fun CaseScreen(c0: EvidenceCase, onBack: () -> Unit) {
                         color = if (i != null && !i.ok) SosRed else Ink, style = MaterialTheme.typography.bodyMedium,
                     )
                 }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "A copy is also saved in ${`in`.security4her.app.sos.EvidenceBackup.where(c)}, with its fingerprints. It stays there even if this app is deleted. After the 24-hour lock, only that copy is kept, to save space.",
+                    color = Muted, style = MaterialTheme.typography.bodySmall,
+                )
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(
@@ -329,24 +333,30 @@ private fun CaseScreen(c0: EvidenceCase, onBack: () -> Unit) {
     if (askDelete) {
         val blocked = Evidence.deleteBlockedReason(c)
         var pin by remember { mutableStateOf("") }
-        val needsPin = Settings.load(ctx).pin.isNotBlank()
+        val needsPin = `in`.security4her.app.core.Pin.isSet(ctx)
+        var pinMsg by remember { mutableStateOf<String?>(null) }
         AlertDialog(
             onDismissRequest = { askDelete = false },
             containerColor = Surface1,
             title = { Text(if (blocked != null) "Can't delete yet" else "Delete this evidence?") },
             text = {
                 Column {
-                    Text(blocked ?: "This permanently removes ${c.pieces.size} recordings from this phone. Export a copy first if you might need it.", color = Muted)
+                    Text(blocked ?: "This removes ${c.pieces.size} recordings from the app. The copy in Downloads stays until you delete it there yourself.", color = Muted)
                     if (blocked == null && needsPin) {
                         Spacer(Modifier.height(10.dp))
-                        Field(pin, { pin = it.filter(Char::isDigit).take(4) }, "Your PIN", KeyboardType.NumberPassword, secret = true)
+                        Field(pin, { pin = it.filter(Char::isDigit).take(4); pinMsg = null }, "Your PIN", KeyboardType.NumberPassword, secret = true)
+                        pinMsg?.let { Text(it, color = SosRed, modifier = Modifier.padding(top = 6.dp)) }
                     }
                 }
             },
             confirmButton = {
                 if (blocked == null) TextButton(
-                    enabled = !needsPin || pin == Settings.load(ctx).pin,
-                    onClick = { askDelete = false; if (Evidence.delete(ctx, c)) onBack() },
+                    enabled = !needsPin || pin.length == 4,
+                    onClick = {
+                        val r = if (needsPin) `in`.security4her.app.core.Pin.check(ctx, pin) else `in`.security4her.app.core.Pin.Check.Ok
+                        if (r is `in`.security4her.app.core.Pin.Check.Ok) { askDelete = false; if (Evidence.delete(ctx, c)) onBack() }
+                        else { pinMsg = `in`.security4her.app.core.Pin.message(r); pin = "" }
+                    },
                 ) { Text("Delete", color = SosRed) }
             },
             dismissButton = { TextButton(onClick = { askDelete = false }) { Text(if (blocked != null) "OK" else "Keep", color = Muted) } },

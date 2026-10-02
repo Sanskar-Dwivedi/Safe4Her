@@ -132,6 +132,7 @@ class App : Application() {
         super.onCreate()
         AppLog.init(this)
         `in`.security4her.app.beta.Beta.init(this)
+        `in`.security4her.app.sos.Evidence.backfill(this) // older recordings get their Downloads copy too
         `in`.security4her.app.core.Community.init(this)
         Backend.init(this)
         SosEngine.init(this)
@@ -715,7 +716,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
         ReadyFacts(
             hasContact = alerted.isNotEmpty(),
             hasPerms = has(ctx, Manifest.permission.ACCESS_FINE_LOCATION) && has(ctx, Manifest.permission.SEND_SMS),
-            hasPin = settings.pin.length == 4, watch = watch,
+            hasPin = `in`.security4her.app.core.Pin.isSet(ctx), watch = watch,
         )
     }
 
@@ -1666,7 +1667,9 @@ private fun DuringSosEditor(settings: Settings, onSave: (Settings) -> Unit) {
     var police by remember(settings.policeNumber) { mutableStateOf(settings.policeNumber) }
     var call by remember(settings.autoCallNumber) { mutableStateOf(settings.autoCallNumber) }
     var secs by remember(settings.countdownSec) { mutableStateOf(settings.countdownSec.toString()) }
-    var pin by remember(settings.pin) { mutableStateOf(settings.pin) }
+    var pin by remember { mutableStateOf("") }
+    val pinCtx = LocalContext.current
+    val pinSet = remember { `in`.security4her.app.core.Pin.isSet(pinCtx) }
 
     val policeErr = if (digits(police) < 3) "Enter the number to text, for example 112." else null
     val callErr = if (call.isNotBlank() && digits(call) < 3) "Enter a full phone number, or leave it blank." else null
@@ -1674,7 +1677,7 @@ private fun DuringSosEditor(settings: Settings, onSave: (Settings) -> Unit) {
     val secsErr = if (secsN == null || secsN !in 3..60) "Choose between 3 and 60 seconds." else null
     val pinErr = if (pin.isNotEmpty() && pin.length != 4) "A PIN needs exactly 4 digits, or leave it blank." else null
     val changed = police.trim() != settings.policeNumber || call.trim() != settings.autoCallNumber ||
-        secs != settings.countdownSec.toString() || pin != settings.pin
+        secs != settings.countdownSec.toString() || pin.isNotEmpty()
     val phone = { v: String -> v.filter { c -> c.isDigit() || c in "+ -" } }
 
     Field(police, { police = phone(it) }, "Police text number", KeyboardType.Phone)
@@ -1686,15 +1689,15 @@ private fun DuringSosEditor(settings: Settings, onSave: (Settings) -> Unit) {
     Field(secs, { secs = it.filter(Char::isDigit).take(2) }, "Seconds before the call", KeyboardType.Number)
     secsErr?.let { FieldError(it) }
     Spacer(Modifier.height(10.dp))
-    Field(pin, { pin = it.filter(Char::isDigit).take(4) }, "PIN to end an SOS (4 digits, optional)", KeyboardType.NumberPassword, secret = true)
+    Field(pin, { pin = it.filter(Char::isDigit).take(4) }, if (pinSet) "New PIN (blank keeps your current one)" else "PIN to end an SOS (4 digits, optional)", KeyboardType.NumberPassword, secret = true)
     pinErr?.let { FieldError(it) }
 
     SaveBar(
         changed = changed, valid = listOf(policeErr, callErr, secsErr, pinErr).all { it == null },
-        onDiscard = { police = settings.policeNumber; call = settings.autoCallNumber; secs = settings.countdownSec.toString(); pin = settings.pin },
+        onDiscard = { police = settings.policeNumber; call = settings.autoCallNumber; secs = settings.countdownSec.toString(); pin = "" },
     ) {
         onSave(settings.copy(policeNumber = police.trim(), autoCallNumber = call.trim(), countdownSec = secsN ?: settings.countdownSec, pin = pin))
-        AppLog.ok("Settings", "SOS settings saved: text ${police.trim()}, call ${call.trim().ifBlank { "first contact" }}, ${secsN}s countdown, PIN ${if (pin.isEmpty()) "off" else "on"}")
+        AppLog.ok("Settings", "SOS settings saved: text ${police.trim()}, call ${call.trim().ifBlank { "first contact" }}, ${secsN}s countdown, PIN ${if (pin.isNotEmpty()) "changed" else if (pinSet) "unchanged" else "off"}")
     }
 }
 
@@ -1986,7 +1989,7 @@ private fun ActiveSosScreen(inc: Incident) {
         Box(Modifier.fillMaxWidth().padding(18.dp)) {
             if (inc.active) {
                 PrimaryButton("I'm safe") {
-                    if (Settings.load(ctx).pin.isBlank()) SosEngine.end("resolved") else askPin = true
+                    if (!`in`.security4her.app.core.Pin.isSet(ctx)) SosEngine.end("resolved") else askPin = true
                 }
             } else PrimaryButton("Back to home") { SosEngine.dismiss() }
         }
@@ -1994,23 +1997,22 @@ private fun ActiveSosScreen(inc: Incident) {
 
     if (askPin) {
         var pin by remember { mutableStateOf("") }
-        var wrong by remember { mutableStateOf(false) }
+        var wrong by remember { mutableStateOf<String?>(null) }
         AlertDialog(
             onDismissRequest = { askPin = false },
             containerColor = Surface1,
             title = { Text("Enter your PIN") },
             text = {
                 Column {
-                    Field(pin, { pin = it.filter(Char::isDigit).take(4); wrong = false }, "4-digit PIN", KeyboardType.NumberPassword, secret = true)
-                    if (wrong) Text("That PIN doesn't match.", color = SosRed, modifier = Modifier.padding(top = 8.dp))
+                    Field(pin, { pin = it.filter(Char::isDigit).take(4); wrong = null }, "4-digit PIN", KeyboardType.NumberPassword, secret = true)
+                    wrong?.let { Text(it, color = SosRed, modifier = Modifier.padding(top = 8.dp)) }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (pin == Settings.load(ctx).pin) { askPin = false; SosEngine.end("resolved") } else {
-                        wrong = true
-                        `in`.security4her.app.beta.Beta.record(`in`.security4her.app.beta.BetaCategory.SECURITY, "warning", "sos_pin_wrong", null)
-                    }
+                    val r = `in`.security4her.app.core.Pin.check(ctx, pin)
+                    if (r is `in`.security4her.app.core.Pin.Check.Ok) { askPin = false; SosEngine.end("resolved") }
+                    else { wrong = `in`.security4her.app.core.Pin.message(r); pin = "" }
                 }) { Text("End SOS", color = Lilac) }
             },
             dismissButton = { TextButton(onClick = { askPin = false }) { Text("Keep SOS on", color = Muted) } },

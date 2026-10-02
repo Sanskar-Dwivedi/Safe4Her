@@ -124,7 +124,7 @@ third-party trackers in either app. During the beta, testers can choose to share
 <tr>
 <td>Places she adds to the safety map, and where SOS alerts happen</td>
 <td>When she adds a report, and once per SOS</td>
-<td>A shared community topic on ntfy.sh. SOS locations are rounded to about 100 m and carry no name or number.</td>
+<td>A shared community topic on ntfy.sh. SOS locations are rounded to about 100 m and to the hour, and carry no name or number. Test SOSs are never shared.</td>
 </tr>
 <tr>
 <td>Account, contacts and incidents</td>
@@ -141,7 +141,9 @@ third-party trackers in either app. During the beta, testers can choose to share
 <h2>What stays on the device</h2>
 <ul>
 <li><strong>Evidence</strong>: audio and video recorded during an SOS stay on the phone, fingerprinted with SHA-256 and
-  locked against deletion for 24 hours. They leave only if she exports them.</li>
+  locked against deletion in the app for 24 hours. A copy is saved in Downloads/Security4Her evidence/ so it
+  survives the app being deleted; after 24 hours only that copy is kept. Other apps allowed to read your media can
+  see those files. They leave the phone only if she exports them.</li>
 <li><strong>Voice SOS</strong>: speech is recognised entirely on the watch. Nothing is recorded, stored or sent; the app
   only reacts to "HELP HELP HELP".</li>
 <li><strong>Knock and shake detection</strong>: motion data is processed on the device and discarded.</li>

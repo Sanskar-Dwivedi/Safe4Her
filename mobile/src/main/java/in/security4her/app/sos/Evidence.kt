@@ -85,7 +85,7 @@ data class Integrity(val ok: Boolean, val checked: Int, val broken: List<Int>)
  * Everything stays in app-private storage (not in the gallery) with a fingerprint chain in manifest.json.
  */
 object Evidence {
-    private const val AUDIO_SEG_BYTES = 60_000L // ~15 s at 32 kbps
+    private const val AUDIO_SEG_BYTES = 45_000L // ~15 s at 24 kbps
     private const val VIDEO_CLIP_MS = 30_000L
     private const val MAX_MS = 60 * 60_000L
     private const val LOCK_MS = 24 * 3_600_000L
@@ -157,6 +157,7 @@ object Evidence {
         io.execute {
             val done = (load(app, c.incidentId) ?: c).copy(recording = false, endedAt = System.currentTimeMillis())
             save(app, done)
+            EvidenceBackup.writeManifest(app, done)
             AppLog.ok("Evidence", "Recording stopped: ${done.pieces.size} pieces, ${human(done.bytes)}")
         }
     }
@@ -175,7 +176,7 @@ object Evidence {
             r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
             r.setAudioChannels(1)
             r.setAudioSamplingRate(16_000)
-            r.setAudioEncodingBitRate(32_000)
+            r.setAudioEncodingBitRate(24_000) // speech stays clear; about 11 MB an hour
             r.setMaxFileSize(AUDIO_SEG_BYTES)
             val f = nextFile(ctx, "audio", "m4a")
             r.setOutputFile(f)
@@ -235,7 +236,7 @@ object Evidence {
                 provider = p
                 val recorder = Recorder.Builder()
                     .setQualitySelector(QualitySelector.from(Quality.SD, FallbackStrategy.lowerQualityOrHigherThan(Quality.SD)))
-                    .setTargetVideoEncodingBitRate(1_200_000)
+                    .setTargetVideoEncodingBitRate(700_000) // 480p, faces readable; about 320 MB an hour instead of 540
                     .build()
                 val vc = VideoCapture.withOutput(recorder)
                 val camera = if (p.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)) CameraSelector.DEFAULT_BACK_CAMERA else CameraSelector.DEFAULT_FRONT_CAMERA
@@ -290,7 +291,10 @@ object Evidence {
                 seq = seqCounter, kind = kind, file = file.name, startedAt = start, endedAt = end, bytes = file.length(),
                 sha256 = sha, chain = sha256Text(prev + sha), lat = fix?.lat, lng = fix?.lng,
             )
-            save(app, c.copy(pieces = c.pieces + piece))
+            val next = c.copy(pieces = c.pieces + piece)
+            save(app, next)
+            EvidenceBackup.copy(app, next, file)
+            EvidenceBackup.writeManifest(app, next)
             if (c.pieces.none { it.kind == kind }) AppLog.ok("Evidence", "First ${label(kind).lowercase()} piece saved")
         }
     }
@@ -332,13 +336,50 @@ object Evidence {
     fun cases(ctx: Context): List<EvidenceCase> =
         root(ctx).listFiles()?.filter { it.isDirectory }?.mapNotNull { load(ctx, it.name) }?.sortedByDescending { it.startedAt }.orEmpty()
 
+    /** A piece's bytes: the app's own copy, or after the 24-hour lock only the verified copy in Downloads. */
+    fun open(ctx: Context, c: EvidenceCase, p: EvidencePiece): java.io.InputStream? {
+        val f = File(dir(ctx, c.incidentId), p.file)
+        if (f.exists()) return f.inputStream()
+        return EvidenceBackup.ref(ctx, c, p.file)?.let { EvidenceBackup.open(ctx, it) }
+    }
+
+    /** Something a player can open: a private file shared through our FileProvider, or the Downloads copy. */
+    fun uri(ctx: Context, c: EvidenceCase, p: EvidencePiece): android.net.Uri? {
+        val f = File(dir(ctx, c.incidentId), p.file)
+        if (f.exists()) return androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
+        val ref = EvidenceBackup.ref(ctx, c, p.file) ?: return null
+        return if (ref.startsWith("content:")) android.net.Uri.parse(ref) else android.net.Uri.fromFile(File(ref))
+    }
+
+    /**
+     * Saves space without touching a single recorded byte: once a case is past its 24-hour lock and every piece's
+     * Downloads copy still matches its fingerprint, the app's duplicate is removed. Nothing is re-encoded, because a
+     * re-encoded file would no longer match the fingerprint taken when it was recorded.
+     */
+    fun slim(ctx: Context) {
+        if (Build.VERSION.SDK_INT < 29) return // Android 8-9 copies are plain files the app can't keep track of as safely
+        val app = ctx.applicationContext
+        io.execute {
+            var freed = 0L
+            cases(app).filter { !it.recording && System.currentTimeMillis() - (it.endedAt ?: it.startedAt) > LOCK_MS }.forEach { c ->
+                c.pieces.forEach { p ->
+                    val f = File(dir(app, c.incidentId), p.file)
+                    val ref = EvidenceBackup.ref(app, c, p.file)
+                    if (f.exists() && ref != null && EvidenceBackup.open(app, ref)?.use { sha256(it) } == p.sha256) {
+                        freed += f.length(); f.delete()
+                    }
+                }
+            }
+            if (freed > 0) AppLog.info("Evidence", "Freed ${human(freed)}: older recordings now live only in Downloads (fingerprints checked)")
+        }
+    }
+
     /** Recomputes every fingerprint and the chain. */
     fun verify(ctx: Context, c: EvidenceCase): Integrity {
         var prev = ZERO
         val broken = mutableListOf<Int>()
         c.pieces.forEach { p ->
-            val f = File(dir(ctx, c.incidentId), p.file)
-            val sha = if (f.exists()) sha256(f) else ""
+            val sha = runCatching { open(ctx, c, p)?.use { sha256(it) } }.getOrNull() ?: ""
             val chain = sha256Text(prev + p.sha256)
             if (sha != p.sha256 || chain != p.chain) broken += p.seq
             prev = p.chain
@@ -375,8 +416,7 @@ object Evidence {
             z.putNextEntry(ZipEntry("README.txt")); z.write(summary.toByteArray()); z.closeEntry()
             z.putNextEntry(ZipEntry("manifest.json")); z.write(manifest(ctx, c.incidentId).readBytes()); z.closeEntry()
             c.pieces.forEach { p ->
-                val f = File(dir(ctx, c.incidentId), p.file)
-                if (f.exists()) { z.putNextEntry(ZipEntry("files/${p.file}")); f.inputStream().use { it.copyTo(z) }; z.closeEntry() }
+                open(ctx, c, p)?.use { z.putNextEntry(ZipEntry("files/${p.file}")); it.copyTo(z); z.closeEntry() }
             }
         }
         AppLog.info("Evidence", "Exported ${c.pieces.size} pieces (${human(out.length())})")
@@ -448,11 +488,24 @@ object Evidence {
     fun clearAsk(ctx: Context) = runCatching { ctx.getSystemService(NotificationManager::class.java).cancel(117) }
 
     // ---- helpers ----
+    /** Copies anything recorded before backups existed (once, in the background). */
+    fun backfill(ctx: Context) {
+        val app = ctx.applicationContext
+        io.execute { cases(app).forEach { c -> EvidenceBackup.backfill(app, c) { p -> File(dir(app, c.incidentId), p.file) } } }
+        slim(app)
+    }
+
     fun label(kind: String) = when (kind) { "audio" -> "Phone audio"; "video" -> "Video"; else -> "Watch audio" }
 
     fun human(b: Long) = when {
         b < 1_000_000 -> "${b / 1000} KB"
         else -> "%.1f MB".format(Locale.US, b / 1_000_000.0)
+    }
+
+    internal fun sha256(input: java.io.InputStream): String {
+        val md = MessageDigest.getInstance("SHA-256"); val buf = ByteArray(64 * 1024)
+        while (true) { val n = input.read(buf); if (n < 0) break; md.update(buf, 0, n) }
+        return md.digest().joinToString("") { "%02x".format(it) }
     }
 
     private fun sha256(f: File): String {
@@ -469,4 +522,116 @@ object Evidence {
     }
 
     private fun sha256Text(s: String) = MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
+}
+
+
+/**
+ * A second copy of every piece in Download/Security4Her evidence/, outside the app's private folder. Android keeps
+ * files there when the app is deleted, so uninstalling Security4Her (or someone forcing her to) can't destroy the
+ * evidence. Each case folder holds the recordings plus fingerprints.txt, so anyone can check that nothing was altered.
+ */
+object EvidenceBackup {
+    private const val ROOT = "Security4Her evidence"
+
+    fun folder(c: EvidenceCase): String =
+        ROOT + "/" + java.text.SimpleDateFormat("yyyy-MM-dd HH.mm", java.util.Locale.US).format(java.util.Date(c.startedAt)) + " " + c.incidentId.take(8)
+
+    /** Where to point her in the app: the folder name as the Files app shows it. */
+    fun where(c: EvidenceCase) = "Downloads / " + folder(c)
+
+    private fun mime(name: String) = when {
+        name.endsWith(".m4a") -> "audio/mp4"
+        name.endsWith(".mp4") -> "video/mp4"
+        else -> "text/plain"
+    }
+
+    private fun record(ctx: Context, c: EvidenceCase) = File(Evidence.dir(ctx, c.incidentId), "backup.json")
+
+    private fun done(ctx: Context, c: EvidenceCase): MutableMap<String, String> = runCatching {
+        val o = org.json.JSONObject(record(ctx, c).readText())
+        o.keys().asSequence().associateWith { o.getString(it) }.toMutableMap()
+    }.getOrDefault(mutableMapOf())
+
+    private fun mark(ctx: Context, c: EvidenceCase, name: String, uri: String) {
+        val m = done(ctx, c); m[name] = uri
+        runCatching { record(ctx, c).writeText(org.json.JSONObject(m as Map<*, *>).toString()) }
+    }
+
+    fun ref(ctx: Context, c: EvidenceCase, name: String): String? = done(ctx, c)[name]
+
+    fun open(ctx: Context, ref: String): java.io.InputStream? = runCatching {
+        if (ref.startsWith("content:")) ctx.contentResolver.openInputStream(android.net.Uri.parse(ref)) else File(ref).inputStream()
+    }.getOrNull()
+
+    @Synchronized
+    fun copy(ctx: Context, c: EvidenceCase, file: File) {
+        if (!file.exists() || done(ctx, c).containsKey(file.name)) return
+        val want = c.pieces.firstOrNull { it.file == file.name }?.sha256
+        runCatching { write(ctx, c, file.name, overwrite = null) { out -> file.inputStream().use { it.copyTo(out) } } }
+            .onSuccess { uri ->
+                val got = open(ctx, uri)?.use { Evidence.sha256(it) }
+                if (want == null || got == want) mark(ctx, c, file.name, uri)
+                else AppLog.error("Evidence", "The Downloads copy of ${file.name} doesn't match its fingerprint; keeping the app's copy")
+            }
+            .onFailure { AppLog.warn("Evidence", "Couldn't copy ${file.name} to Downloads", it) }
+    }
+
+    @Synchronized
+    fun writeManifest(ctx: Context, c: EvidenceCase) {
+        val text = buildString {
+            appendLine("Security4Her evidence")
+            appendLine("Case ${c.incidentId}, started ${java.util.Date(c.startedAt)}, trigger: ${c.trigger}")
+            appendLine("Recorded on ${c.device}, ${c.app}")
+            appendLine()
+            appendLine("Each file's SHA-256 fingerprint was taken the moment it was saved. If a file is changed in any way its")
+            appendLine("fingerprint changes. Check one with: certutil -hashfile <file> SHA256 (Windows) or sha256sum <file>.")
+            appendLine("The chain value links every piece to the one before it, so a removed or reordered piece is detectable too.")
+            appendLine()
+            c.pieces.forEach { p ->
+                appendLine("${p.file}")
+                appendLine("    ${Evidence.label(p.kind)}, ${java.util.Date(p.startedAt)} to ${java.util.Date(p.endedAt)}, ${p.bytes} bytes")
+                appendLine("    sha256 ${p.sha256}")
+                appendLine("    chain  ${p.chain}")
+            }
+        }
+        val prev = done(ctx, c)["fingerprints.txt"]
+        runCatching { write(ctx, c, "fingerprints.txt", overwrite = prev) { it.write(text.toByteArray()) } }
+            .onSuccess { uri -> if (prev == null) mark(ctx, c, "fingerprints.txt", uri) }
+            .onFailure { AppLog.warn("Evidence", "Couldn't save the fingerprint list to Downloads", it) }
+    }
+
+    fun backfill(ctx: Context, c: EvidenceCase, fileOf: (EvidencePiece) -> File) {
+        val have = done(ctx, c)
+        if (c.pieces.all { have.containsKey(it.file) } && have.containsKey("fingerprints.txt")) return
+        c.pieces.forEach { copy(ctx, c, fileOf(it)) }
+        writeManifest(ctx, c)
+    }
+
+    /** Writes into Downloads; returns a reference to the copy. [overwrite] = an earlier copy's reference to replace. */
+    private fun write(ctx: Context, c: EvidenceCase, name: String, overwrite: String?, body: (java.io.OutputStream) -> Unit): String {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val cr = ctx.contentResolver
+            if (overwrite != null) {
+                val ok = runCatching { cr.openOutputStream(android.net.Uri.parse(overwrite), "wt")!!.use(body) }.isSuccess
+                if (ok) return overwrite // else she deleted the old copy: make a new one
+            }
+            val v = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
+                put(android.provider.MediaStore.Downloads.MIME_TYPE, mime(name))
+                put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/" + folder(c))
+                put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val uri = cr.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, v) ?: error("Downloads refused the file")
+            cr.openOutputStream(uri)!!.use(body)
+            v.clear(); v.put(android.provider.MediaStore.Downloads.IS_PENDING, 0); cr.update(uri, v, null, null)
+            return uri.toString()
+        }
+        // Android 8 and 9: plain files, which needs the storage permission
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) error("no storage permission")
+        @Suppress("DEPRECATION")
+        val dir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), folder(c)).apply { mkdirs() }
+        val f = File(dir, name)
+        f.outputStream().use(body)
+        return f.absolutePath
+    }
 }

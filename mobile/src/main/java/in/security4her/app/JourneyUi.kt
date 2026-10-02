@@ -393,7 +393,7 @@ fun CheckInScreen(s: JourneyState) {
     val leftMs = ((s.checkUntil ?: now) - now).coerceAtLeast(0)
     val frac = (leftMs / window).coerceIn(0f, 1f)
     val secs = kotlin.math.ceil(leftMs / 1000.0).toInt()
-    fun ok() { if (Settings.load(ctx).pin.isBlank()) Journey.respondOk(ctx) else askPin = true }
+    fun ok() { if (!`in`.security4her.app.core.Pin.isSet(ctx)) Journey.respondOk(ctx) else askPin = true }
 
     Column(
         Modifier.fillMaxSize().background(Night).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 28.dp),
@@ -446,6 +446,7 @@ fun CheckInScreen(s: JourneyState) {
     if (askPin) {
         var pin by remember { mutableStateOf("") }
         var wrong by remember { mutableStateOf(false) }
+        var why by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { askPin = false },
             containerColor = Surface1,
@@ -453,12 +454,13 @@ fun CheckInScreen(s: JourneyState) {
             text = {
                 Column {
                     Field(pin, { pin = it.filter(Char::isDigit).take(4); wrong = false }, "4-digit PIN", KeyboardType.NumberPassword, secret = true)
-                    if (wrong) Text("That PIN doesn't match.", color = SosRed, modifier = Modifier.padding(top = 8.dp))
+                    if (wrong) Text(why, color = SosRed, modifier = Modifier.padding(top = 8.dp))
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (pin == Settings.load(ctx).pin) { askPin = false; Journey.respondOk(ctx) } else wrong = true
+                    val r = `in`.security4her.app.core.Pin.check(ctx, pin)
+                    if (r is `in`.security4her.app.core.Pin.Check.Ok) { askPin = false; Journey.respondOk(ctx) } else { why = `in`.security4her.app.core.Pin.message(r); wrong = true; pin = "" }
                 }) { Text("I'm OK", color = Lilac) }
             },
             dismissButton = { TextButton(onClick = { askPin = false }) { Text("Back", color = Muted) } },

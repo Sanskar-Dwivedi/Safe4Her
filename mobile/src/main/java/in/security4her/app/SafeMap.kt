@@ -70,6 +70,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
+import `in`.security4her.app.core.Store
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
@@ -100,6 +101,7 @@ import kotlin.math.sqrt
 
 private val NAGPUR = GeoPoint(21.1458, 79.0882) // demo city, used until we know where she is
 
+@kotlinx.serialization.Serializable
 data class Place(val id: String, val name: String, val kind: String, val lat: Double, val lng: Double, val phone: String?, val distanceM: Double)
 
 private val kindColor get() = mapOf(
@@ -135,22 +137,50 @@ private fun distanceText(m: Double) = if (m < 1000) "${(m / 10).roundToInt() * 1
 object Places {
     private val endpoints = listOf("https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter")
 
+    // ---- remembered between visits, so the map shows places at once even with weak or no internet ----
+    @kotlinx.serialization.Serializable
+    private data class Saved(val lat: Double, val lng: Double, val at: Long, val list: List<Place>)
+    private val store = Json { ignoreUnknownKeys = true }
+    private fun saved(ctx: Context): Saved? = runCatching {
+        Store.prefs(ctx).getString("map_places", null)?.let { store.decodeFromString(Saved.serializer(), it) }
+    }.getOrNull()
+
+    /** Places saved near here (within 5 km), with distances from where she is now. */
+    fun cached(ctx: Context, lat: Double, lng: Double): List<Place>? {
+        val s = saved(ctx) ?: return null
+        if (meters(lat, lng, s.lat, s.lng) > 5_000) return null
+        return s.list.map { it.copy(distanceM = meters(lat, lng, it.lat, it.lng)) }.sortedBy { it.distanceM }
+    }
+
+    /** Saved recently and close by: no need to ask the internet again. */
+    fun fresh(ctx: Context, lat: Double, lng: Double): Boolean {
+        val s = saved(ctx) ?: return false
+        return meters(lat, lng, s.lat, s.lng) < 1_500 && System.currentTimeMillis() - s.at < 12 * 3_600_000L
+    }
+
+    fun savedAt(ctx: Context): Long? = saved(ctx)?.at
+
+    fun remember(ctx: Context, lat: Double, lng: Double, list: List<Place>) {
+        if (list.isEmpty()) return
+        runCatching { Store.prefs(ctx).edit().putString("map_places", store.encodeToString(Saved.serializer(), Saved(lat, lng, System.currentTimeMillis(), list))).apply() }
+    }
+
     suspend fun near(lat: Double, lng: Double): List<Place> = withContext(Dispatchers.IO) {
         if (!Backend.mock) {
             runCatching { MapRepository(Backend.client).nearestSafePlaces(lat, lng, 30) }.getOrNull()
                 ?.takeIf { it.isNotEmpty() }
                 ?.let { list -> return@withContext list.map { Place(it.id.toString(), it.name, it.category, it.lat, it.lng, it.phone, it.distanceM) } }
         }
-        runCatching { nominatim(lat, lng) }.getOrNull()?.takeIf { it.isNotEmpty() }
-            ?: runCatching { overpass(lat, lng) }.getOrNull()?.takeIf { it.isNotEmpty() }
+        runCatching { overpass(lat, lng) }.getOrNull()?.takeIf { it.isNotEmpty() }
+            ?: runCatching { nominatim(lat, lng) }.getOrNull()?.takeIf { it.isNotEmpty() }
             ?: fallback(lat, lng)
     }
 
     private fun get(url: String): String {
         val c = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 10_000
-            readTimeout = 15_000
-            setRequestProperty("User-Agent", "Security4Her/0.3 (safety app)")
+            connectTimeout = 6_000
+            readTimeout = 10_000
+            setRequestProperty("User-Agent", "Security4Her/1.1 (safety app)")
         }
         if (c.responseCode != 200) error("HTTP ${c.responseCode}")
         return c.inputStream.bufferedReader().use { it.readText() }
@@ -198,9 +228,9 @@ object Places {
                 val c = (URL(url).openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
                     doOutput = true
-                    connectTimeout = 10_000
-                    readTimeout = 25_000
-                    setRequestProperty("User-Agent", "Security4Her/0.3 (safety app)")
+                    connectTimeout = 6_000
+                    readTimeout = 18_000
+                    setRequestProperty("User-Agent", "Security4Her/1.1 (safety app)")
                     setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
                 }
                 c.outputStream.use { it.write(("data=" + URLEncoder.encode(q, "UTF-8")).toByteArray()) }
@@ -233,7 +263,12 @@ object Places {
         }.distinctBy { it.name + it.kind }.sortedBy { it.distanceM }.take(40)
 }
 
-internal fun dot(ctx: Context, color: Color, sizeDp: Int, ring: Color = Color.White, halo: Boolean = false): BitmapDrawable {
+private val dots = HashMap<String, BitmapDrawable>()
+
+internal fun dot(ctx: Context, color: Color, sizeDp: Int, ring: Color = Color.White, halo: Boolean = false): BitmapDrawable =
+    dots.getOrPut("${color.toArgb()}|$sizeDp|${ring.toArgb()}|$halo") { drawDot(ctx, color, sizeDp, ring, halo) }
+
+private fun drawDot(ctx: Context, color: Color, sizeDp: Int, ring: Color, halo: Boolean): BitmapDrawable {
     val d = ctx.resources.displayMetrics.density
     val px = (sizeDp * d).toInt()
     val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
@@ -260,12 +295,22 @@ internal fun darkTiles(): ColorMatrixColorFilter {
 }
 
 @SuppressLint("MissingPermission")
+private suspend fun lastKnown(ctx: Context): GeoPoint? = runCatching {
+    LocationServices.getFusedLocationProviderClient(ctx).lastLocation.await()?.let { GeoPoint(it.latitude, it.longitude) }
+}.getOrNull()
+
+@SuppressLint("MissingPermission")
 private suspend fun locate(ctx: Context): GeoPoint? = runCatching {
     val client = LocationServices.getFusedLocationProviderClient(ctx)
-    val loc = withTimeoutOrNull(10_000) { client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).await() }
+    val loc = withTimeoutOrNull(8_000) { client.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null).await() }
         ?: client.lastLocation.await()
     loc?.let { GeoPoint(it.latitude, it.longitude) }
 }.getOrNull()
+
+private fun online(ctx: Context): Boolean = runCatching {
+    val cm = ctx.getSystemService(android.net.ConnectivityManager::class.java)
+    cm.getNetworkCapabilities(cm.activeNetwork)?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+}.getOrDefault(true)
 
 private sealed interface MapSel {
     data class Official(val place: Place) : MapSel
@@ -319,14 +364,24 @@ fun SafeMapScreen() {
     var adding by remember { mutableStateOf<String?>(null) } // danger | safe_area | safe_place while adding
     var addRadius by remember { mutableIntStateOf(250) }
     var center by remember { mutableStateOf(NAGPUR) }
+    val placing = remember { booleanArrayOf(false) }
+    SideEffect { placing[0] = adding == "danger" || adding == "safe_area" }
+    var offline by remember { mutableStateOf(!online(ctx)) }
+    var savedAt by remember { mutableStateOf<Long?>(null) }
     val cd by Community.data.collectAsStateWithLifecycle()
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { hasLocation = granted() }
 
     val map = remember {
         Configuration.getInstance().apply {
             userAgentValue = ctx.packageName
-            osmdroidBasePath = File(ctx.cacheDir, "osm")
-            osmdroidTileCache = File(ctx.cacheDir, "osm/tiles")
+            osmdroidBasePath = File(ctx.filesDir, "osm")
+            osmdroidTileCache = File(ctx.filesDir, "osm/tiles")
+            tileFileSystemCacheMaxBytes = 160L * 1024 * 1024
+            tileFileSystemCacheTrimBytes = 120L * 1024 * 1024
+            expirationExtendedDuration = 14L * 24 * 3_600_000 // a slightly old street map beats a blank one on weak internet
+            tileDownloadThreads = 2
+            tileFileSystemThreads = 4
+            cacheMapTileCount = 24
         }
         MapView(ctx).apply {
             setTileSource(TileSourceFactory.MAPNIK)
@@ -336,6 +391,8 @@ fun SafeMapScreen() {
             overlayManager.tilesOverlay.loadingBackgroundColor = 0xFF16101E.toInt()
             overlayManager.tilesOverlay.loadingLineColor = 0xFF221A2C.toInt()
             setMultiTouchControls(true)
+            setUseDataConnection(online(ctx))
+            isFlingEnabled = true
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             minZoomLevel = 4.0
             controller.setZoom(14.5)
@@ -343,7 +400,7 @@ fun SafeMapScreen() {
             setBackgroundColor(Night.toArgb())
             addMapListener(object : MapListener {
                 override fun onScroll(event: ScrollEvent?): Boolean {
-                    mapCenter.let { center = GeoPoint(it.latitude, it.longitude) }
+                    if (placing[0]) mapCenter.let { center = GeoPoint(it.latitude, it.longitude) }
                     return false
                 }
                 override fun onZoom(event: ZoomEvent?): Boolean = false
@@ -362,7 +419,7 @@ fun SafeMapScreen() {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
         val obs = LifecycleEventObserver { _, e ->
-            if (e == Lifecycle.Event.ON_RESUME) map.onResume()
+            if (e == Lifecycle.Event.ON_RESUME) { offline = !online(ctx); map.setUseDataConnection(!offline); map.onResume() }
             if (e == Lifecycle.Event.ON_PAUSE) map.onPause()
         }
         lifecycle.addObserver(obs)
@@ -372,28 +429,42 @@ fun SafeMapScreen() {
 
     LaunchedEffect(hasLocation, reload) {
         error = null
-        val here = if (hasLocation) locate(ctx) else null
-        me = here
+        offline = !online(ctx)
+        map.setUseDataConnection(!offline)
+        // 1. Instantly: last known position and the places saved last time
+        val quick = if (hasLocation) lastKnown(ctx) else null
+        if (quick != null) { me = quick; map.controller.setCenter(quick); map.controller.setZoom(15.0) }
+        val first = quick ?: me ?: NAGPUR
+        Places.cached(ctx, first.latitude, first.longitude)?.let { places = it; savedAt = Places.savedAt(ctx) }
+        // 2. A fresh position fix, without blocking the map
+        val here = if (hasLocation) locate(ctx) ?: quick else null
+        if (here != null) {
+            me = here
+            if (quick == null || meters(quick.latitude, quick.longitude, here.latitude, here.longitude) > 150) map.controller.animateTo(here, 15.0, 500L)
+        }
         val c = here ?: NAGPUR
-        map.controller.animateTo(c, 15.0, 700L)
-        places = null
-        places = try {
-            Places.near(c.latitude, c.longitude).also {
-                AppLog.info("Map", "Loaded ${it.size} safe places near %.4f, %.4f".format(Locale.US, c.latitude, c.longitude))
-            }
+        Places.cached(ctx, c.latitude, c.longitude)?.let { places = it; savedAt = Places.savedAt(ctx) }
+        // 3. The internet only when the saved list is old or from somewhere else (and there is internet)
+        if (offline || (reload == 0 && Places.fresh(ctx, c.latitude, c.longitude) && places != null)) {
+            if (places == null) error = if (offline) "You're offline and nothing is saved for this area yet." else null
+            return@LaunchedEffect
+        }
+        try {
+            val list = Places.near(c.latitude, c.longitude)
+            Places.remember(ctx, c.latitude, c.longitude, list)
+            places = list; savedAt = System.currentTimeMillis()
+            AppLog.info("Map", "Loaded ${list.size} safe places near %.4f, %.4f".format(Locale.US, c.latitude, c.longitude))
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e // she left the map; not a failure
             AppLog.warn("Map", "Couldn't load safe places", e)
-            error = "Couldn't load hospitals and police stations. Check your internet and tap Refresh."
-            emptyList()
+            if (places == null) { places = emptyList(); error = "Couldn't load hospitals and police stations. Check your internet and tap Refresh." }
         }
     }
     // Community reports: now, then every minute while the map is open.
     LaunchedEffect(Unit) {
         while (true) {
-            Community.flush()
-            Community.sync()
-            delay(60_000)
+            if (online(ctx)) { Community.flush(); Community.sync() }
+            delay(if (offline) 120_000 else 60_000)
         }
     }
 

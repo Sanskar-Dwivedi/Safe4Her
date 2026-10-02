@@ -561,7 +561,10 @@ private fun Progress(s: WatchInstallState, onDone: () -> Unit) {
             else "Security4Her ${it.version} is on your watch. From now on the watch updates itself.",
         ) {
             Spacer(Modifier.height(6.dp))
-            Text("You can turn Wireless debugging off on the watch now.", color = Muted, style = MaterialTheme.typography.bodySmall)
+            Text(
+                "Now turn Wireless debugging off on the watch (Settings, then Developer options). Left on, it lets paired devices control the watch. Updates don't need it.",
+                color = Amber, style = MaterialTheme.typography.bodySmall,
+            )
         }
         Spacer(Modifier.height(16.dp))
         ChunkyButton("Done", onClick = onDone)

@@ -70,7 +70,7 @@ interface WatchActions {
     fun finishSetup()
     fun sosNow()
     fun cancelCountdown()
-    fun imSafe()
+    fun imSafe(pin: String? = null)
     fun dismiss()
     fun setSafetyMode(on: Boolean)
     fun setVoiceSos(on: Boolean)
@@ -366,6 +366,7 @@ private fun IncidentScreen(incident: ActiveIncident, phone: PhoneStatus?, link: 
         }
     }
     var confirming by remember { mutableStateOf(false) }
+    var askPin by remember { mutableStateOf(false) }
     LaunchedEffect(confirming) {
         if (confirming) {
             delay(4_000)
@@ -438,7 +439,49 @@ private fun IncidentScreen(incident: ActiveIncident, phone: PhoneStatus?, link: 
 
         Spacer(Modifier.height(4.dp))
         PillButton(if (confirming) "Tap again to confirm" else "I'm safe", if (confirming) C.green else C.purple) {
-            if (confirming) actions.imSafe() else confirming = true
+            if (!confirming) confirming = true
+            else if (`in`.security4her.app.sos.WatchPin.required(link)) { confirming = false; askPin = true }
+            else actions.imSafe()
+        }
+    }
+    if (askPin && link != null) PinPad(link, onCancel = { askPin = false }) { pin -> askPin = false; actions.imSafe(pin) }
+}
+
+/** Four digits, checked here against the phone's hash, then sent so the phone can check them too. */
+@Composable
+private fun PinPad(link: DeviceLink, onCancel: () -> Unit, onOk: (String) -> Unit) {
+    val ctx = LocalContext.current
+    var pin by remember { mutableStateOf("") }
+    var msg by remember { mutableStateOf<String?>(null) }
+    BackHandler(onBack = onCancel)
+    Box(Modifier.fillMaxSize().background(C.bg), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Label(msg ?: "Enter your PIN", color = if (msg != null) C.red else C.white, size = 12.sp, weight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                repeat(4) { i -> Box(Modifier.size(8.dp).clip(CircleShape).background(if (i < pin.length) C.purpleLight else C.grey.copy(alpha = 0.4f))) }
+            }
+            listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("✕", "0", "⌫")).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    row.forEach { k ->
+                        Box(
+                            Modifier.size(30.dp).clip(CircleShape).background(C.purple.copy(alpha = 0.35f)).clickable {
+                                when (k) {
+                                    "✕" -> onCancel()
+                                    "⌫" -> pin = pin.dropLast(1)
+                                    else -> if (pin.length < 4) {
+                                        pin += k
+                                        if (pin.length == 4) {
+                                            val r = `in`.security4her.app.sos.WatchPin.check(ctx, link, pin)
+                                            if (r is `in`.security4her.app.sos.WatchPin.Check.Ok) onOk(pin) else { msg = `in`.security4her.app.sos.WatchPin.message(r); pin = "" }
+                                        }
+                                    }
+                                }
+                            },
+                            contentAlignment = Alignment.Center,
+                        ) { Label(k, size = 13.sp, weight = FontWeight.Bold) }
+                    }
+                }
+            }
         }
     }
 }

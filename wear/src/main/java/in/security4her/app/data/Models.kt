@@ -47,7 +47,7 @@ data class SosLocationMsg(
 )
 
 @Serializable
-data class IncidentRef(val incidentId: String)
+data class IncidentRef(val incidentId: String, val pin: String? = null)
 
 @Serializable
 data class FakeCallRequest(val requestId: String, val createdAt: Long)
@@ -73,6 +73,10 @@ data class DeviceLink(
     val displayName: String = "",
     val deviceToken: String,
     val testMode: Boolean = true,
+    // Salted hash of her safety PIN from the phone (never the digits): "I'm safe" on the watch asks for it.
+    val pinHash: String = "",
+    val pinSalt: String = "",
+    val pinIter: Int = 0,
 )
 
 // ---- watch-sos Edge Function (CONTRACT.md §3) ----

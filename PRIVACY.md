@@ -11,14 +11,16 @@ third-party trackers in either app. During the beta, testers can choose to share
 | Her live location | During an SOS, a Safe Journey, or when she taps *Live location* | A private, randomly named topic on [ntfy.sh](https://ntfy.sh), shown on the live-map page linked in the SMS. Sharing stops when she ends it. |
 | A call | After the SOS countdown | The number she set (or her test number while Test Mode is on) |
 | Approximate map area | When the map looks for nearby hospitals, police and routes | OpenStreetMap services (Nominatim, Overpass, OSRM). Coordinates only, no identity. |
-| Places she adds to the safety map, and where SOS alerts happen | When she adds a report, and once per SOS | A shared community topic on ntfy.sh. SOS locations are rounded to about 100 m and carry no name or number. |
+| Places she adds to the safety map, and where SOS alerts happen | When she adds a report, and once per SOS | A shared community topic on ntfy.sh. SOS locations are rounded to about 100 m and to the hour, and carry no name or number. Test SOSs are never shared. |
 | Account, contacts and incidents | Only if the app is connected to a Supabase backend | That backend, protected by row-level security |
 | Update checks | Every few hours | `security4her.vercel.app`, an ordinary web request for `version.json` |
 
 ## What stays on the device
 
 - **Evidence**: audio and video recorded during an SOS stay on the phone, fingerprinted with SHA-256 and
-  locked against deletion for 24 hours. They leave only if she exports them.
+  locked against deletion in the app for 24 hours. A copy is saved in Downloads/Security4Her evidence/ so it
+  survives the app being deleted; after 24 hours only that copy is kept. Other apps allowed to read your media can
+  see those files. They leave the phone only if she exports them.
 - **Voice SOS**: speech is recognised entirely on the watch. Nothing is recorded, stored or sent; the app
   only reacts to "HELP HELP HELP".
 - **Knock and shake detection**: motion data is processed on the device and discarded.

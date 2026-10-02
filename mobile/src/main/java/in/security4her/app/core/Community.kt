@@ -155,16 +155,22 @@ object Community {
                 connectTimeout = 10_000
                 readTimeout = 20_000
             }
-            val lines = c.inputStream.bufferedReader().use { it.readLines() }
+            val lines = c.inputStream.bufferedReader().use { it.readLines() }.filter { it.length <= 4_096 } // nothing legitimate is bigger
             val events = lines.mapNotNull { line ->
                 runCatching {
                     val msg = Json.parseToJsonElement(line).jsonObject["message"]?.jsonPrimitive?.content ?: return@runCatching null
                     json.decodeFromString(CommunityEvent.serializer(), msg)
                 }.getOrNull()
             }
-            val added = merge(
-                reports = events.mapNotNull { it.report }, sos = events.mapNotNull { it.sos }, confirms = events.mapNotNull { it.confirm }, synced = true,
-            )
+            // The feed is public, so anyone can post to it: keep only well-formed, recent items, and at most 10 reports per author.
+            val now = System.currentTimeMillis()
+            val reports = events.mapNotNull { it.report }.filter { valid(it, now) }
+                .groupBy { it.by }.flatMap { (_, l) -> l.sortedByDescending { it.at }.take(10) }
+            val sos = events.mapNotNull { it.sos }.filter { !it.test && validPlace(it.lat, it.lng) && validTime(it.at, now) && it.id.length <= 64 }
+            val confirms = events.mapNotNull { it.confirm }.filter { it.reportId.length <= 64 && it.by.length in 1..64 && validTime(it.at, now) }
+            val dropped = events.size - reports.size - sos.size - confirms.size
+            if (dropped > 0) AppLog.info("Community", "Ignored $dropped malformed, old or excess items from the public feed")
+            val added = merge(reports = reports, sos = sos, confirms = confirms, synced = true)
             if (added > 0) AppLog.info("Community", "$added new ${if (added == 1) "update" else "updates"} from other users")
             added
         } catch (e: Exception) {
@@ -197,12 +203,25 @@ object Community {
         shared
     }
 
-    /** Called once per SOS with its first fix. Rounded to ~100 m, no name or number attached. */
+    /**
+     * Called once per SOS with its first fix. Rounded to ~100 m and to the hour, with no name or number, so the public
+     * feed can't be used to work out who raised it. Test SOSs stay on this phone.
+     */
     fun recordSos(lat: Double, lng: Double, test: Boolean) {
-        val p = SosPing(UUID.randomUUID().toString(), round3(lat), round3(lng), System.currentTimeMillis(), test)
+        val hour = System.currentTimeMillis() / 3_600_000L * 3_600_000L
+        val p = SosPing(UUID.randomUUID().toString(), round3(lat), round3(lng), hour, test)
         merge(sos = listOf(p))
+        if (test) return
         scope.launch { if (!publish(CommunityEvent("sos", sos = p))) queue(CommunityEvent("sos", sos = p)) }
     }
+
+    private val kinds = setOf("danger", "safe_area", "safe_place")
+    private fun validPlace(lat: Double, lng: Double) = lat.isFinite() && lng.isFinite() && lat in -90.0..90.0 && lng in -180.0..180.0
+    private fun validTime(at: Long, now: Long) = at in (now - 30L * 86_400_000)..(now + 5 * 60_000)
+    private fun valid(r: CommunityReport, now: Long) =
+        r.kind in kinds && validPlace(r.lat, r.lng) && validTime(r.at, now) && r.radiusM in 0..2_000 &&
+            r.id.length in 1..64 && r.by.length in 1..64 && Regex("[a-z_]{1,24}").matches(r.category) &&
+            (r.name?.length ?: 0) <= 60 && (r.note?.length ?: 0) <= 200 && !r.sample
 
     // Items that couldn't be shared (no internet) are retried on the next sync.
     private fun queue(e: CommunityEvent) {

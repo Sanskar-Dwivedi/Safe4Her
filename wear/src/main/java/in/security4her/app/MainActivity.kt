@@ -71,7 +71,7 @@ class MainActivity : ComponentActivity() {
 
         override fun cancelCountdown() = SosController.cancelCountdown()
 
-        override fun imSafe() = SosController.end(this@MainActivity)
+        override fun imSafe(pin: String?) = SosController.end(this@MainActivity, pin)
 
         override fun dismiss() = SosController.dismiss(this@MainActivity)
 
