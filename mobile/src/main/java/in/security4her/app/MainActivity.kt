@@ -157,7 +157,7 @@ private fun baloo(w: Int) = Font(R.font.baloo2, FontWeight(w), variationSettings
 internal val Baloo = FontFamily(baloo(600), baloo(700), baloo(800))
 
 @Composable
-private fun S4hTheme(content: @Composable () -> Unit) {
+internal fun S4hTheme(content: @Composable () -> Unit) {
     val scheme = (if (Palettes.current.value.light) lightColorScheme(
         primary = Lilac, onPrimary = OnLilac, secondary = Lilac, onSecondary = OnLilac,
         background = Night, onBackground = Ink, surface = Surface1, onSurface = Ink,

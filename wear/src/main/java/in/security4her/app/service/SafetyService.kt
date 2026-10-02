@@ -22,6 +22,7 @@ import `in`.security4her.app.sos.Locator
 import `in`.security4her.app.sos.ShakeDetector
 import `in`.security4her.app.sos.SosController
 import `in`.security4her.app.sos.WatchRecorder
+import `in`.security4her.app.sos.TwistRuntime
 import `in`.security4her.app.voice.VoiceListener
 import `in`.security4her.app.voice.VoiceSos
 import kotlinx.coroutines.CoroutineScope
@@ -34,8 +35,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Foreground service (type location + microphone) that runs while Safety Mode or Voice SOS is on, or an
- * incident is live:
+ * Foreground service (type location + microphone) for Safety Mode, Voice SOS and live incidents:
  * - Safety Mode: shake detection → the same 5 s countdown as the gesture launch.
  * - Voice SOS: listens for "HELP HELP HELP" → the same countdown. Pauses during a countdown or SOS (the SOS
  *   recorder needs the microphone) and while the practice screen is open.
@@ -62,13 +62,15 @@ class SafetyService : LifecycleService() {
         running = true
         val store = WatchStore.get(this)
         lifecycleScope.launch {
-            combine(store.safetyMode, store.voiceSos, VoiceSos.practicing, store.incident, SosController.countdown) {
-                    safety, voiceOn, practicing, incident, countdown ->
-                State(safety, voiceOn, practicing, incident?.takeIf { !it.ended }, countdown)
+            val modes = combine(store.safetyMode, store.voiceSos) { safety, voiceOn -> safety to voiceOn }
+            val practice = combine(VoiceSos.practicing, TwistRuntime.practice) { voice, twist -> voice || twist }
+            combine(modes, practice, store.incident, SosController.countdown) {
+                    mode, practicing, incident, countdown ->
+                State(mode.first, mode.second, practicing, incident?.takeIf { !it.ended }, countdown)
             }.distinctUntilChanged().collect { state ->
                 lastState = state
                 val (safety, voiceOn, practicing, incident, countdown) = state
-                setShake(safety)
+                setShake(safety && !practicing && incident == null && countdown == null)
                 // Voice first: it must let go of the microphone before the SOS recorder starts.
                 setVoice(voiceOn && !practicing && incident == null && countdown == null, voiceOn)
                 setHeartbeat(incident != null)
@@ -104,8 +106,10 @@ class SafetyService : LifecycleService() {
             // A listener that gave up (e.g. the microphone wasn't allowed yet) gets another go.
             if (voice?.isRunning == false) { voice = null }
             lastState?.let { s ->
+                setShake(s.safety && !s.practicing && s.incident == null && s.countdown == null)
                 setVoice(s.voice && !s.practicing && s.incident == null && s.countdown == null, s.voice)
-                if (s.safety || s.voice || s.incident != null) notify(buildNotification(s.safety, s.incident, s.countdown, s.voice, listening = voice != null))
+                if (s.safety || s.voice || s.incident != null)
+                    notify(buildNotification(s.safety, s.incident, s.countdown, s.voice, listening = voice != null))
             }
         }
         // If Android stops us for memory, come back (and ask for a tap if the microphone can't be reclaimed).
@@ -150,7 +154,9 @@ class SafetyService : LifecycleService() {
 
     private fun setShake(on: Boolean) {
         if (on && shake == null) {
-            shake = ShakeDetector(this) { SosController.beginCountdown(this, "shake") }.also {
+            shake = ShakeDetector(this) {
+                if (!TwistRuntime.practice.value) SosController.beginCountdown(this, "shake")
+            }.also {
                 if (!it.start()) Log.w(TAG, "no accelerometer")
             }
         } else if (!on && shake != null) {
@@ -171,7 +177,7 @@ class SafetyService : LifecycleService() {
         }
         if (listen && voice == null) {
             voice = VoiceListener(this) {
-                if (VoiceSos.claimTrigger()) SosController.beginCountdown(this, "voice")
+                if (!TwistRuntime.practice.value && VoiceSos.claimTrigger()) SosController.beginCountdown(this, "voice")
             }.also { it.start() }
         } else if (!listen && voice != null) {
             voice?.stop()
@@ -216,6 +222,7 @@ class SafetyService : LifecycleService() {
             countdown != null -> "SOS in ${countdown.secondsLeft} s — tap Cancel if this is a mistake"
             incident != null && incident.delivered -> "SOS active — alert delivered"
             incident != null -> "SOS active — NOT SENT yet, retrying"
+            TwistRuntime.practice.value -> "Practising wrist twist — gesture SOS paused"
             voiceOn && !listening && VoiceSos.practicing.value -> "Practising Voice SOS"
             voiceOn && !listening -> "Voice SOS paused — tap to resume"
             safety && voiceOn -> "Shake 3 times, or say HELP HELP HELP, for SOS"

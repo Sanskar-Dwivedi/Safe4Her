@@ -41,9 +41,12 @@ import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
 import `in`.security4her.app.BuildConfig
 import `in`.security4her.app.MainActivity
+import `in`.security4her.app.FakeCallLauncher
 import `in`.security4her.app.R
 import `in`.security4her.app.core.Backend
 import `in`.security4her.app.core.DeviceLink
+import `in`.security4her.app.core.FakeCallAck
+import `in`.security4her.app.core.FakeCallRequest
 import `in`.security4her.app.core.IncidentRef
 import `in`.security4her.app.core.Paths
 import `in`.security4her.app.core.PhoneStatus
@@ -568,6 +571,19 @@ class PhoneWearListenerService : WearableListenerService() {
                     if (SosEngine.current.value?.id == ref.incidentId) SosEngine.end("resolved")
                 }
                 Paths.LINK_REQUEST -> runBlocking { WearBridge.linkWatch(this@PhoneWearListenerService) }
+                Paths.FAKE_CALL_START -> {
+                    val request = S4hJson.decodeFromString(FakeCallRequest.serializer(), json)
+                    val accepted = FakeCallLauncher.request(this, request)
+                    val ack = FakeCallAck(request.requestId, accepted)
+                    runBlocking {
+                        runCatching {
+                            Wearable.getMessageClient(this@PhoneWearListenerService).sendMessage(
+                                event.sourceNodeId, Paths.FAKE_CALL_ACK,
+                                S4hJson.encodeToString(FakeCallAck.serializer(), ack).toByteArray(Charsets.UTF_8),
+                            ).await()
+                        }
+                    }
+                }
             }
         }.onFailure { Log.w(TAG, "bad message on ${event.path}: $json", it) }
     }

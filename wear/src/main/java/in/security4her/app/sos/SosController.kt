@@ -45,6 +45,7 @@ object SosController {
 
     /** Starts the cancellable countdown unless one is running or an incident is already live. */
     fun beginCountdown(context: Context, trigger: String) {
+        if (TwistRuntime.practice.value) return
         val app = context.applicationContext
         synchronized(this) {
             if (countdownJob?.isActive == true) return
@@ -52,7 +53,7 @@ object SosController {
             countdownStartedAt = System.currentTimeMillis(); countdownTrigger = trigger
             countdownJob = scope.launch {
                 val live = WatchStore.get(app).incidentNow()
-                if (live != null && !live.ended) return@launch
+                if (TwistRuntime.practice.value || (live != null && !live.ended)) return@launch
                 for (s in COUNTDOWN_SECONDS downTo 1) {
                     _countdown.value = Countdown(trigger, s)
                     Haptics.tick(app)

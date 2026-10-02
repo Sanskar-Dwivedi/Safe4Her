@@ -104,7 +104,7 @@ object WatchUpdater {
         val store = WatchStore.get(ctx)
         if (SosController.countdown.value != null) return false
         if (store.incidentNow()?.ended == false) return false
-        val armed = store.safetyModeNow() || store.voiceSos.first()
+        val armed = store.safetyModeNow() || store.voiceSos.first() || store.fakeCallTwistNow()
         return !armed || ctx.getSystemService(BatteryManager::class.java)?.isCharging == true
     }
 

@@ -23,7 +23,7 @@ object ServerLink {
         .build()
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
-    val isConfigured: Boolean get() = BuildConfig.SUPABASE_URL.isNotBlank()
+    val isConfigured: Boolean get() = BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_ANON_KEY.isNotBlank()
 
     suspend fun post(link: DeviceLink, request: WatchSosRequest): Result<WatchSosResponse> =
         withContext(Dispatchers.IO) {

@@ -58,7 +58,11 @@ without mobile data, and keeps a record that holds up afterwards.
 2. **Quick actions** share her live location, start a Safe Journey, call 112 or find the nearest safe place.
 3. **Not an emergency yet?** A **fake call** rings in seconds so she can step away, with a voice on the line when she answers. The **siren** draws attention instantly.
 
-On the watch, the same SOS starts from a button, a shake, or *"HELP HELP HELP"*.
+On the watch, the same SOS starts from a button, a dedicated SOS shortcut, a shake, or *"HELP HELP HELP"*.
+Opening the watch app starts a cancellable five-second SOS countdown, including launches from Knock Knock.
+Cancel the countdown to use the dashboard. Fake calls have a button, a separate launcher shortcut,
+a tile and a watch-face complication. Optional wrist twists work while the watch screen is awake,
+with a safe practice screen and adjustable strength. See [watch setup](docs/WATCH_GESTURES.md).
 
 </td>
 </tr>
@@ -263,7 +267,7 @@ See [`docs/RELEASING.md`](docs/RELEASING.md).
 
 - [ ] **Fall and struggle detection** on the watch: a hard impact followed by stillness starts the countdown
 - [ ] **Low-battery alert**: below 10% during a journey, send the last location to contacts
-- [ ] **Wear OS tile and complication** for one-tap SOS from the watch face
+- [x] **Wear OS tile and complications** for SOS and fake-call shortcuts (watch build 11; device checks pending)
 - [ ] **Route-deviation alerts** and trip sharing in Safe Journey
 - [ ] **Hindi and Marathi**, including Voice SOS (*"bachao bachao bachao"*)
 - [ ] **Play Store release**, which removes the one-time SMS and Wireless debugging steps
@@ -284,6 +288,9 @@ and [privacy notice](PRIVACY.md#beta-test-data).
 - After the watch restarts, Android only lets **Voice SOS** use the microphone again after one tap on its notification.
 - **Voice SOS** was tuned on recorded voices in street noise; words run together very fast (*"helphelphelp"*) can be missed.
 - **Battery life** over a full day with Voice SOS on has not been measured.
+- **Wrist twist** requires an awake display; its accuracy and battery use still need checking on real wrists.
+- **Watch4 pinch** uses Samsung Universal Gestures for accessible button navigation, not a custom global app trigger.
+- **Direct watch SOS** requires backend configuration, an account link and watch internet. The dashboard shows missing setup.
 - **Community reports** are user-submitted, not official crime data.
 
 ## 👥 Team

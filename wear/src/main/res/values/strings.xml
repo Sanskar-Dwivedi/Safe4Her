@@ -2,4 +2,6 @@
 <resources>
     <string name="app_name">Security4Her Beta</string>
     <string name="channel_safety">Safety Mode &amp; SOS</string>
+    <string name="shortcut_sos">Security4Her SOS</string>
+    <string name="shortcut_fake_call">Security4Her Fake Call</string>
 </resources>
