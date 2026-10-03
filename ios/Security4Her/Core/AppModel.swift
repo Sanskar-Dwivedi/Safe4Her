@@ -65,7 +65,9 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
             backend.clearLocalSession(); SecureStore.remove("safety-pin")
             UserDefaults.standard.set(true, forKey: "installationInitialized")
         }
-        if backend.config.configured, backend.session != nil {
+        if canRestoreDemo {
+            activateDemo()
+        } else if backend.config.configured, backend.session != nil {
             if let cached: Profile = Disk.read("profile.json"), cached.id == backend.session?.user.id {
                 profile = cached
                 contacts = Disk.read("contacts-\(cached.id).json") ?? []
@@ -91,19 +93,52 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
     }
     func report(_ error: Error) { self.error = error.localizedDescription; log(error.localizedDescription) }
     func authenticate(name: String, email: String, password: String, creating: Bool) async {
+        guard !demo || !hasUnresolvedSafetySession else {
+            error = "End the demo safety session before signing in."; return
+        }
         busy = true; defer { busy = false }
         do {
             profile = try await (creating ? backend.signUp(name: name, email: email, password: password) : backend.signIn(email: email, password: password))
             demo = false
+            UserDefaults.standard.set(false, forKey: "offlineDemo")
             if let profile { persist(profile, "profile.json") }
             if profile?.verifiedFemale == true { try await loadContacts() }
         } catch { report(error) }
     }
-    func enterDemo() {
-        guard incident?.state != "active", journey?.state != "active" else { error = "Resolve the active safety session before changing accounts."; return }
+    private var hasUnresolvedSafetySession: Bool {
+        incident?.state == "active" || incident?.endPending == true || journey?.state == "active" ||
+            journey?.serverPending == true || journey?.endPending == true
+    }
+    private var canRestoreDemo: Bool {
+        // Never hide a live or uncertain server session behind offline demo mode.
+        if let incident, incident.state == "active" || incident.endPending {
+            guard incident.test, !incident.serverAccepted, !incident.endPending else { return false }
+        }
+        if let journey, journey.state == "active" || journey.serverArmed || journey.endPending || journey.serverPending {
+            guard !journey.serverArmed, !journey.serverPending, !journey.endPending else { return false }
+        }
+        if UserDefaults.standard.bool(forKey: "offlineDemo") { return true }
+        // Older builds saved demo sessions but did not save the selected demo account.
+        // Recover only local practice state with no saved authenticated account.
+        let cached: Profile? = Disk.read("profile.json")
+        guard backend.session == nil, cached == nil, hasUnresolvedSafetySession else { return false }
+        if let incident, incident.state == "active" {
+            let owners = evidence.cases.filter { $0.id == incident.id }.map(\.ownerId)
+            guard owners.allSatisfy({ $0 == "demo" }) else { return false }
+        }
+        return true
+    }
+    private func activateDemo() {
         demo = true; settings.testMode = true
         profile = Profile(id: "demo", displayName: "Demo", verifiedFemale: true)
-        contacts = []; loading = false
+        contacts = []
+        UserDefaults.standard.set(true, forKey: "offlineDemo")
+    }
+    func enterDemo() {
+        guard !hasUnresolvedSafetySession || canRestoreDemo else {
+            error = "A saved safety session needs attention. Sign in to the account that started it and end it before entering the demo."; return
+        }
+        activateDemo(); loading = false
     }
     func verifyIdentity() async {
         do {
@@ -156,6 +191,7 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
         }
         if !demo { await backend.signOut() }
         Disk.remove("profile.json")
+        UserDefaults.standard.set(false, forKey: "offlineDemo")
         profile = nil; contacts = []; demo = false; incident = nil; journey = nil
         Disk.remove("incident.json"); Disk.remove("journey.json"); stopLive()
     }

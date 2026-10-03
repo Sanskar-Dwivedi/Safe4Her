@@ -25,6 +25,11 @@ Simulators and use Product > Run. Physical-device builds still need a valid team
 Keep `DEVELOPMENT_TEAM = $(inherited)` in `Local.xcconfig` when choosing your team in Xcode; setting it
 to an empty value overrides a team selected at the project level and causes a missing-team error.
 
+Offline demo selection survives relaunch, including an unfinished practice SOS or journey. End it from
+Home or Journey before signing out of the demo. Older builds' local practice sessions can also be restored
+when no authenticated account is saved. Live, server-accepted or pending server sessions are not reset by
+entering the demo; sign in to their original account and resolve them. Evidence is retained during recovery.
+
 Command-line simulator build, from the repository root on macOS:
 
 ```sh
