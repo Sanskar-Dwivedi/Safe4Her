@@ -9,5 +9,6 @@ SUPABASE_SECRET_KEY=sb_secret_s7Se8NQ1-kbKa6IamNWkWw_PgRbsyNY
 SUPABASE_JWKS_URL=https://udjoctuzlbmtdhhujjqr.supabase.co/auth/v1/.well-known/jwks.json
 
 // Optional: your actual Apple development team, never a signing password.
-DEVELOPMENT_TEAM =
+// Preserve the team selected in Xcode instead of overriding it with an empty value.
+DEVELOPMENT_TEAM = $(inherited)
 

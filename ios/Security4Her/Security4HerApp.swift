@@ -30,7 +30,13 @@ struct Security4HerApp: App {
                         }.padding()
                     }
                 }
-                .fullScreenCover(isPresented: $model.deterrents.callVisible) { FakeCallView().environmentObject(model) }
+                .fullScreenCover(isPresented: Binding(
+                    get: { model.deterrents.callVisible },
+                    set: { visible in
+                        if visible { model.deterrents.callVisible = true }
+                        else { model.deterrents.endCall() }
+                    }
+                )) { FakeCallView().environmentObject(model) }
         }
     }
 }

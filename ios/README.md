@@ -12,13 +12,18 @@ the project and real iPhones must exercise its safety flows before anyone relies
 
 On a Mac with a current Xcode installation supporting iOS 17 deployment:
 
-1. Copy `Config/Local.xcconfig.example` to `Config/Local.xcconfig`.
+1. Open `Config/Local.xcconfig` to configure this checkout.
 2. Set the existing deployment's Supabase URL, **public** anon/publishable key, tracking page URL and live
-   page URL. Never add a service-role key or Telegram token. Keep the example's slash escaping for URLs.
+   page URL. Never add a service-role key or Telegram token. Keep the existing slash escaping for URLs.
 3. Open `Security4Her.xcodeproj`. Select the **Security4Her** scheme and an iPhone simulator or device.
 4. For a real iPhone, select your Apple development team under Signing & Capabilities and use a bundle ID
    available to that team. Enable Developer Mode on the device if Xcode requests it.
 5. Build and run. Without configuration, the entry screen offers an explicitly labelled offline demo.
+
+Simulator builds disable signing and do not need an Apple account. Select a destination under iOS
+Simulators and use Product > Run. Physical-device builds still need a valid team and provisioning profile.
+Keep `DEVELOPMENT_TEAM = $(inherited)` in `Local.xcconfig` when choosing your team in Xcode; setting it
+to an empty value overrides a team selected at the project level and causes a missing-team error.
 
 Command-line simulator build, from the repository root on macOS:
 

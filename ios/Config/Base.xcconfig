@@ -4,3 +4,6 @@ S4H_SUPABASE_ANON_KEY =
 S4H_TRACKING_URL =
 S4H_LIVE_URL =
 #include? "Local.xcconfig"
+
+// Simulator builds do not require an Apple development team.
+CODE_SIGNING_ALLOWED[sdk=iphonesimulator*] = NO
