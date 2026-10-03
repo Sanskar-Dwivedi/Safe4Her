@@ -89,6 +89,7 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
             } catch { log("Server connection unavailable. Saved local setup remains available; remote actions will retry.") }
         }
         loading = false
+        refreshJourneyPresentation()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
         if incident?.state == "active" { location.start("sos"); log("SOS restored. Recording does not silently restart after termination.") }
         if journey?.state == "active" { location.start("journey") }

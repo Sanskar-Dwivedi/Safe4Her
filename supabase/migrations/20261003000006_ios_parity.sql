@@ -33,7 +33,7 @@ $$;
 create function public._ios_lifecycle(p_user uuid, p_event text, p_incident uuid, p_journey uuid) returns void
 language sql security definer set search_path = public, pg_temp as $$
   insert into public.ios_alert_jobs(user_id, incident_id, journey_id, contact_id, event)
-  select p_user, p_incident, p_journey, c.id from public.trusted_contacts c
+  select p_user, p_incident, p_journey, c.id, p_event from public.trusted_contacts c
   where c.owner_id = p_user and c.receives_sos and c.telegram_chat_id is not null
     and ((p_journey is not null and exists(select 1 from public.ios_journeys j
       where j.id = p_journey and j.user_id = p_user and not j.test_mode)) or
