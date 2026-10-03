@@ -1,7 +1,23 @@
 import { type Env, type Fetch, json, required, rpc, shareUrl } from "../_shared/lib.ts";
 
-interface AlertJob { id: string; chatId: number; name: string; token: string; trigger: string }
-interface State { state?: string; shareToken?: string; accepted?: number; pending?: number; schedulerReady?: boolean }
+interface AlertJob { id: string; lease: string; chatId: number; name: string; token?: string; trigger?: string; event: string; destination?: string; deadline?: string }
+interface State { state?: string; shareToken?: string; accepted?: number; pending?: number; schedulerReady?: boolean;
+  deadline?: string; revision?: number; incidentState?: string; eligibleRecipients?: number }
+
+function trackingConfigured(env: Env): boolean {
+  try { return new URL(env.TRACK_BASE_URL ?? "").protocol === "https:"; } catch { return false; }
+}
+
+export function alertText(job: AlertJob, env: Env): string {
+  const name = job.name || "Your contact";
+  if (job.event === "resolved") return `${name} ended their SOS in Security4Her. Contact them if you still have concerns.`;
+  if (job.event === "journey_arrived") return `${name} checked in at their journey destination${job.destination ? `: ${job.destination}` : ""}.`;
+  if (job.event === "journey_ended") return `${name} ended journey monitoring. This does not confirm arrival.`;
+  if (job.event === "journey_started") return `${name} started a monitored journey${job.destination ? ` to ${job.destination}` : ""}. Check-in deadline: ${job.deadline ?? "not available"}. You will be alerted if they miss it.`;
+  const link = trackingConfigured(env) ? shareUrl(env, job.token) : null;
+  return `${job.trigger === "journey" ? "Missed journey check-in" : "SOS"} from ${name}. They may need help.` +
+    (link ? ` Last reported location: ${link}` : " Contact them now.");
+}
 
 async function deliver(env: Env, f: Fetch, user: string | null): Promise<void> {
   const token = required(env, "TELEGRAM_BOT_TOKEN");
@@ -10,9 +26,7 @@ async function deliver(env: Env, f: Fetch, user: string | null): Promise<void> {
   await Promise.all(jobs.map(async (job) => {
     let sent = false, retry = 60;
     try {
-      const link = shareUrl(env, job.token);
-      const text = `${job.trigger === "journey" ? "Missed journey check-in" : "SOS"} from ${job.name || "your contact"}. ` +
-        `They may need help.${link ? ` Last reported location: ${link}` : " Contact them now."}`;
+      const text = alertText(job, env);
       const response = await f(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ chat_id: job.chatId, text, disable_web_page_preview: true }),
@@ -22,7 +36,7 @@ async function deliver(env: Env, f: Fetch, user: string | null): Promise<void> {
       sent = response.ok && result.ok === true;
       retry = result.parameters?.retry_after ?? (response.status === 403 ? 3600 : 60);
     } catch { /* Keep only the delivery state, never log contact details or message bodies. */ }
-    await rpc(env, f, "ios_finish_alert", { p_id: job.id, p_sent: sent, p_retry_seconds: retry });
+    await rpc(env, f, "ios_finish_delivery", { p_id: job.id, p_lease: job.lease, p_sent: sent, p_retry_seconds: retry });
   }));
 }
 
@@ -45,6 +59,8 @@ export async function handler(req: Request, env: Env, f: Fetch = fetch): Promise
     const body = await req.json() as Record<string, unknown>;
     const action = body.action;
     if (typeof action !== "string" || !["capabilities", "sos", "end", "journeyStart", "journeyStatus", "journeyExtend", "journeyEnd"].includes(action)) return json({ error: "invalid action" }, 400);
+    const deliveryReady = !!env.TELEGRAM_BOT_TOKEN && !!env.SUPABASE_SERVICE_ROLE_KEY && trackingConfigured(env);
+    if (action === "journeyStart" && !deliveryReady) return json({ error: "Journey delivery and tracking are not configured." }, 503);
     async function run(): Promise<State> {
       const response = await f(`${base}/rest/v1/rpc/ios_safety`, {
         method: "POST", headers: { apikey, authorization: authorization!, "content-type": "application/json" },
@@ -62,7 +78,9 @@ export async function handler(req: Request, env: Env, f: Fetch = fetch): Promise
       state = await run();
     }
     return json({ state: state.state, accepted: state.accepted, pending: state.pending,
-      schedulerReady: state.schedulerReady, shareUrl: shareUrl(env, state.shareToken) });
+      schedulerReady: state.schedulerReady, deliveryReady, eligibleRecipients: state.eligibleRecipients,
+      deadline: state.deadline, revision: state.revision, incidentState: state.incidentState,
+      shareUrl: trackingConfigured(env) ? shareUrl(env, state.shareToken) : null });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "safety service unavailable" }, 400);
   }

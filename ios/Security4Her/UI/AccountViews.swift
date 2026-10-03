@@ -120,6 +120,7 @@ struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @State private var newPIN = ""
     @State private var oldPIN = ""
+    @State private var choosingFolder = false
     var body: some View {
         Form {
             Section(model.profile?.displayName ?? "Your account") {
@@ -138,7 +139,22 @@ struct SettingsView: View {
             Section("Evidence") {
                 Toggle("Record audio during SOS", isOn: $model.settings.audioEvidence)
                 Toggle("Record video while app is visible", isOn: $model.settings.videoEvidence)
-                Text("Local recordings are removed on uninstall. Export important cases first. Encrypted recovery and automatic evidence sharing are not part of this version.").font(.caption).foregroundStyle(.secondary)
+                Text("Local recordings are removed on uninstall. Optional Files copies contain audio, video and location metadata outside the app’s PIN protection. Anyone with access to that folder can read them.").font(.caption).foregroundStyle(.secondary)
+                Button(model.evidence.backup.folderName == nil ? "Enable copies — choose a Files folder" : "Choose a different copy folder") { choosingFolder = true }
+                if let folder = model.evidence.backup.folderName {
+                    Text("Copy folder: \(folder)")
+                    Button("Retry completed evidence copies") { model.retryEvidenceCopies() }
+                    Button("Turn off automatic copies", role: .destructive) { model.evidence.backup.disable() }
+                }
+                Text(model.evidence.backup.status).font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Journey reminders") {
+                if #available(iOS 26.0, *) {
+                    Toggle("Use system check-in alarms", isOn: Binding(get: { model.settings.alarmReminders == true }, set: {
+                        model.settings.alarmReminders = $0; model.updateReminders()
+                    }))
+                }
+                Text("Open the app to confirm you are safe. Dismissing a reminder or Live Activity does not check you in. On older iOS versions, reminders use notifications and respect notification settings.").font(.caption).foregroundStyle(.secondary)
             }
             Section("Safety PIN") {
                 if SecureStore.hasPIN { SecureField("Current PIN", text: $oldPIN).keyboardType(.numberPad) }
@@ -157,6 +173,7 @@ struct SettingsView: View {
             }
             Section { Button("Sign out", role: .destructive) { Task { await model.signOut() } } }
         }.navigationTitle("Me")
+            .sheet(isPresented: $choosingFolder) { EvidenceFolderPicker { model.chooseEvidenceFolder($0); choosingFolder = false } }
     }
 }
 
@@ -169,6 +186,7 @@ struct SetupView: View {
                 Button("Allow location") { model.location.requestPermission() }
                 Button("Allow background location") { model.location.requestBackgroundPermission() }
                 Text("Location status: \(String(describing: model.location.authorization))").font(.caption)
+                Text(model.location.preciseLocation ? "Precise location enabled" : "Approximate location: check in manually if arrival cannot be confirmed").font(.caption)
                 Button("Allow microphone and camera") { Task { _ = await AVCaptureDevice.requestAccess(for: .audio); _ = await AVCaptureDevice.requestAccess(for: .video) } }
                 Button("Allow notifications") { Task { do { notificationStatus = try await Notifications.shared.authorize() ? "Allowed" : "Not allowed" } catch { model.report(error) } } }
                 Text("Notifications: \(notificationStatus)").font(.caption)
@@ -177,6 +195,16 @@ struct SetupView: View {
             Section("Fast access") {
                 Text("In Shortcuts, find Security4Her → Start SOS. You can assign that shortcut in iPhone Settings → Accessibility → Touch → Back Tap, or to the Action button on supported iPhones. Unlocking may be required.")
                 Text("A separate Fake Call shortcut opens the simulated call. Background scheduled calls appear as notifications; tap to open them.")
+                Text("Add the SOS access widget to your Home or Lock Screen. On iOS 18 or later, add Start SOS in Control Center. These open the app for the countdown; keep it open until SOS starts.")
+            }
+            Section("Automatic Telegram delivery") {
+                if let readiness = model.readiness {
+                    Text("Eligible linked contacts: \(readiness.eligibleRecipients ?? 0)")
+                    Text(readiness.schedulerReady == true ? "Scheduler recently responded" : "Scheduler has not recently responded")
+                    Text(readiness.deliveryReady == true ? "Delivery configuration ready" : "Delivery configuration incomplete")
+                } else { Text("Readiness has not been confirmed") }
+                Button("Refresh delivery readiness") { Task { await model.refreshReadiness() } }
+                Text("Sent counts mean Telegram accepted a message; they do not prove a contact read it. Manual SMS and calls remain available.").font(.caption)
             }
             Section("Availability") {
                 Text("Camera evidence stops when this app leaves the foreground. Audio and location use permitted background modes but can be interrupted by iOS, calls, permissions or force quit.")

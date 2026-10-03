@@ -15,18 +15,25 @@ struct JourneyView: View {
     @State private var walking = true
     @State private var searching = false
     @State private var routeNote = "Choose a destination to estimate travel time."
+    @ObservedObject private var presentation = JourneyPresentation.shared
     var body: some View {
         Form {
             if let journey = model.journey, journey.state == "active" || journey.endPending {
                 Section("Current journey") {
                     Text(journey.name).font(.title2.bold())
                     Text("Check in by \(journey.deadline.formatted(date: .omitted, time: .shortened))")
+                    if let pending = journey.pendingDeadline {
+                        Text("Requested deadline: \(pending.formatted(date: .omitted, time: .shortened)). The previous server deadline remains in effect until confirmed.").foregroundStyle(.orange)
+                    }
+                    if let at = journey.acknowledgedAt { Text("Last server confirmation: \(at.formatted())").font(.caption) }
+                    Text(presentation.reminderStatus).font(.caption)
                     Text(journey.serverPending ? "Server confirmation is pending. A deadline may already be armed; end this journey to cancel it before trying again." : journey.serverArmed ? "Server deadline armed: linked Telegram contacts can be alerted if you miss check-in." : "Practice only: keep the app open. No automatic contact alerts.").foregroundStyle(journey.serverArmed ? .green : .orange)
                     if let reason = journey.checkReason { Text(reason).foregroundStyle(.orange) }
                     if let until = journey.checkUntil { Text(until, style: .timer).font(.title.monospacedDigit()) }
                     if journey.endPending { Text("Waiting for the server to confirm cancellation. The previous deadline may still alert contacts.").foregroundStyle(.orange) }
                     Button("I’m OK — give me 10 more minutes") { Task { await model.extendJourney() } }.disabled(journey.endPending || journey.serverPending)
-                    Button("I’ve arrived — end journey") { Task { await model.endJourney() } }
+                    Button("I’ve arrived — end journey") { Task { await model.endJourney(reason: "arrived") } }
+                    Button("End monitoring without confirming arrival", role: .destructive) { Task { await model.endJourney() } }
                 }
             } else {
                 Section("Where are you going?") {

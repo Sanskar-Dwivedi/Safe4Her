@@ -134,6 +134,20 @@ cloud project. All RPCs are called via PostgREST `rpc/<name>` with named paramet
 
 ## Change requests
 
+- 2026-10-03: iPhone parity hardening adds optional `deadline`, `revision`, `incidentState`,
+  `eligibleRecipients` and `deliveryReady` to `ios-safety` responses. Journey mutations carry a
+  monotonically increasing `revision`; cancellation wins over delayed starts/extensions. Cancellation
+  tombstones are retained for the account lifetime. `journeyEnd.reason` is `arrived` only after an
+  explicit arrival or two qualifying GPS fixes; otherwise it is `ended`. Telegram lifecycle jobs are
+  durable, deduplicated per session/event/contact and never generated for Test Mode sessions. Worker
+  leases carry tokens so an expired worker cannot acknowledge a newer lease. Deploy the additive
+  migration and function before the iPhone update. Existing Android/Wear RPCs are unchanged.
+  ntfy live maps accept both Google `q` and Apple `ll` links. iPhone messages additionally carry
+  JSON `{version:1,state:"active"|"ended",fixAt,lat,lng,accuracyM}`; `fixAt` is the GPS measurement
+  time, not the relay publication time. An ended share does not claim that its owner is safe.
+  iPhone external evidence copies require explicit folder selection, remain outside the app PIN,
+  and report verified local copies separately from provider/cloud synchronization.
+
 - 2026-10-03: add the separate iPhone source target `in.security4her.ios` (iOS 17+, SwiftUI; no watch target).
   Existing Android/Wear identity and data-layer contracts are unchanged. iPhone uses existing REST auth,
   contacts, verification and map RPCs. New authenticated Edge Function `ios-safety` accepts `action` values

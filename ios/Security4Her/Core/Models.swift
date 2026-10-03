@@ -40,16 +40,18 @@ struct AppSettings: Codable {
     var fakeVoice = "Hi, where are you? I'm nearby. Come and meet me, I'll wait for you."
     var pocketGesture = false
     var onboardingComplete = false
+    // Optional additions preserve decoding of settings written by previous releases.
+    var alarmReminders: Bool?
 }
 
-struct Fix: Codable {
+struct Fix: Codable, Sendable {
     let lat: Double
     let lng: Double
     let accuracy: Double
     let at: Date
     var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lng) }
     var mapsURL: String { "https://maps.apple.com/?ll=\(lat),\(lng)" }
-    var isFresh: Bool { accuracy >= 0 && abs(at.timeIntervalSinceNow) < 120 }
+    var isFresh: Bool { SafetyPolicy.fresh(at: at, accuracy: accuracy, now: Date()) }
 }
 
 struct Incident: Codable, Identifiable {
@@ -83,6 +85,13 @@ struct JourneyState: Codable, Identifiable {
     var checkUntil: Date?
     var checkReason: String?
     var endPending = false
+    var revision: Int?
+    var acknowledgedAt: Date?
+    var pendingDeadline: Date?
+    var arrivalCandidateAt: Date?
+    var endReason: String?
+    var test: Bool?
+    var mutationRevision: Int { revision ?? 0 }
 }
 
 struct ActivityEntry: Codable, Identifiable {

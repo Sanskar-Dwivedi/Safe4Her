@@ -9,7 +9,7 @@ import AVFoundation
 final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentationContextProviding {
     static let shared = AppModel()
     @Published var settings: AppSettings = Disk.read("settings.json") ?? AppSettings() { didSet { persist(settings, "settings.json") } }
-    @Published var profile: Profile?
+    @Published var profile: Profile? { didSet { retryEvidenceCopies() } }
     @Published var contacts: [TrustedContact] = []
     @Published var incident: Incident? = Disk.read("incident.json")
     @Published var journey: JourneyState? = Disk.read("journey.json")
@@ -31,22 +31,32 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
     private var countdownTask: Task<Void, Never>?
     private var timer: Timer?
     private var syncBusy = false
+    private var syncAgain = false
+    private var journeyStarting = false
+    @Published var readiness: SafetyResponse?
     private var lastSync = Date.distantPast
     private var lastLive = Date.distantPast
+    private var lastBackupRetry = Date.distantPast
     private var authSession: ASWebAuthenticationSession?
     private var observers = Set<AnyCancellable>()
     private var launchTask: Task<Void, Never>?
     private var startInProgress = false
     private var livePublishing = false
+    private var pendingLiveEnds: [String: Date] = Disk.read("live-ends.json") ?? [:]
+    private var pendingAction: (SafetyAction, Date)?
     override private init() {
         super.init()
+        if let saved: LiveSession = Disk.read("live-session.json") {
+            liveTopic = saved.topic; liveUntil = saved.until
+            if saved.until <= Date() { stopLive() } else { location.start("live") }
+        }
         location.onFix = { [weak self] fix in self?.received(fix) }
         evidence.location = { [weak self] in self?.location.fix }
         deterrents.onKnock = { [weak self] in self?.beginCountdown(trigger: "pocket") }
         Notifications.shared.configure()
         Notifications.shared.onAction = { [weak self] action in
             guard let self else { return }
-            if action == "fake-call" { self.deterrents.ring() }
+            if action == "fake-call" { Task { _ = try? await self.requestSafetyAction(.fakeCall) } }
             if action == "journey" { self.selectedTab = 1 }
         }
         for publisher in [location.objectWillChange, evidence.objectWillChange, deterrents.objectWillChange] {
@@ -96,6 +106,7 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
         guard !demo || !hasUnresolvedSafetySession else {
             error = "End the demo safety session before signing in."; return
         }
+        evidence.backup.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &observers)
         busy = true; defer { busy = false }
         do {
             profile = try await (creating ? backend.signUp(name: name, email: email, password: password) : backend.signIn(email: email, password: password))
@@ -106,7 +117,7 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
         } catch { report(error) }
     }
     private var hasUnresolvedSafetySession: Bool {
-        incident?.state == "active" || incident?.endPending == true || journey?.state == "active" ||
+        countdown != nil || startInProgress || journeyStarting || incident?.state == "active" || incident?.endPending == true || journey?.state == "active" ||
             journey?.serverPending == true || journey?.endPending == true
     }
     private var canRestoreDemo: Bool {
@@ -186,7 +197,7 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
         } catch { report(error) }
     }
     func signOut() async {
-        guard incident?.state != "active", incident?.endPending != true, journey?.state != "active", journey?.endPending != true else {
+        guard !hasUnresolvedSafetySession else {
             error = "End and synchronize active safety sessions before signing out."; return
         }
         if !demo { await backend.signOut() }
@@ -212,8 +223,44 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
             await startSOS(trigger: trigger)
         }
     }
+    func requestSafetyAction(_ action: SafetyAction) async throws -> String {
+        await launch()
+        guard profile?.verifiedFemale == true else {
+            throw AppFailure.message("Open Security4Her and finish sign-in and setup. No SOS has started.")
+        }
+        if action == .sos {
+            if incident?.state == "active" { selectedTab = 0; return "An SOS is already active. Open Security4Her to review it." }
+            guard incident?.endPending != true else { throw AppFailure.message("The previous SOS is still ending. Open Security4Her to synchronize it.") }
+            if countdown != nil { return "The SOS countdown is already running. Keep Security4Her open." }
+        }
+        pendingAction = (action, Date())
+        consumeSafetyAction()
+        if action == .journey { return "Open Security4Her to check in. Your journey has not been ended." }
+        if pendingAction != nil { return "Open and unlock Security4Her to continue. No SOS has started yet." }
+        return action == .sos ? "The SOS countdown has started. Keep Security4Her open." : "The simulated call is open. No real call was placed."
+    }
+    private func consumeSafetyAction() {
+        guard UIApplication.shared.applicationState == .active, let (action, created) = pendingAction else { return }
+        pendingAction = nil
+        guard Date().timeIntervalSince(created) < 30 else { log("Fast-access request expired. Start again from the app."); return }
+        switch action {
+        case .sos: selectedTab = 0; beginCountdown()
+        case .fakeCall: deterrents.ring()
+        case .journey: selectedTab = 1
+        }
+    }
+    func openSafetyURL(_ url: URL) async {
+        guard url.scheme == "security4her" else { return }
+        let action: SafetyAction?
+        switch url.host { case "sos": action = .sos; case "fake-call": action = .fakeCall; case "journey": action = .journey; default: action = nil }
+        guard let action else { return }
+        do { _ = try await requestSafetyAction(action) } catch { report(error) }
+    }
     func cancelCountdown() { countdownTask?.cancel(); countdownTask = nil; countdown = nil }
     func startSOS(trigger: String) async {
+        guard profile?.verifiedFemale == true, incident?.endPending != true else {
+            error = "Finish account setup and synchronize the previous SOS before starting another."; return
+        }
         guard incident?.state != "active", !startInProgress else { return }
         startInProgress = true; defer { startInProgress = false }
         let current = Incident(trigger: trigger, test: settings.testMode || demo, lastFix: location.fix)
@@ -229,16 +276,24 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
         guard var current = incident else { return }
         evidence.stop(); location.stop("sos")
         current.state = "resolved"; current.endPending = !demo; incident = current; persist(current, "incident.json")
+        if journey?.incidentId == current.id, journey?.state == "alerted" {
+            journey?.state = "ended"; journey?.endPending = !demo
+            journey?.revision = (journey?.mutationRevision ?? 0) + 1
+            if let journey { persist(journey, "journey.json") }
+            refreshJourneyPresentation()
+        }
         log("SOS ended locally. Synchronizing the server status.")
         await synchronize()
     }
     private func received(_ fix: Fix) {
         if incident?.state == "active" { incident?.lastFix = fix; if let incident { persist(incident, "incident.json") } }
         evaluateJourney(fix)
+        location.confirmArrival(journey?.state == "active" && journey?.arrivalCandidateAt != nil)
         if Date().timeIntervalSince(lastSync) > 20 { Task { await synchronize() } }
         publishLiveIfNeeded()
     }
     private func tick() {
+        if Date().timeIntervalSince(lastBackupRetry) >= 60 { retryEvidenceCopies() }
         if let current = incident, current.state == "active", Date().timeIntervalSince(current.startedAt) >= 3600, evidence.recordingId != nil {
             evidence.stop(); log("Evidence recording reached its one-hour limit. SOS remains active.")
         }
@@ -251,10 +306,16 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
         publishLiveIfNeeded()
     }
     func synchronize() async {
-        guard !syncBusy, profile?.verifiedFemale == true else { return }
+        guard profile?.verifiedFemale == true else { return }
+        if syncBusy { syncAgain = true; return }
         lastSync = Date()
         guard !demo else { return }
-        syncBusy = true; defer { syncBusy = false }
+        syncBusy = true
+        defer {
+            syncBusy = false
+            if syncAgain { syncAgain = false; Task { await synchronize() } }
+            refreshJourneyPresentation()
+        }
         if let current = incident, current.state == "active" || current.endPending {
             do {
                 var body: [String: Any] = ["incidentId": current.id, "trigger": current.trigger, "test": current.test]
@@ -274,28 +335,49 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
         }
         if let current = journey, current.serverArmed || current.serverPending || current.endPending {
             do {
-                var body: [String: Any] = ["journeyId": current.id]
+                var body: [String: Any] = ["journeyId": current.id, "revision": current.mutationRevision,
+                                           "reason": current.endReason ?? "ended"]
                 if let fix = location.fix { body["lat"] = fix.lat; body["lng"] = fix.lng; body["accuracyM"] = fix.accuracy; body["fixAt"] = ISO8601DateFormatter().string(from: fix.at) }
-                let result = try await backend.safety(current.endPending ? "journeyEnd" : "journeyStatus", body)
-                guard journey?.id == current.id else { return }
+                let action: String
+                if current.endPending { action = "journeyEnd" }
+                else if current.serverPending {
+                    action = "journeyStart"
+                    body["incidentId"] = current.incidentId; body["name"] = current.name
+                    body["deadline"] = ISO8601DateFormatter().string(from: current.deadline)
+                    body["test"] = current.test ?? false
+                } else if let pending = current.pendingDeadline {
+                    action = "journeyExtend"; body["deadline"] = ISO8601DateFormatter().string(from: pending)
+                } else { action = "journeyStatus" }
+                let result = try await backend.safety(action, body)
+                guard SafetyPolicy.acceptsJourneyResponse(id: current.id, revision: current.mutationRevision, state: current.state,
+                    currentID: journey?.id, currentRevision: journey?.mutationRevision ?? 0, currentState: journey?.state) else { return }
+                journey?.acknowledgedAt = Date()
+                journey?.revision = max(current.mutationRevision, result.revision ?? 0)
+                if let deadline = result.deadlineDate { journey?.deadline = deadline }
+                if (result.revision ?? 0) >= current.mutationRevision { journey?.pendingDeadline = nil }
                 if current.endPending { journey?.endPending = false; journey?.serverArmed = false; journey?.serverPending = false }
                 else if result.state == "active" { journey?.serverArmed = true; journey?.serverPending = false }
                 else if result.state == "ended" {
                     journey?.state = "ended"; journey?.serverArmed = false; journey?.serverPending = false
+                    journey?.pendingDeadline = nil
                     location.stop("journey"); Notifications.shared.cancel("journey")
                 }
                 if result.state == "alerted" {
                     journey?.state = "alerted"; location.stop("journey")
                     journey?.serverPending = false
-                    if incident?.state != "active" {
-                        incident = Incident(id: current.incidentId, trigger: "journey", test: settings.testMode, shareURL: result.shareUrl, serverAccepted: true, lastFix: location.fix)
+                    if SafetyPolicy.shouldRestoreIncident(id: current.incidentId, serverState: result.incidentState,
+                                                          localID: incident?.id, localState: incident?.state) {
+                        incident = Incident(id: current.incidentId, trigger: "journey", test: current.test ?? false, shareURL: result.shareUrl, serverAccepted: true, lastFix: location.fix)
                         if let incident { persist(incident, "incident.json") }
                         location.start("sos")
                         log("The server raised a missed-check-in SOS. Open SOS to review alerts.")
                     }
                 }
                 if let journey { persist(journey, "journey.json") }
-            } catch { if journey?.endPending == true { self.error = "Journey cancellation is waiting for internet. Contacts may still be alerted until the server confirms." } }
+            } catch {
+                if journey?.endPending == true { self.error = "Journey cancellation is waiting for internet. Contacts may still be alerted until the server confirms." }
+                else { log("Journey synchronization failed; the saved request will retry. \(error.localizedDescription)") }
+            }
         }
     }
     var sosMessage: String {
@@ -305,12 +387,14 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
             ((location.fix ?? incident?.lastFix).map { "Last location: \($0.mapsURL) (±\(Int($0.accuracy)) m, \($0.at.formatted()))." } ?? "Location unavailable.")
     }
     func composeSOS() {
-        let numbers = settings.testMode || demo ? [settings.testNumber].filter { !$0.isEmpty } : contacts.filter(\.receivesSos).map(\.phone)
+        let practice = demo || (incident?.state == "active" ? incident?.test == true : settings.testMode)
+        let numbers = practice ? [settings.testNumber].filter { !$0.isEmpty } : contacts.filter(\.receivesSos).map(\.phone)
         guard !numbers.isEmpty else { error = settings.testMode ? "Set a test phone number first." : "Add a trusted contact first."; return }
         messageDraft = MessageDraft(recipients: numbers, body: sosMessage)
     }
     func dial() {
-        let number = settings.testMode || demo ? settings.testNumber : settings.callNumber
+        let practice = demo || (incident?.state == "active" ? incident?.test == true : settings.testMode)
+        let number = practice ? settings.testNumber : settings.callNumber
         let cleaned = number.filter { $0.isNumber || $0 == "+" }
         guard !cleaned.isEmpty, let url = URL(string: "tel:\(cleaned)") else { error = "Set a valid call number in settings."; return }
         UIApplication.shared.open(url) { [weak self] opened in Task { @MainActor in
@@ -323,7 +407,7 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
         if !active {
             cancelCountdown() // A suspended timer must not claim it completed an emergency action.
             if deterrents.torchOn { deterrents.setTorch(false) }
-        } else { Task { await synchronize() } }
+        } else { consumeSafetyAction(); refreshJourneyPresentation(); retryEvidenceCopies(); Task { await synchronize() } }
     }
     func scheduleFakeCall(seconds: Double) async {
         do {
@@ -334,50 +418,58 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
         } catch { report(error) }
     }
     func startJourney(name: String, coordinate: CLLocationCoordinate2D, minutes: Int) async {
-        guard journey?.state != "active", journey?.endPending != true else { error = "End the current journey first."; return }
+        guard profile?.verifiedFemale == true else { error = "Finish account setup before starting a journey."; return }
+        guard !journeyStarting, journey?.state != "active", journey?.endPending != true else { error = "End the current journey first."; return }
+        journeyStarting = true; defer { journeyStarting = false }
         var current = JourneyState(name: name, lat: coordinate.latitude, lng: coordinate.longitude, deadline: Date().addingTimeInterval(Double(minutes) * 60))
+        current.test = demo || settings.testMode
         if !demo && !settings.testMode {
             do {
                 let readiness = try await backend.safety("capabilities")
-                guard readiness.schedulerReady == true else { throw AppFailure.message("Server journey monitoring is not configured. Use Test Mode for an on-screen practice journey.") }
-                // Persist the ID before the request: a timed-out response must not orphan an armed deadline.
-                current.serverPending = true; journey = current; persist(current, "journey.json")
-                let response = try await backend.safety("journeyStart", ["journeyId": current.id, "incidentId": current.incidentId, "name": name,
-                    "lat": coordinate.latitude, "lng": coordinate.longitude, "deadline": ISO8601DateFormatter().string(from: current.deadline)])
-                current.serverArmed = response.state == "active"
-                guard current.serverArmed else { throw AppFailure.message("Journey monitoring was not confirmed.") }
-                current.serverPending = false
+                self.readiness = readiness
+                guard readiness.schedulerReady == true, readiness.deliveryReady == true,
+                      (readiness.eligibleRecipients ?? 0) > 0 else {
+                    throw AppFailure.message("Journey monitoring needs a running server scheduler, configured delivery, and a linked Telegram contact. Refresh setup after linking a contact.")
+                }
+                current.serverPending = true
             } catch { report(error); return }
         }
         journey = current; persist(current, "journey.json"); location.start("journey")
-        do {
-            if try await Notifications.shared.authorize() {
-                try await Notifications.shared.schedule(id: "journey", title: "Journey check-in", body: "Open Security4Her and confirm you are safe before your deadline.", after: max(1, current.deadline.timeIntervalSinceNow - 120), category: "journey")
-            }
-        } catch { report(error) }
-        log(current.serverArmed ? "Journey deadline confirmed by the server." : "Practice journey started. No automatic remote alerts.")
+        if current.serverPending { await synchronize() }
+        else { refreshJourneyPresentation(); log("Practice journey started. No automatic remote alerts.") }
     }
     func extendJourney(minutes: Int = 10) async {
         guard var current = journey, current.state == "active" else { return }
-        let next = Date().addingTimeInterval(Double(minutes) * 60)
-        do {
-            if current.serverArmed { _ = try await backend.safety("journeyExtend", ["journeyId": current.id, "deadline": ISO8601DateFormatter().string(from: next)]) }
-            current.deadline = next; current.checkUntil = nil; current.checkReason = nil; current.stillSince = Date(); current.anchor = location.fix
-            journey = current; persist(current, "journey.json")
-            try await Notifications.shared.schedule(id: "journey", title: "Journey check-in", body: "Confirm you are safe before your deadline.", after: max(1, next.timeIntervalSinceNow - 120), category: "journey")
-        } catch { report(error) }
+        guard !current.serverPending else { error = "Wait for the server to confirm the journey, or end it."; return }
+        let next = SafetyPolicy.extendedDeadline(current.pendingDeadline ?? current.deadline, now: Date(), minutes: minutes)
+        current.revision = current.mutationRevision + 1
+        if current.serverArmed { current.pendingDeadline = next } else { current.deadline = next }
+        current.checkUntil = nil; current.checkReason = nil; current.stillSince = Date(); current.anchor = location.fix
+        current.arrivalCandidateAt = nil
+        journey = current; persist(current, "journey.json"); refreshJourneyPresentation()
+        await synchronize()
     }
-    func endJourney() async {
+    func endJourney(reason: String = "ended") async {
         guard var current = journey else { return }
         current.state = "ended"; current.endPending = current.serverArmed || current.serverPending
+        current.revision = current.mutationRevision + 1; current.pendingDeadline = nil; current.endReason = reason
         journey = current; persist(current, "journey.json"); location.stop("journey"); Notifications.shared.cancel("journey")
+        location.confirmArrival(false)
+        refreshJourneyPresentation()
         await synchronize()
     }
     private func evaluateJourney(_ fix: Fix) {
         guard var current = journey, current.state == "active", !current.serverPending, fix.isFresh else { return }
         let here = CLLocation(latitude: fix.lat, longitude: fix.lng)
         let distance = here.distance(from: .init(latitude: current.lat, longitude: current.lng))
-        if distance < 150 { Task { await endJourney() }; return }
+        if SafetyPolicy.arrivalCandidate(distance: distance, accuracy: fix.accuracy, at: fix.at, now: Date()) {
+            if SafetyPolicy.confirmsArrival(first: current.arrivalCandidateAt, at: fix.at) {
+                Task { await endJourney(reason: "arrived") }; return
+            }
+            if current.arrivalCandidateAt == nil || fix.at.timeIntervalSince(current.arrivalCandidateAt!) >= 120 {
+                current.arrivalCandidateAt = fix.at
+            }
+        } else { current.arrivalCandidateAt = nil }
         if let anchor = current.anchor, here.distance(from: .init(latitude: anchor.lat, longitude: anchor.lng)) > 80 {
             current.anchor = fix; current.stillSince = Date()
         } else if current.anchor == nil { current.anchor = fix; current.stillSince = Date() }
@@ -387,11 +479,9 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
                 current.checkUntil = Date().addingTimeInterval(settings.testMode ? 30 : 120)
                 current.checkReason = away ? "Moving away from your destination" : "You have stopped moving"
                 if current.serverArmed, let until = current.checkUntil {
-                    let id = current.id
-                    Task {
-                        do { _ = try await backend.safety("journeyExtend", ["journeyId": id, "deadline": ISO8601DateFormatter().string(from: until)]) }
-                        catch { report(error) }
-                    }
+                    current.pendingDeadline = min(current.deadline, until)
+                    current.revision = current.mutationRevision + 1
+                    Task { await synchronize() }
                 }
                 Task { try? await Notifications.shared.schedule(id: "journey", title: "Are you safe?", body: "Open Security4Her to check in.", after: 1, category: "journey") }
             }
@@ -399,38 +489,89 @@ final class AppModel: NSObject, ObservableObject, ASWebAuthenticationPresentatio
         current.lastDistance = min(current.lastDistance ?? distance, distance)
         journey = current; persist(current, "journey.json")
     }
+    func refreshReadiness() async {
+        guard !demo else { readiness = nil; return }
+        do { readiness = try await backend.safety("capabilities") } catch { readiness = nil; report(error) }
+    }
+    func retryEvidenceCopies() {
+        lastBackupRetry = Date()
+        evidence.backup.activate(ownerID: profile?.id, cases: evidence.cases, directory: evidence.directory)
+    }
+    func chooseEvidenceFolder(_ url: URL) {
+        guard let owner = profile?.id else { return }
+        do { try evidence.backup.choose(url, ownerID: owner); retryEvidenceCopies() } catch { report(error) }
+    }
+    func updateReminders() { refreshJourneyPresentation() }
+    private func refreshJourneyPresentation() {
+        JourneyPresentation.shared.update(journey, alarmEnabled: settings.alarmReminders == true)
+    }
     private func overdueJourney() async {
         guard journey?.state == "active" else { return }
         journey?.state = "alerted"; location.stop("journey")
         if let journey { persist(journey, "journey.json") }
+        refreshJourneyPresentation()
         await startSOS(trigger: "journey")
     }
     var liveURL: URL? {
         guard let topic = liveTopic else { return nil }
-        let base = backend.config.liveURL.isEmpty ? "https://ntfy.sh/\(topic)" : backend.config.liveURL + "?t=\(topic)"
-        return URL(string: base)
+        guard var parts = URLComponents(string: backend.config.liveURL), parts.scheme == "https", parts.host != nil else { return nil }
+        parts.queryItems = (parts.queryItems ?? []) + [URLQueryItem(name: "t", value: topic)]
+        return parts.url
     }
     func startLive() {
+        guard let url = URL(string: backend.config.liveURL), url.scheme == "https", url.host != nil else {
+            error = "Live-map sharing is not configured in this build. Contact the app provider to enable it."; return
+        }
+        if liveTopic != nil { stopLive() }
         liveTopic = "s4h-" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
         liveUntil = Date().addingTimeInterval(3600); liveStatus = "Waiting for location"; lastLive = .distantPast; location.start("live")
+        persist(LiveSession(topic: liveTopic!, until: liveUntil!), "live-session.json")
     }
-    func stopLive() { liveTopic = nil; liveUntil = nil; liveStatus = "Sharing ended"; location.stop("live") }
+    func stopLive() {
+        if let topic = liveTopic { pendingLiveEnds[topic] = Date(); persist(pendingLiveEnds, "live-ends.json") }
+        liveTopic = nil; liveUntil = nil; liveStatus = "Sharing ended; sending stop update"; location.stop("live")
+        Disk.remove("live-session.json"); publishLiveIfNeeded()
+    }
     private func publishLiveIfNeeded() {
+        guard !livePublishing else { return }
+        if let topic = pendingLiveEnds.keys.sorted().first {
+            guard Date().timeIntervalSince(lastLive) >= 20 else { return }
+            lastLive = Date()
+            livePublishing = true
+            Task {
+                defer { livePublishing = false }
+                do {
+                    try await publishLive(topic: topic, payload: ["version": 1, "state": "ended"])
+                    pendingLiveEnds.removeValue(forKey: topic); persist(pendingLiveEnds, "live-ends.json")
+                    if liveTopic == nil { liveStatus = "Sharing ended; stop update published" }
+                } catch { if liveTopic == nil { liveStatus = "Sharing ended locally; stop update waiting for internet" } }
+            }
+            return
+        }
         guard !livePublishing, let topic = liveTopic, let fix = location.fix, fix.isFresh, Date().timeIntervalSince(lastLive) >= 20 else { return }
         livePublishing = true; lastLive = Date()
         Task {
             defer { livePublishing = false }
             do {
-                var request = URLRequest(url: URL(string: "https://ntfy.sh")!, timeoutInterval: 15)
-                request.httpMethod = "POST"; request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.httpBody = try JSONSerialization.data(withJSONObject: ["topic": topic, "title": "Live location", "message": "\(fix.lat), \(fix.lng), accurate to \(Int(fix.accuracy)) m", "click": fix.mapsURL])
-                let (_, response) = try await URLSession.shared.data(for: request)
-                guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw AppFailure.message("Live map update failed.") }
+                try await publishLive(topic: topic, payload: ["version": 1, "state": "active", "lat": fix.lat,
+                    "lng": fix.lng, "accuracyM": fix.accuracy, "fixAt": ISO8601DateFormatter().string(from: fix.at)], click: fix.mapsURL)
                 if liveTopic == topic { liveStatus = "Updated \(Date().formatted(date: .omitted, time: .shortened))" }
             } catch { if liveTopic == topic { liveStatus = "Update failed; retrying when the app can run" } }
         }
     }
+    private func publishLive(topic: String, payload: [String: Any], click: String? = nil) async throws {
+        var body: [String: Any] = ["topic": topic, "title": "Security4Her location",
+            "message": String(decoding: try JSONSerialization.data(withJSONObject: payload), as: UTF8.self)]
+        if let click { body["click"] = click }
+        var request = URLRequest(url: URL(string: "https://ntfy.sh")!, timeoutInterval: 15)
+        request.httpMethod = "POST"; request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw AppFailure.message("Live map update failed.") }
+    }
 }
+
+private struct LiveSession: Codable { let topic: String; let until: Date }
 
 struct MessageDraft: Identifiable {
     let id = UUID()

@@ -10,7 +10,7 @@ the project and real iPhones must exercise its safety flows before anyone relies
 
 ## Open and build
 
-On a Mac with a current Xcode installation supporting iOS 17 deployment:
+On a Mac with Xcode 26 or later (deployment remains iOS 17+):
 
 1. Open `Config/Local.xcconfig` to configure this checkout.
 2. Set the existing deployment's Supabase URL, **public** anon/publishable key, tracking page URL and live
@@ -38,17 +38,23 @@ xcodebuild -project ios/Security4Her.xcodeproj -scheme Security4Her \
   -derivedDataPath ios/DerivedData CODE_SIGNING_ALLOWED=NO build
 ```
 
-The manual **iPhone build** GitHub Actions workflow runs Debug and Release simulator builds on macOS.
-It does not sign, publish, install, deploy the backend or run tests. It was not triggered by this port.
+The **iPhone build** workflow runs on relevant pull requests and branch pushes, as well as
+manual dispatch. It builds Debug and Release simulator apps, the widget extension, an unsigned Release
+device app, and hosted XCTest regressions. A separate job runs handler/viewer tests and the migrations
+with pgTAP in a disposable PostgreSQL/PostGIS database. It does not publish or deploy anything.
 
 The Xcode project is committed; no generator is needed to open it. After adding/removing Swift files,
-run `python ios/generate_project.py` to regenerate source references. The generator also copies existing
-brand artwork without changing Android assets. The included 180px icon supports development; supply all
-required device sizes and a 1024px marketing icon before App Store submission.
+run `python ios/generate_project.py` to regenerate source references. All three targets and the test
+scheme are generated; existing assets are preserved. App icons include every iPhone slot and an opaque
+1024px marketing PNG. These are resampled from the existing brand icon, not newly drawn high-resolution
+artwork; `ios/generate_icons.ps1` reproduces the asset sizes on Windows.
 
 ## Backend deployment
 
-The new migration and function must be deployed before live iPhone alerts and journeys work:
+Deploy `20261003000006_ios_parity.sql` and the updated function before the iPhone update. Pause the
+scheduled dispatcher during the migration/function rollout, then resume it and verify a fresh heartbeat.
+The worker now acknowledges a specific lease; an old worker cannot finish a new lease. Do not leave
+the old function running against the new migration. Use a staging project and the DB tests first:
 
 ```sh
 supabase db push
@@ -100,8 +106,11 @@ also delay or prevent delivery.
 SOS jobs are persisted before sending. Failed jobs retry, with two-minute leases and a 24-hour maximum
 queue age; ended/expired incidents cancel pending jobs. Telegram acceptance is tracked independently
 from confirmed human receipt. A network timeout after acceptance can cause a duplicate message; the
-application does not claim exactly-once delivery. Old completed delivery records and journeys are pruned
-after seven days. A cancellation cannot recall a message already accepted or in flight.
+application does not claim exactly-once delivery. Terminal session identifiers and completed event keys
+are retained until account deletion so delayed offline requests cannot recreate a cancelled session or
+resend a lifecycle event. A cancellation cannot recall a message already accepted or in flight.
+Journey start, arrival/end and SOS resolution messages use the same durable queue. Test sessions never
+enqueue either alerts or lifecycle messages. The worker checks contact eligibility again when claiming.
 
 ## Feature behavior
 
@@ -111,13 +120,14 @@ after seven days. A cancellation cannot recall a message already accepted or in 
 | SOS hold/countdown | 1.5-second hold, cancellable countdown, server incident, retrying Telegram alerts, explicit SMS/call controls. Countdown cancels if the app leaves the active state. |
 | Automatic carrier SMS/call | Replaced by Apple's message composer and telephone confirmation. No silent SMS or silent emergency dialing. |
 | Live SOS map | Existing token-based tracking page, location updates while iOS permits the session. Displayed fixes carry timestamps; stale data is not a live guarantee. |
-| Standalone live sharing | Existing ntfy relay/page; one-hour session; stops publishing on cancellation. Already published data is not recalled. |
-| Safe Journey | MapKit search/ETA, adjustable deadline, arrival/stillness/moving-away checks, local check-in notifications, durable server deadline. Practice mode never arms remote alerts. |
+| Standalone live sharing | ntfy relay and the included `live.html`; supports Android `q` and Apple `ll` links, GPS measurement timestamps and explicit ended events. Pending stop events retry when the app can run. One-hour session; already published data is not recalled. |
+| Safe Journey | Server-acknowledged deadlines, durable start/extend/end retries, cancellation tombstones and ordered revisions. +10 minutes extends the later of now or the existing deadline. Automatic arrival requires two fresh fixes at least 10 seconds apart, accuracy ≤50m, with the complete error circle within 150m. |
 | Evidence | 15-second audio and 30-second foreground video segments, SHA-256 chain, account-filtered history, PIN/24-hour deletion rule and streamed ZIP export. One-hour recording limit. |
-| Evidence after uninstall | App-private iPhone files are removed. Explicitly save exported ZIPs to Files or another destination before uninstall. Android's newer Downloads mirroring is not implemented here. |
+| Evidence after uninstall | Opt-in completed-segment and manifest copies to a user-selected Files/iCloud Drive folder. Copies are hash-verified and retried; originals remain local. External copies are outside the PIN. Provider/cloud upload is not confirmed by a successful file copy. |
 | Fake call | In-app full-screen simulation, synthesized voice, immediate/scheduled invocation; notification entry when backgrounded. No fake VoIP/CallKit integration. |
-| Siren | Generated audio at the user's output volume, optional steady torch. No forced volume change or strobe. |
-| Pocket knock | Optional three-knock detector only while the app is active. App Shortcuts provide Siri, Back Tap and supported Action-button entry points. No global sensor daemon. |
+| Siren | Generated audio, native user-controlled volume slider, two-second sound test and optional steady torch. No forced volume change or strobe. |
+| Pocket knock and fast access | Foreground three-knock detection; Siri/Back Tap/Action-button shortcuts, Home/Lock Screen widget, and iOS 18+ Control Center button. All SOS entry points wait for the app to become active before counting down. |
+| Journey system UI | Live Activity shows acknowledged deadline/status and last server confirmation. iOS 26+ opt-in AlarmKit reminders, with notification fallback. Dismissing any reminder/display does not check in or stop monitoring. |
 | Maps/community | MapKit nearby search/directions; existing backend safe places and aggregated danger areas; Android-compatible public report feed, safe areas/places and confirmations. Public identities are not verified. |
 | Themes/offline assistant/activity | Five theme selections, offline feature guidance and locally stored/exportable activity log. |
 | Beta diagnostics | Manual local log export. Android's opt-in automatic beta telemetry collector is not ported. |
@@ -125,12 +135,45 @@ after seven days. A cancellation cannot recall a message already accepted or in 
 
 Foreground video pauses when the application leaves the active state. Separate audio may continue with
 the declared audio background mode, but calls, session interruptions, permission changes and force quit
-can stop it. Missing permissions or interrupted recording are shown. Resuming recording requires an
-explicit action or a valid camera session returning to the foreground; never claim background camera capture.
+can stop it. Audio interruption handling closes and retains the current segment, records gaps and retries
+only when the interruption ends with permission to resume or the app returns to the foreground. Playable
+unindexed media is recovered after termination with file-metadata timestamps; damaged containers remain
+on disk and are not advertised as complete. Video still requires the foreground.
 
 The hourly-key recovery/Telegram **evidence file** plan is deliberately not implemented. Telegram in this
 port sends SOS **alerts**, not recordings. The current ZIP export is unencrypted, and the PIN is an in-app
 control rather than an encryption password or uninstall lock.
+
+### Standalone live-map configuration
+
+`S4H_LIVE_URL` must be the HTTPS URL of the deployed **`web-track/live.html`**, without a topic parameter.
+`TRACK_BASE_URL` on the server points to the separate incident map (`web-track/index.html`). The Pages
+workflow deploys both files and `live-message.js`. Use its actual deployment output URL; do not assume
+the Android app's older external map host contains these fixes. The app refuses to start standalone
+sharing when this value is absent, rather than handing contacts an ntfy feed instead of a map.
+
+### Evidence copy behavior
+
+Choose the folder in Me → Evidence. This opts the signed-in account into copies of its existing cases
+and newly completed segments. No folder is selected by default. Folder access is stored as an iOS
+security-scoped bookmark and writes use file coordination. A revoked or stale bookmark, offline provider
+or full disk leaves the originals intact and a visible pending status; retry or choose the folder again.
+Account changes never enqueue another account's cases. Turning off copies stops queued work; a copy
+already in progress may finish. Existing external copies are not deleted. Choose an external Files
+provider or iCloud Drive, and verify the files on another device before relying on uninstall recovery.
+
+### Regression commands
+
+```sh
+node --experimental-strip-types --test supabase/functions/tests/*.test.ts web-track/*.test.cjs
+swift test --package-path ios
+bash scripts/test_db.sh  # disposable local database only; requires PostGIS + pgTAP
+```
+
+On Windows, Node may need `--test-isolation=none`. The Windows Swift SDK used during implementation
+does not contain XCTest. In a Visual Studio developer shell, compile `SafetyPolicy.swift` and
+`Security4HerTests/SafetyPolicyTests.swift` together with `swiftc` to run the same four policy tests using
+their assertion adapters. This does not validate any Apple framework integration.
 
 ## Release handoff
 

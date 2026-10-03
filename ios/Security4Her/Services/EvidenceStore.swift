@@ -4,7 +4,7 @@ import CryptoKit
 import UIKit
 import Combine
 
-struct EvidencePiece: Codable, Identifiable {
+struct EvidencePiece: Codable, Identifiable, Sendable {
     var id: String { filename }
     let filename: String
     let kind: String
@@ -15,7 +15,7 @@ struct EvidencePiece: Codable, Identifiable {
     let chain: String
     let fix: Fix?
 }
-struct EvidenceCase: Codable, Identifiable {
+struct EvidenceCase: Codable, Identifiable, Sendable {
     let id: String
     let ownerId: String
     let startedAt: Date
@@ -31,6 +31,7 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
     @Published var audioOn = false
     @Published var videoOn = false
     @Published var error: String?
+    let backup = EvidenceBackup()
     private var audio: AVAudioRecorder?
     private let capture = AVCaptureSession()
     private let video = AVCaptureMovieFileOutput()
@@ -39,6 +40,7 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
     private var videoStart = Date()
     private var wantsAudio = false
     private var wantsVideo = false
+    private var audioInterrupted = false
     private var foreground = true
     private var sequence = 0
     private var pendingVideoCase: String?
@@ -54,8 +56,18 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
             item.problems.append("Recording was interrupted when the app stopped.")
             save(item)
         }
-        NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.problem("Audio was interrupted by the system. Open the app to review recording status."); self?.audioOn = false }
+        Task { await recoverUnindexedSegments() }
+        NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] notification in
+            let type = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            let options = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            Task { @MainActor in self?.handleAudioInterruption(type: type, options: options) }
+        }
+        NotificationCenter.default.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.finishAudioSegment(); self?.audioInterrupted = false
+                self?.problem("Audio services restarted. A recording gap may exist.")
+                self?.resumeAudioIfPossible()
+            }
         }
         NotificationCenter.default.addObserver(forName: .AVCaptureSessionRuntimeError, object: capture, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.problem("Camera recording was interrupted."); self?.videoOn = false }
@@ -75,6 +87,7 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
                 attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
             try JSONEncoder().encode(item).write(to: directory(item.id).appendingPathComponent("manifest.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
             cases.removeAll { $0.id == item.id }; cases.append(item); cases.sort { $0.startedAt > $1.startedAt }
+            backup.enqueue(item, directory: directory(item.id))
         } catch { self.error = "Evidence could not be saved: \(error.localizedDescription)" }
     }
     func start(id: String, ownerId: String, audio enabledAudio: Bool, video enabledVideo: Bool) async {
@@ -107,7 +120,8 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
     }
     private func nextAudio() {
         if reachedLimit() { stop(); return }
-        guard wantsAudio, let url = nextURL("audio", extension: "m4a") else { return }
+        guard wantsAudio, !audioInterrupted, !audioOn, let url = nextURL("audio", extension: "m4a") else { return }
+        if audio != nil { finishAudioSegment() }
         do {
             audioStart = Date()
             let recorder = try AVAudioRecorder(url: url, settings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 22050, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: 32000])
@@ -148,6 +162,7 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
     }
     func setForeground(_ value: Bool) {
         foreground = value
+        if value { resumeAudioIfPossible() }
         if !value {
             videoOn = false
             captureQueue.async { [capture, video] in
@@ -162,11 +177,7 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
     func stop() {
         guard let id = recordingId else { return }
         wantsAudio = false; wantsVideo = false
-        if let audio {
-            audio.delegate = nil; audio.stop()
-            add(id: id, url: audio.url, kind: "audio", start: audioStart)
-        }
-        audio = nil; audioOn = false
+        finishAudioSegment(); audioInterrupted = false
         videoOn = false
         captureQueue.async { [capture, video] in
             if video.isRecording { video.stopRecording() }
@@ -175,18 +186,65 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
         if var item = cases.first(where: { $0.id == id }) { item.endedAt = Date(); save(item) }
         recordingId = nil
     }
+    private func finishAudioSegment() {
+        if let audio, let id = recordingId {
+            audio.delegate = nil; audio.stop()
+            add(id: id, url: audio.url, kind: "audio", start: audioStart)
+        }
+        audio = nil; audioOn = false
+    }
+    private func handleAudioInterruption(type: UInt?, options: UInt) {
+        guard recordingId != nil else { return }
+        if type == AVAudioSession.InterruptionType.began.rawValue {
+            audioInterrupted = true; finishAudioSegment()
+            problem("Audio interrupted by iOS. Completed segments are retained; this interval may have a recording gap.")
+        } else if type == AVAudioSession.InterruptionType.ended.rawValue {
+            audioInterrupted = false
+            if AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume) { resumeAudioIfPossible() }
+            else { problem("Audio remains paused after an interruption. Return to the app to retry recording.") }
+        }
+    }
+    private func resumeAudioIfPossible() {
+        guard recordingId != nil, wantsAudio, !audioInterrupted, !audioOn,
+              AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else { return }
+        do { try AVAudioSession.sharedInstance().setActive(true); nextAudio() }
+        catch { problem("Audio could not resume: \(error.localizedDescription)") }
+    }
     private func problem(_ text: String) {
         error = text
         if let id = recordingId, var item = cases.first(where: { $0.id == id }) {
             if !item.problems.contains(text) { item.problems.append(text); save(item) }
         }
     }
-    private func add(id: String, url: URL, kind: String, start: Date) {
+    private func recoverUnindexedSegments() async {
+        for item in cases {
+            let files = (try? FileManager.default.contentsOfDirectory(at: directory(item.id),
+                includingPropertiesForKeys: [.creationDateKey, .contentModificationDateKey])) ?? []
+            for url in files where ["m4a", "mov"].contains(url.pathExtension) && !item.pieces.contains(where: { $0.filename == url.lastPathComponent }) {
+                guard recordingId != item.id, pendingVideoCase != item.id else { break }
+                // A killed recording can leave an unfinalized container. Retain it, but don't
+                // advertise it as playable evidence unless AVFoundation can read it.
+                let playable = (try? await AVURLAsset(url: url).load(.isPlayable)) == true
+                guard recordingId != item.id, pendingVideoCase != item.id else { break }
+                guard playable else { continue }
+                let dates = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
+                add(id: item.id, url: url, kind: url.pathExtension == "mov" ? "video" : "audio",
+                    start: dates?.creationDate ?? item.startedAt, end: dates?.contentModificationDate, includeLocation: false)
+                if var recovered = cases.first(where: { $0.id == item.id }) {
+                    let note = "Playable media was recovered after interruption. Recovered timestamps come from file metadata; no location was inferred."
+                    if !recovered.problems.contains(note) { recovered.problems.append(note) }
+                    if let end = recovered.pieces.last?.endedAt { recovered.endedAt = max(recovered.endedAt ?? end, end) }
+                    save(recovered)
+                }
+            }
+        }
+    }
+    private func add(id: String, url: URL, kind: String, start: Date, end: Date? = nil, includeLocation: Bool = true) {
         guard var item = cases.first(where: { $0.id == id }), !item.pieces.contains(where: { $0.filename == url.lastPathComponent }),
               let bytes = try? Data(contentsOf: url), !bytes.isEmpty else { return }
         let hash = Self.hash(bytes)
         let chain = Self.hash(Data(((item.pieces.last?.chain ?? String(repeating: "0", count: 64)) + hash).utf8))
-        item.pieces.append(.init(filename: url.lastPathComponent, kind: kind, startedAt: start, endedAt: Date(), bytes: bytes.count, sha256: hash, chain: chain, fix: location?()))
+        item.pieces.append(.init(filename: url.lastPathComponent, kind: kind, startedAt: start, endedAt: end ?? Date(), bytes: bytes.count, sha256: hash, chain: chain, fix: includeLocation ? location?() : nil))
         save(item)
     }
     nonisolated func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {

@@ -33,6 +33,17 @@ struct SafetyResponse: Decodable {
     var pending: Int?
     var state: String?
     var schedulerReady: Bool?
+    var deliveryReady: Bool?
+    var eligibleRecipients: Int?
+    var deadline: String?
+    var revision: Int?
+    var incidentState: String?
+    var deadlineDate: Date? {
+        guard let deadline else { return nil }
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return parser.date(from: deadline) ?? ISO8601DateFormatter().date(from: deadline)
+    }
 }
 
 @MainActor

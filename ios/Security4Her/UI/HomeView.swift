@@ -61,8 +61,8 @@ struct HomeView: View {
                     Button { model.selectedTab = 2 } label: { action("Safe places", "map.fill") }
                 }.buttonStyle(.plain)
                 SafetyCard(title: "Share live location") {
+                    Text(model.liveStatus).foregroundStyle(.secondary)
                     if model.liveTopic != nil {
-                        Text(model.liveStatus).foregroundStyle(.secondary)
                         if let url = model.liveURL { ShareLink("Send live-map link", item: url) }
                         Button("Stop sharing", role: .destructive) { model.stopLive() }
                     } else {
@@ -125,16 +125,26 @@ struct FakeCallView: View {
 
 struct SirenView: View {
     @EnvironmentObject private var model: AppModel
+    @State private var soundTest: Task<Void, Never>?
     var body: some View {
         VStack(spacing: 28) {
             Image(systemName: "speaker.wave.3.fill").font(.system(size: 90)).foregroundStyle(Brand.sos)
             Text(model.deterrents.sirenOn ? "Siren sounding" : "Draw attention").font(.largeTitle.bold())
             Text("Sound uses the iPhone’s current output volume. Check volume before relying on it.").multilineTextAlignment(.center).foregroundStyle(.secondary)
+            SystemVolumeSlider().frame(height: 44).accessibilityLabel("iPhone output volume")
+            Button("Test sound for 2 seconds") {
+                soundTest?.cancel(); model.deterrents.startSiren()
+                soundTest = Task {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    if !Task.isCancelled { model.deterrents.stopSiren() }
+                }
+            }.disabled(model.deterrents.sirenOn)
             Button(model.deterrents.sirenOn ? "Stop siren" : "Start siren") {
+                soundTest?.cancel()
                 if model.deterrents.sirenOn { model.deterrents.stopSiren() } else { model.deterrents.startSiren() }
             }.buttonStyle(.borderedProminent).tint(Brand.sos).controlSize(.large)
             Button(model.deterrents.torchOn ? "Turn torch off" : "Turn torch on") { model.deterrents.setTorch(!model.deterrents.torchOn) }
             if let error = model.deterrents.error { Text(error).foregroundStyle(.orange) }
-        }.padding(28).navigationTitle("Siren").onDisappear { model.deterrents.stopSiren() }
+        }.padding(28).navigationTitle("Siren").onDisappear { soundTest?.cancel(); model.deterrents.stopSiren() }
     }
 }

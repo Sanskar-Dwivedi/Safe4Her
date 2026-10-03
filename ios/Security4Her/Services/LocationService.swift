@@ -6,14 +6,17 @@ import Combine
 final class LocationService: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var fix: Fix?
     @Published var authorization: CLAuthorizationStatus = .notDetermined
+    @Published var preciseLocation = false
     @Published var error: String?
     var onFix: ((Fix) -> Void)?
     private let manager = CLLocationManager()
     private var reasons = Set<String>()
+    func confirmArrival(_ needed: Bool) { manager.distanceFilter = needed ? kCLDistanceFilterNone : 10 }
     override init() {
         super.init()
         manager.delegate = self
         authorization = manager.authorizationStatus
+        preciseLocation = manager.accuracyAuthorization == .fullAccuracy
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.distanceFilter = 10
         manager.pausesLocationUpdatesAutomatically = false
@@ -40,14 +43,18 @@ final class LocationService: NSObject, ObservableObject, CLLocationManagerDelega
     }
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         authorization = manager.authorizationStatus
+        preciseLocation = manager.accuracyAuthorization == .fullAccuracy
         if authorization == .authorizedAlways || authorization == .authorizedWhenInUse {
             error = nil
             if reasons.isEmpty { manager.requestLocation() } else { manager.allowsBackgroundLocationUpdates = true; manager.startUpdatingLocation() }
+        } else if authorization == .denied || authorization == .restricted {
+            error = "Location permission is off. Automatic arrival cannot be confirmed. Open the journey to check in manually."
         }
     }
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last, location.horizontalAccuracy >= 0 else { return }
         let value = Fix(lat: location.coordinate.latitude, lng: location.coordinate.longitude, accuracy: location.horizontalAccuracy, at: location.timestamp)
+        if let fix, value.at < fix.at { return }
         fix = value; error = nil; onFix?(value)
     }
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) { self.error = error.localizedDescription }

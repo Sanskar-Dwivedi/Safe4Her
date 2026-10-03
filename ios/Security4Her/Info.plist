@@ -39,6 +39,10 @@
 	<string>Record audio evidence during an SOS that you start.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Detect an optional triple-knock gesture while Security4Her is open.</string>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Remind you to open Security4Her and check in before your journey deadline.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>S4HLiveURL</key>
 	<string>$(S4H_LIVE_URL)</string>
 	<key>S4HSupabaseAnonKey</key>

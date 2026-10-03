@@ -31,7 +31,11 @@ wear/src/main/assets/model-en-us/
 # iPhone build and local signing/configuration
 ios/Config/Local.xcconfig
 ios/DerivedData/
+ios/DeviceDerivedData/
+ios/TestResults.xcresult/
 ios/build/
+ios/.build/
+ios/.swiftpm/
 *.xcuserstate
 xcuserdata/
 *.ipa

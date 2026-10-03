@@ -11,6 +11,7 @@ struct Security4HerApp: App {
                 .preferredColorScheme(model.settings.theme == "daylight" ? .light : .dark)
                 .tint(Brand.accent(model.settings.theme))
                 .task { await model.launch() }
+                .onOpenURL { url in Task { await model.openSafetyURL(url) } }
                 .onChange(of: phase) { _, new in model.setForeground(new == .active) }
                 .alert("Security4Her", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
                     Button("OK") { model.error = nil }

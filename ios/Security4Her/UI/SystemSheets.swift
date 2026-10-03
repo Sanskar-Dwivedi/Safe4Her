@@ -1,4 +1,29 @@
 import SwiftUI
+import UniformTypeIdentifiers
+import MediaPlayer
+
+struct EvidenceFolderPicker: UIViewControllerRepresentable {
+    var selected: (URL) -> Void
+    func makeCoordinator() -> Coordinator { Coordinator(selected: selected) }
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder])
+        picker.allowsMultipleSelection = false; picker.delegate = context.coordinator
+        return picker
+    }
+    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {}
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let selected: (URL) -> Void
+        init(selected: @escaping (URL) -> Void) { self.selected = selected }
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            if let url = urls.first { selected(url) }
+        }
+    }
+}
+
+struct SystemVolumeSlider: UIViewRepresentable {
+    func makeUIView(context: Context) -> MPVolumeView { MPVolumeView(frame: .zero) }
+    func updateUIView(_ view: MPVolumeView, context: Context) {}
+}
 import MessageUI
 import ContactsUI
 import Contacts

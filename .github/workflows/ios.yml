@@ -1,5 +1,9 @@
 name: iPhone build
 on:
+  pull_request:
+    paths: ["ios/**", "supabase/**", "web-track/**", "scripts/test_db.sh", ".github/workflows/ios.yml"]
+  push:
+    paths: ["ios/**", "supabase/**", "web-track/**", "scripts/test_db.sh", ".github/workflows/ios.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,9 +17,54 @@ jobs:
         configuration: [Debug, Release]
     steps:
       - uses: actions/checkout@v4
+      - name: Verify generated project is current
+        run: |
+          python3 ios/generate_project.py
+          git diff --exit-code -- ios/Security4Her.xcodeproj
+          xcodebuild -version
+          test "$(xcrun --sdk iphoneos --show-sdk-version | cut -d. -f1)" -ge 26 || { echo 'Select Xcode 26+ to compile AlarmKit'; exit 1; }
       - name: Compile iPhone simulator application
         run: >-
           xcodebuild -project ios/Security4Her.xcodeproj -scheme Security4Her
           -configuration '${{ matrix.configuration }}' -sdk iphonesimulator
           -destination 'generic/platform=iOS Simulator' -derivedDataPath ios/DerivedData
           CODE_SIGNING_ALLOWED=NO build
+      - name: Compile unsigned device application and extension
+        if: matrix.configuration == 'Release'
+        run: >-
+          xcodebuild -project ios/Security4Her.xcodeproj -scheme Security4Her
+          -configuration Release -sdk iphoneos -destination 'generic/platform=iOS'
+          -derivedDataPath ios/DeviceDerivedData CODE_SIGNING_ALLOWED=NO build
+      - name: Run XCTest regressions
+        if: matrix.configuration == 'Debug'
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available --json | python3 -c 'import sys,json; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for k,v in d.items() if "iOS" in k for x in v if "iPhone" in x["name"]))')
+          xcodebuild -project ios/Security4Her.xcodeproj -scheme Security4Her -configuration Debug \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath ios/DerivedData \
+            -resultBundlePath ios/TestResults.xcresult CODE_SIGNING_ALLOWED=NO test
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.configuration == 'Debug'
+        with:
+          name: ios-test-results
+          path: ios/TestResults.xcresult
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --experimental-strip-types --test supabase/functions/tests/*.test.ts web-track/*.test.cjs
+      - name: Install local database test extensions
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-16-postgis-3 postgresql-16-pgtap
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'local-ci-only';"
+      - name: Run all migrations and database regression tests
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: local-ci-only
+        run: bash scripts/test_db.sh

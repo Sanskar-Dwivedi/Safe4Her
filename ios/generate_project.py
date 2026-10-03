@@ -1,87 +1,107 @@
-"""Regenerate the checked-in, dependency-free iPhone Xcode project (Python 3)."""
+"""Generate app, widget and XCTest targets deterministically; preserve existing artwork."""
 from pathlib import Path
 import hashlib
 import json
-import shutil
 
 ROOT = Path(__file__).resolve().parent
+objects, refs = [], []
 def ident(name):
     return hashlib.sha256(name.encode()).hexdigest()[:24].upper()
-def quote(value):
-    return json.dumps(value)
-
-objects = []
 def add(name, content):
     objects.append(f"\t\t{ident(name)} = {{ {content} }};")
     return ident(name)
+def listing(values):
+    return "(" + ",".join(values) + ("," if values else "") + ")"
+def reference(rel, kind):
+    key = ident(rel)
+    if key not in refs:
+        add(rel, f"isa = PBXFileReference; lastKnownFileType = {kind}; path = {json.dumps(rel)}; sourceTree = SOURCE_ROOT;")
+        refs.append(key)
+    return key
+def phase(name, kind, files):
+    return add(name, f"isa = {kind}; buildActionMask = 2147483647; files = {listing(files)}; runOnlyForDeploymentPostprocessing = 0;")
+def configs(name, extra):
+    for mode in ("Debug", "Release"):
+        settings = {"SDKROOT": "iphoneos", "IPHONEOS_DEPLOYMENT_TARGET": "17.0", "SWIFT_VERSION": "5.0",
+            "CLANG_ENABLE_MODULES": "YES", "SWIFT_STRICT_CONCURRENCY": "minimal",
+            "SWIFT_OPTIMIZATION_LEVEL": "-Onone" if mode == "Debug" else "-O",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": ("DEBUG " if mode == "Debug" else "") + ("WIDGET_EXTENSION" if name == "widgets" else ""),
+            "DEBUG_INFORMATION_FORMAT": "dwarf" if mode == "Debug" else "dwarf-with-dsym", **extra}
+        text = " ".join(f"{key} = {json.dumps(value)};" for key, value in settings.items())
+        base = f'baseConfigurationReference = {ident("Config/Base.xcconfig")};' if name != "project" else ""
+        add(name + ":" + mode, f"isa = XCBuildConfiguration; {base} buildSettings = {{ {text} }}; name = {mode};")
+    return add(name + ":config", f'isa = XCConfigurationList; buildConfigurations = ({ident(name + ":Debug")},{ident(name + ":Release")},); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;')
+def dependency(name, target):
+    proxy = add(name + ":proxy", f'isa = PBXContainerItemProxy; containerPortal = {ident("project")}; proxyType = 1; remoteGlobalIDString = {ident(target)}; remoteInfo = {target};')
+    return add(name + ":dependency", f"isa = PBXTargetDependency; target = {ident(target)}; targetProxy = {proxy};")
 
-sources = sorted((ROOT / "Security4Her").rglob("*.swift"))
-refs, source_builds, resource_builds = [], [], []
-for path in sources:
-    rel = path.relative_to(ROOT).as_posix()
-    ref = add(rel, f"isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {quote(rel)}; sourceTree = SOURCE_ROOT;")
-    refs.append(ref)
-    source_builds.append(add("build:" + rel, f"isa = PBXBuildFile; fileRef = {ref};"))
+shared = sorted((ROOT / "Shared").glob("*.swift"))
+targets = [
+    ("target", "Security4Her", "app", "application", sorted((ROOT / "Security4Her").rglob("*.swift")) + shared),
+    ("widgets", "SafetyWidgets", "appex", "app-extension", sorted((ROOT / "SafetyWidgets").glob("*.swift")) + shared),
+    ("tests", "Security4HerTests", "xctest", "bundle.unit-test", sorted((ROOT / "Security4HerTests").glob("*.swift"))),
+]
+reference("Config/Base.xcconfig", "text.xcconfig")
+products = []
+for key, name, ext, product_type, sources in targets:
+    source_builds = []
+    for path in sources:
+        rel = path.relative_to(ROOT).as_posix()
+        ref = reference(rel, "sourcecode.swift")
+        source_builds.append(add(f"{key}:build:{rel}", f"isa = PBXBuildFile; fileRef = {ref};"))
+    resources = []
+    if key == "target":
+        for rel, kind in [("Security4Her/Assets.xcassets", "folder.assetcatalog"), ("Security4Her/PrivacyInfo.xcprivacy", "text.xml")]:
+            ref = reference(rel, kind)
+            resources.append(add("build:" + rel, f"isa = PBXBuildFile; fileRef = {ref};"))
+    phases = [phase(key + ":sources", "PBXSourcesBuildPhase", source_builds),
+              phase(key + ":frameworks", "PBXFrameworksBuildPhase", []),
+              phase(key + ":resources", "PBXResourcesBuildPhase", resources)]
+    dependencies = []
+    if key == "target":
+        build = add("embed:widgets", f'isa = PBXBuildFile; fileRef = {ident("widgets:product")}; settings = {{ ATTRIBUTES = (RemoveHeadersOnCopy,); }};')
+        phases.append(add("embed", f'isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = ({build},); name = "Embed App Extensions"; runOnlyForDeploymentPostprocessing = 0;'))
+        dependencies.append(dependency("app-widgets", "widgets"))
+    elif key == "tests":
+        dependencies.append(dependency("tests-app", "target"))
+    product = add(key + ":product", f'isa = PBXFileReference; explicitFileType = {"wrapper.application" if ext == "app" else "wrapper.app-extension" if ext == "appex" else "wrapper.cfbundle"}; path = {name}.{ext}; sourceTree = BUILT_PRODUCTS_DIR;')
+    products.append(product)
+    settings = {"PRODUCT_NAME": "$(TARGET_NAME)", "PRODUCT_BUNDLE_IDENTIFIER": "in.security4her.ios" + ("" if key == "target" else "." + key),
+        "TARGETED_DEVICE_FAMILY": "1", "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator", "SUPPORTS_MACCATALYST": "NO",
+        "SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD": "NO", "CURRENT_PROJECT_VERSION": "2", "MARKETING_VERSION": "1.1.0",
+        "CODE_SIGN_STYLE": "Automatic", "LD_RUNPATH_SEARCH_PATHS": "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"}
+    if key == "target":
+        settings.update(INFOPLIST_FILE="Security4Her/Info.plist", GENERATE_INFOPLIST_FILE="NO",
+                        ASSETCATALOG_COMPILER_APPICON_NAME="AppIcon", ENABLE_TESTABILITY="YES")
+        reference("Security4Her/Info.plist", "text.plist.xml")
+    elif key == "widgets":
+        settings.update(INFOPLIST_FILE="SafetyWidgets/Info.plist", GENERATE_INFOPLIST_FILE="NO", SKIP_INSTALL="YES", APPLICATION_EXTENSION_API_ONLY="YES")
+        reference("SafetyWidgets/Info.plist", "text.plist.xml")
+    else:
+        settings.update(GENERATE_INFOPLIST_FILE="YES", SKIP_INSTALL="YES", TEST_HOST="$(BUILT_PRODUCTS_DIR)/Security4Her.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Security4Her", BUNDLE_LOADER="$(TEST_HOST)")
+    configuration = configs(key, settings)
+    add(key, f'isa = PBXNativeTarget; buildConfigurationList = {configuration}; buildPhases = {listing(phases)}; buildRules = (); dependencies = {listing(dependencies)}; name = {name}; productName = {name}; productReference = {product}; productType = "com.apple.product-type.{product_type}";')
 
-for rel, kind in [("Security4Her/Assets.xcassets", "folder.assetcatalog"), ("Security4Her/PrivacyInfo.xcprivacy", "text.xml")]:
-    ref = add(rel, f"isa = PBXFileReference; lastKnownFileType = {kind}; path = {quote(rel)}; sourceTree = SOURCE_ROOT;")
-    refs.append(ref)
-    resource_builds.append(add("build:" + rel, f"isa = PBXBuildFile; fileRef = {ref};"))
-for rel, kind in [("Security4Her/Info.plist", "text.plist.xml"), ("Config/Base.xcconfig", "text.xcconfig")]:
-    refs.append(add(rel, f"isa = PBXFileReference; lastKnownFileType = {kind}; path = {quote(rel)}; sourceTree = SOURCE_ROOT;"))
-
-product = add("product", 'isa = PBXFileReference; explicitFileType = wrapper.application; path = Security4Her.app; sourceTree = BUILT_PRODUCTS_DIR;')
-products = add("products", f'isa = PBXGroup; children = ({product},); name = Products; sourceTree = "<group>";')
-main = add("main", f'isa = PBXGroup; children = ({",".join(refs + [products])},); sourceTree = "<group>";')
-source_phase = add("sources", f'isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ({",".join(source_builds)},); runOnlyForDeploymentPostprocessing = 0;')
-resource_phase = add("resources", f'isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ({",".join(resource_builds)},); runOnlyForDeploymentPostprocessing = 0;')
-framework_phase = add("frameworks", 'isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;')
-
-for mode in ["Debug", "Release"]:
-    add("project:" + mode, f'isa = XCBuildConfiguration; buildSettings = {{ SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; }}; name = {mode};')
-    settings = {
-        "PRODUCT_NAME": "$(TARGET_NAME)", "PRODUCT_BUNDLE_IDENTIFIER": "in.security4her.ios",
-        "INFOPLIST_FILE": "Security4Her/Info.plist", "GENERATE_INFOPLIST_FILE": "NO",
-        "TARGETED_DEVICE_FAMILY": "1", "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
-        "SUPPORTS_MACCATALYST": "NO", "SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD": "NO",
-        "CURRENT_PROJECT_VERSION": "1", "MARKETING_VERSION": "1.1.0", "CODE_SIGN_STYLE": "Automatic",
-        "SWIFT_VERSION": "5.0", "SWIFT_STRICT_CONCURRENCY": "minimal", "ENABLE_PREVIEWS": "YES",
-        "LD_RUNPATH_SEARCH_PATHS": "$(inherited) @executable_path/Frameworks",
-        "SWIFT_OPTIMIZATION_LEVEL": "-Onone" if mode == "Debug" else "-O",
-        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG" if mode == "Debug" else "",
-        "DEBUG_INFORMATION_FORMAT": "dwarf" if mode == "Debug" else "dwarf-with-dsym",
-        "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
-    }
-    text = " ".join(f"{key} = {quote(value)};" for key, value in settings.items())
-    add("target:" + mode, f'isa = XCBuildConfiguration; baseConfigurationReference = {ident("Config/Base.xcconfig")}; buildSettings = {{ {text} }}; name = {mode};')
-for kind in ["project", "target"]:
-    add(kind + ":config", f'isa = XCConfigurationList; buildConfigurations = ({ident(kind + ":Debug")},{ident(kind + ":Release")},); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;')
-target = add("target", f'isa = PBXNativeTarget; buildConfigurationList = {ident("target:config")}; buildPhases = ({source_phase},{framework_phase},{resource_phase},); buildRules = (); dependencies = (); name = Security4Her; productName = Security4Her; productReference = {product}; productType = "com.apple.product-type.application";')
-project = add("project", f'isa = PBXProject; attributes = {{ BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 1600; TargetAttributes = {{ {target} = {{ CreatedOnToolsVersion = 16.0; }}; }}; }}; buildConfigurationList = {ident("project:config")}; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = {main}; productRefGroup = {products}; projectDirPath = ""; projectRoot = ""; targets = ({target},);')
+products_group = add("products", f'isa = PBXGroup; children = {listing(products)}; name = Products; sourceTree = "<group>";')
+main = add("main", f'isa = PBXGroup; children = {listing(refs + [products_group])}; sourceTree = "<group>";')
+configuration = configs("project", {})
+project = add("project", f'isa = PBXProject; attributes = {{ BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 2600; }}; buildConfigurationList = {configuration}; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en,Base); mainGroup = {main}; productRefGroup = {products_group}; projectDirPath = ""; projectRoot = ""; targets = {listing([ident(x[0]) for x in targets])};')
 project_dir = ROOT / "Security4Her.xcodeproj"
 project_dir.mkdir(exist_ok=True)
 (project_dir / "project.pbxproj").write_text('// !$*UTF8*$!\n{\n\tarchiveVersion = 1;\n\tclasses = {};\n\tobjectVersion = 56;\n\tobjects = {\n' + '\n'.join(objects) + f'\n\t}};\n\trootObject = {project};\n}}\n', encoding="utf-8")
+def buildable(key, name, ext):
+    return f'<BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{ident(key)}" BuildableName="{name}.{ext}" BlueprintName="{name}" ReferencedContainer="container:Security4Her.xcodeproj"/>'
+app = buildable("target", "Security4Her", "app")
+tests = buildable("tests", "Security4HerTests", "xctest")
 schemes = project_dir / "xcshareddata" / "xcschemes"
 schemes.mkdir(parents=True, exist_ok=True)
-reference = f'<BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{target}" BuildableName="Security4Her.app" BlueprintName="Security4Her" ReferencedContainer="container:Security4Her.xcodeproj"/>'
 (schemes / "Security4Her.xcscheme").write_text(f'''<?xml version="1.0" encoding="UTF-8"?>
-<Scheme LastUpgradeVersion="1600" version="1.3">
-<BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES"><BuildActionEntries><BuildActionEntry buildForTesting="NO" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">{reference}</BuildActionEntry></BuildActionEntries></BuildAction>
-<LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" allowLocationSimulation="YES"><BuildableProductRunnable runnableDebuggingMode="0">{reference}</BuildableProductRunnable></LaunchAction>
-<ProfileAction buildConfiguration="Release" shouldUseLaunchSchemeArgsEnv="YES" savedToolIdentifier="" useCustomWorkingDirectory="NO" debugDocumentVersioning="YES"><BuildableProductRunnable runnableDebuggingMode="0">{reference}</BuildableProductRunnable></ProfileAction>
+<Scheme LastUpgradeVersion="2600" version="1.3">
+<BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES"><BuildActionEntries><BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">{app}</BuildActionEntry></BuildActionEntries></BuildAction>
+<TestAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv="YES"><Testables><TestableReference skipped="NO">{tests}</TestableReference></Testables></TestAction>
+<LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" allowLocationSimulation="YES"><BuildableProductRunnable runnableDebuggingMode="0">{app}</BuildableProductRunnable></LaunchAction>
+<ProfileAction buildConfiguration="Release" shouldUseLaunchSchemeArgsEnv="YES" savedToolIdentifier="" useCustomWorkingDirectory="NO" debugDocumentVersioning="YES"><BuildableProductRunnable runnableDebuggingMode="0">{app}</BuildableProductRunnable></ProfileAction>
 <AnalyzeAction buildConfiguration="Debug"/><ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES"/>
 </Scheme>
 ''', encoding="utf-8")
-assets = ROOT / "Security4Her" / "Assets.xcassets"
-logo = assets / "BrandLogo.imageset"
-logo.mkdir(parents=True, exist_ok=True)
-shutil.copyfile(ROOT.parent / "mobile/src/main/res/drawable-nodpi/logo_security4her.png", logo / "logo.png")
-(assets / "Contents.json").write_text(json.dumps({"info": {"author": "xcode", "version": 1}}, indent=2) + "\n")
-(logo / "Contents.json").write_text(json.dumps({"images": [{"filename": "logo.png", "idiom": "universal"}], "info": {"author": "xcode", "version": 1}}, indent=2) + "\n")
-icon = assets / "AppIcon.appiconset"
-icon.mkdir(exist_ok=True)
-# Reuse the existing correctly sized 180px artwork without modifying brand assets.
-# A 1024px marketing icon must be supplied before App Store submission.
-shutil.copyfile(ROOT.parent / "web-install/apple-touch-icon.png", icon / "AppIcon-180.png")
-(icon / "Contents.json").write_text(json.dumps({"images": [{"filename": "AppIcon-180.png", "idiom": "iphone", "size": "60x60", "scale": "3x"}], "info": {"author": "xcode", "version": 1}}, indent=2) + "\n")
-print(f"Generated Xcode project with {len(sources)} Swift sources.")
+print("Generated app, widgets and XCTest targets; existing assets preserved.")
