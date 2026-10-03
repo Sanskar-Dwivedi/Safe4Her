@@ -55,9 +55,8 @@ import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.sin
 
-// ---------------------------------------------------------------- Deterrents: fake call and siren
-// Two ways out of a situation that isn't an emergency yet: a believable incoming call to excuse herself, and a loud
-// siren with a flashing torch to draw attention. Neither contacts anyone.
+// ---------------------------------------------------------------- Deterrent: fake call
+// A way out of a situation that isn't an emergency yet: a believable incoming call to excuse herself. It contacts no one.
 
 private fun Context.keepScreenOn(on: Boolean) {
     val w = (this as? Activity)?.window ?: return
@@ -239,93 +238,5 @@ private fun Talking(name: String, onEnd: () -> Unit) {
         }
         Spacer(Modifier.height(40.dp))
         RoundCallButton(Color(0xFFE5484D), "End", rotate = 135f, onClick = onEnd)
-    }
-}
-
-// ---------------------------------------------------------------- Siren
-
-/** A loud rising-and-falling siren on the alarm stream (plays even on silent), the screen flashing and the torch strobing. */
-@Composable
-fun SirenScreen(onClose: () -> Unit) {
-    val ctx = LocalContext.current
-    BackHandler(onBack = onClose)
-    DisposableEffect(Unit) {
-        ctx.keepScreenOn(true)
-        AppLog.info("Siren", "Siren on")
-        val siren = Siren(ctx).also { it.start() }
-        onDispose { siren.stop(); ctx.keepScreenOn(false); AppLog.info("Siren", "Siren off") }
-    }
-    val flash = rememberInfiniteTransition(label = "siren")
-    val on by flash.animateFloat(0f, 1f, infiniteRepeatable(tween(250), RepeatMode.Reverse), label = "on")
-    Box(
-        Modifier.fillMaxSize().background(if (on > 0.5f) SosRed else Color.White).clickable(onClickLabel = "Stop siren", onClick = onClose),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("HELP", color = if (on > 0.5f) Color.White else SosRed, fontFamily = Baloo, fontWeight = FontWeight.ExtraBold, fontSize = 96.sp)
-            Spacer(Modifier.height(12.dp))
-            Text("Tap anywhere to stop", color = if (on > 0.5f) Color.White else Color.Black, style = MaterialTheme.typography.titleMedium)
-        }
-    }
-}
-
-private class Siren(private val ctx: Context) {
-    private val audio = ctx.getSystemService(AudioManager::class.java)
-    private val camera = ctx.getSystemService(CameraManager::class.java)
-    private val torchId: String? = runCatching {
-        camera.cameraIdList.firstOrNull { camera.getCameraCharacteristics(it).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true }
-    }.getOrNull()
-    private var track: AudioTrack? = null
-    private var strobe: Thread? = null
-    private var savedVolume = -1
-
-    fun start() {
-        runCatching {
-            savedVolume = audio.getStreamVolume(AudioManager.STREAM_ALARM)
-            audio.setStreamVolume(AudioManager.STREAM_ALARM, audio.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0)
-        }
-        track = runCatching { tone().apply { play() } }.getOrNull()
-        runCatching { ctx.vibrator().vibrate(VibrationEffect.createWaveform(longArrayOf(0, 400, 200), 0)) }
-        torchId?.let { id ->
-            strobe = Thread {
-                var lit = false
-                try {
-                    while (!Thread.currentThread().isInterrupted) { lit = !lit; camera.setTorchMode(id, lit); Thread.sleep(120) }
-                } catch (_: InterruptedException) {
-                } catch (_: Exception) {
-                } finally { runCatching { camera.setTorchMode(id, false) } }
-            }.apply { isDaemon = true; start() }
-        }
-    }
-
-    fun stop() {
-        runCatching { track?.stop(); track?.release() }
-        track = null
-        strobe?.interrupt(); strobe = null
-        runCatching { ctx.vibrator().cancel() }
-        if (savedVolume >= 0) runCatching { audio.setStreamVolume(AudioManager.STREAM_ALARM, savedVolume, 0) }
-    }
-
-    /** One 1.2 s up-and-down sweep between 650 and 1500 Hz, looped. */
-    private fun tone(): AudioTrack {
-        val rate = 22_050
-        val frames = (rate * 1.2).toInt()
-        val pcm = ShortArray(frames)
-        var phase = 0.0
-        for (i in 0 until frames) {
-            val t = i / frames.toDouble()
-            val f = 650 + 850 * (if (t < 0.5) t * 2 else (1 - t) * 2)
-            phase += 2 * PI * f / rate
-            pcm[i] = (sin(phase) * Short.MAX_VALUE * 0.95).toInt().toShort()
-        }
-        val t = AudioTrack.Builder()
-            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
-            .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
-            .setBufferSizeInBytes(frames * 2)
-            .setTransferMode(AudioTrack.MODE_STATIC)
-            .build()
-        t.write(pcm, 0, frames)
-        t.setLoopPoints(0, frames, -1)
-        return t
     }
 }

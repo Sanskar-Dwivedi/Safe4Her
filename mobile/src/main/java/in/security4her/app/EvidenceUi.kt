@@ -156,9 +156,10 @@ fun EvidenceLockerScreen(onClose: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) { TextButton(onClick = onClose) { Text("‹  Back", color = Lilac) } }
         Text("Evidence locker", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(horizontal = 20.dp))
         Text(
-            "Audio and video recorded during SOS alerts, each with a fingerprint. Copied to Downloads so they survive the app being deleted.",
+            "Audio and video recorded during SOS alerts, each with a fingerprint. An encrypted copy in Downloads survives the app being deleted; only Security4Her can open it.",
             color = Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
         )
+        RecoveryCard(hasEvidence = !cases.isNullOrEmpty(), onRestored = { reload++ })
         val list = cases
         when {
             list == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Lilac) }
@@ -263,7 +264,7 @@ private fun CaseScreen(c0: EvidenceCase, onBack: () -> Unit) {
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "A copy is also saved in ${`in`.security4her.app.sos.EvidenceBackup.where(c)}, with its fingerprints. It stays there even if this app is deleted. After the 24-hour lock, only that copy is kept, to save space.",
+                    "An encrypted copy is saved in ${`in`.security4her.app.sos.EvidenceBackup.where(c)}. It stays there even if this app is deleted, and only Security4Her can open it. After the 24-hour lock, only that copy is kept, to save space.",
                     color = Muted, style = MaterialTheme.typography.bodySmall,
                 )
                 Spacer(Modifier.height(12.dp))
@@ -360,6 +361,136 @@ private fun CaseScreen(c0: EvidenceCase, onBack: () -> Unit) {
                 ) { Text("Delete", color = SosRed) }
             },
             dismissButton = { TextButton(onClick = { askDelete = false }) { Text(if (blocked != null) "OK" else "Keep", color = Muted) } },
+        )
+    }
+}
+
+
+// ---------------------------------------------------------------- Recovery code and restore
+
+/**
+ * The recovery code opens the encrypted copies in Downloads after the app is deleted. Showing it needs her PIN (it is
+ * as powerful as the recordings themselves), and she confirms she saved it by typing its last group.
+ */
+@Composable
+private fun RecoveryCard(hasEvidence: Boolean, onRestored: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var saved by remember { mutableStateOf(`in`.security4her.app.sos.EvidenceKeys.codeSaved(ctx)) }
+    var showCode by remember { mutableStateOf(false) }
+    var askPin by remember { mutableStateOf(false) }
+    var tree by remember { mutableStateOf<android.net.Uri?>(null) }
+    var result by remember { mutableStateOf<String?>(null) }
+    val pick = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()) { tree = it }
+    fun reveal() { if (`in`.security4her.app.core.Pin.isSet(ctx)) askPin = true else showCode = true }
+
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (!saved && hasEvidence) Amber.copy(alpha = 0.12f) else Surface1).padding(14.dp)) {
+        if (!saved && hasEvidence) {
+            Text("Save your recovery code", color = Amber, style = MaterialTheme.typography.titleSmall)
+            Text("If this app is deleted, the encrypted copies in Downloads open only with this code. Keep it somewhere safe outside this phone.",
+                color = Muted, style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = { reveal() }, contentPadding = PaddingValues(0.dp)) { Text("Show recovery code", color = Lilac) }
+        } else Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(if (saved) "Recovery code saved" else "Copies in Downloads are encrypted", color = Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            TextButton(onClick = { reveal() }) { Text(if (saved) "Show again" else "Recovery code", color = Lilac) }
+        }
+        TextButton(onClick = { runCatching { pick.launch(null) } }, contentPadding = PaddingValues(0.dp)) { Text("Restore evidence from Downloads", color = Lilac) }
+        result?.let { Text(it, color = Muted, style = MaterialTheme.typography.bodySmall) }
+    }
+
+    if (askPin) {
+        var pin by remember { mutableStateOf("") }
+        var msg by remember { mutableStateOf<String?>(null) }
+        AlertDialog(
+            onDismissRequest = { askPin = false }, containerColor = Surface1,
+            title = { Text("Enter your PIN") },
+            text = {
+                Column {
+                    Text("The recovery code opens all your recordings, so it's protected by your PIN.", color = Muted)
+                    Spacer(Modifier.height(8.dp))
+                    Field(pin, { pin = it.filter(Char::isDigit).take(4); msg = null }, "4-digit PIN", KeyboardType.NumberPassword, secret = true)
+                    msg?.let { Text(it, color = SosRed, modifier = Modifier.padding(top = 6.dp)) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val r = `in`.security4her.app.core.Pin.check(ctx, pin)
+                    if (r is `in`.security4her.app.core.Pin.Check.Ok) { askPin = false; showCode = true } else { msg = `in`.security4her.app.core.Pin.message(r); pin = "" }
+                }) { Text("Show", color = Lilac) }
+            },
+            dismissButton = { TextButton(onClick = { askPin = false }) { Text("Cancel", color = Muted) } },
+        )
+    }
+
+    if (showCode) {
+        val code = remember { `in`.security4her.app.sos.EvidenceKeys.code(ctx) }
+        var confirm by remember { mutableStateOf("") }
+        val last = code.substringAfterLast('-')
+        AlertDialog(
+            onDismissRequest = { showCode = false }, containerColor = Surface1,
+            title = { Text("Your recovery code") },
+            text = {
+                Column {
+                    Text(code.split("-").chunked(3).joinToString("\n") { it.joinToString("-") }, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 16.sp, lineHeight = 24.sp, color = Ink)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Write it down or keep it in a password manager. Anyone with this code and the files can open your recordings, so don't text it or keep it next to them.",
+                        color = Muted, style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = {
+                        val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                        val clip = android.content.ClipData.newPlainText("Recovery code", code)
+                        if (android.os.Build.VERSION.SDK_INT >= 33) clip.description.extras = android.os.PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
+                        cm.setPrimaryClip(clip)
+                    }, contentPadding = PaddingValues(0.dp)) { Text("Copy", color = Lilac) }
+                    if (!saved) {
+                        Field(confirm, { confirm = it.uppercase().filter(Char::isLetterOrDigit).take(6) }, "Type the last 6 characters to confirm")
+                    }
+                }
+            },
+            confirmButton = {
+                if (!saved) TextButton(enabled = confirm == last, onClick = {
+                    `in`.security4her.app.sos.EvidenceKeys.markCodeSaved(ctx); saved = true; showCode = false
+                }) { Text("I've saved it", color = Lilac) }
+                else TextButton(onClick = { showCode = false }) { Text("Done", color = Lilac) }
+            },
+            dismissButton = { if (!saved) TextButton(onClick = { showCode = false }) { Text("Later", color = Muted) } },
+        )
+    }
+
+    tree?.let { t ->
+        var code by remember { mutableStateOf("") }
+        var busy by remember { mutableStateOf(false) }
+        var msg by remember { mutableStateOf<String?>(null) }
+        AlertDialog(
+            onDismissRequest = { if (!busy) tree = null }, containerColor = Surface1,
+            title = { Text("Restore evidence") },
+            text = {
+                Column {
+                    Text("Enter the recovery code saved with these recordings.", color = Muted)
+                    Spacer(Modifier.height(8.dp))
+                    Field(code, { code = it; msg = null }, "Recovery code")
+                    msg?.let { Text(it, color = SosRed, modifier = Modifier.padding(top = 6.dp)) }
+                    if (busy) Text("Decrypting…", color = Muted, modifier = Modifier.padding(top = 6.dp))
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !busy, onClick = {
+                    val secret = `in`.security4her.app.sos.S4he.decodeCode(code)
+                    if (secret == null) { msg = "That code isn't complete or has a typo."; return@TextButton }
+                    busy = true
+                    scope.launch {
+                        val r = withContext(Dispatchers.IO) { runCatching { `in`.security4her.app.sos.EvidenceRestore.restore(ctx, t, secret) } }
+                        busy = false
+                        r.onSuccess { res ->
+                            tree = null; saved = `in`.security4her.app.sos.EvidenceKeys.codeSaved(ctx)
+                            result = if (res.pieces + res.cases == 0) "No evidence files found in that folder."
+                            else "Restored ${res.pieces} recordings from ${res.cases} SOS ${if (res.cases == 1) "case" else "cases"}." +
+                                if (res.unreadable > 0) " ${res.unreadable} files didn't open with this code." else ""
+                            onRestored()
+                        }.onFailure { e -> msg = if (e.message == "wrong recovery code") "That code doesn't open these files." else "Couldn't read that folder." }
+                    }
+                }) { Text("Restore", color = Lilac) }
+            },
+            dismissButton = { TextButton(enabled = !busy, onClick = { tree = null }) { Text("Cancel", color = Muted) } },
         )
     }
 }

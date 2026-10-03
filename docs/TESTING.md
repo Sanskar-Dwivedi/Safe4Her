@@ -1,7 +1,7 @@
 # Device test checklist
 
 Run this on a real phone (and watch) before every release. Keep **Test Mode** on (Me → Test Mode) with a
-test number set to a phone you control, so police texts and the automatic call never reach 112.
+test number set to a phone you control, so police texts and the automatic call never reach the police (100).
 
 ## Setup
 
@@ -35,7 +35,6 @@ Note pass or fail and the time taken for each.
 | 12 | Older watch version installed | Wait, or open the app | The watch updates itself; while Voice SOS is on it waits until it's charging |
 | 13 | New watch, Wireless debugging on | Phone: Me → Install or update the watch app, type the code | Four ticks in about a minute; the app opens on the watch |
 | 14 | Home → Fake call | Ring now, then Answer | A realistic ringing screen; after answering a timer runs and a voice speaks |
-| 15 | Phone on silent | Home → Siren | Loud alarm, flashing screen and torch; one tap stops everything and restores the volume |
 | 16 | After an SOS | Me → Evidence locker → case → Check | "Intact"; export makes a zip with a manifest |
 | 17 | Older phone version installed | Open the app | *Update to …* card; the update installs over the old version |
 

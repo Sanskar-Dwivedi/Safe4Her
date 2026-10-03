@@ -880,7 +880,7 @@ private fun PlaceRow(p: Place, selected: Boolean, sub: String? = null, onFocus: 
                 fontSize = 12.sp, color = if (sub != null) MapLilac else Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
-        val phone = p.phone ?: if (p.kind == "police") "112" else null
+        val phone = p.phone ?: if (p.kind == "police") "100" else null
         phone?.let { n ->
             TextButton(onClick = {
                 runCatching { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + n.filter { it.isDigit() || it == '+' }))) }

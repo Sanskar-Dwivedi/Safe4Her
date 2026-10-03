@@ -203,12 +203,11 @@ object Beta {
     private val PLACE_TAGS = setOf("Journey", "Location", "Live", "Map", "SMS", "Community", "Account", "Fake call", "Chat")
 
     private val USAGE_CODES = listOf(
-        Triple("Pocket", "Three knocks detected", "pocket_sos_triggered"),
+        Triple("Pocket", "Pocket SOS triggered", "pocket_sos_triggered"),
         Triple("Journey", "Started to", "journey_started"),
         Triple("Journey", "She answered the check-in", "journey_checkin_ok"),
         Triple("Journey", "Alerting contacts", "journey_alert_sent"),
         Triple("Fake call", "Incoming call", "fake_call"),
-        Triple("Siren", "Siren on", "siren_on"),
         Triple("Live", "Sharing live location", "live_location_started"),
         Triple("Evidence", "Recording stopped", "evidence_recorded"),
         Triple("Evidence", "Exported", "evidence_exported"),

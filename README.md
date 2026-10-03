@@ -2,7 +2,7 @@
 
 <img src="docs/banner.png" alt="Security4Her: help is one long press away" width="100%">
 
-<h3>A women's safety system for Android and Wear OS.<br>One press, one knock or three words, and help is on its way.</h3>
+<h3>A women's safety system for Android and Wear OS.<br>One press, three presses of the power button or three words, and help is on its way.</h3>
 
 <p>
 <a href="https://security4her.vercel.app"><img src="https://img.shields.io/badge/⬇_Install-security4her.vercel.app-FF4D5E?style=for-the-badge" alt="Install"></a>
@@ -55,8 +55,8 @@ without mobile data, and keeps a record that holds up afterwards.
 **The home screen is built for the worst moment.** SOS is the biggest thing on it, and every other action is one tap away.
 
 1. **Hold SOS** for 1.5 s. Texts, the live map, evidence and the call all start together.
-2. **Quick actions** share her live location, start a Safe Journey, call 112 or find the nearest safe place.
-3. **Not an emergency yet?** A **fake call** rings in seconds so she can step away, with a voice on the line when she answers. The **siren** draws attention instantly.
+2. **Quick actions** share her live location, start a Safe Journey, call the police (100) or find the nearest safe place.
+3. **Not an emergency yet?** A **fake call** rings in seconds so she can step away, with a voice on the line when she answers.
 
 On the watch, the same SOS starts from a button, a dedicated SOS shortcut, a shake, or *"HELP HELP HELP"*.
 Opening the watch app starts a cancellable five-second SOS countdown, including launches from Knock Knock.
@@ -88,7 +88,7 @@ with a safe practice screen and adjustable strength. See [watch setup](docs/WATC
 - **Hold SOS** for 1.5 s on the home screen
 - **Wear OS watch**: button, gesture or shake
 - **Voice SOS**: say *"HELP HELP HELP"* to the watch
-- **Pocket SOS**: knock 3 times through a pocket or bag, screen off
+- **Pocket SOS**: press the power button 3 times, even in a pocket or bag (or knock 3 times, if you prefer)
 - **Safe Journey**: missed check-ins raise it automatically
 
 </td>
@@ -98,7 +98,6 @@ with a safe practice screen and adjustable strength. See [watch setup](docs/WATC
 
 ### 🛡️ Before it becomes an emergency
 - **Fake call**: a realistic incoming call to step away, with a voice on the line
-- **Siren**: a loud alarm, even on silent, with a flashing screen and torch
 - **Safe Journey**: real-route arrival estimates and check-ins if she's late, stopped or off-route
 - **Community safety map**: hospitals, police, places women recommend, and red zones from reports and repeated SOS alerts
 
@@ -136,7 +135,7 @@ sequenceDiagram
     She->>Watch: "HELP HELP HELP", shake, or hold SOS
     Watch->>Watch: 5 s countdown (cancel if it's a mistake)
     Watch->>Phone: SOS over the Wear Data Layer
-    Note over Phone: Or: hold SOS · knock ×3 · missed journey check-in
+    Note over Phone: Or: hold SOS · power button ×3 · missed journey check-in
     Phone->>Contacts: SMS with location and live link (no data needed)
     Phone->>Live: Live location every 20 s
     Phone->>Phone: Records audio and video evidence
@@ -157,7 +156,6 @@ sequenceDiagram
 <td align="center"><img src="docs/screenshots/safety-map.png" width="190" alt="Safety map"><br><sub><b>Safety map</b><br>Safe places and red zones</sub></td>
 <td align="center"><img src="docs/screenshots/pocket-countdown.png" width="190" alt="Pocket SOS countdown"><br><sub><b>Pocket SOS</b><br>Countdown over the lock screen</sub></td>
 <td align="center"><img src="docs/screenshots/knock-practice.png" width="190" alt="Knock practice"><br><sub><b>Knock tuning</b><br>Learns her knock</sub></td>
-<td align="center"><img src="docs/screenshots/siren.png" width="190" alt="Siren"><br><sub><b>Siren</b><br>Loud, flashing, torch strobe</sub></td>
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/watch-install.png" width="190" alt="Install on the watch"><br><sub><b>Watch install</b><br>From the phone, over Wi-Fi</sub></td>
@@ -180,7 +178,7 @@ sequenceDiagram
 2. Grant the permissions and add at least one trusted contact.
 3. Installs from outside the Play Store need SMS allowed once: **Settings → Apps → Security4Her → ⋮ → Allow
    restricted settings → Permissions → SMS → Allow**. The Home screen walks you through it.
-4. Optional: **Me → Pocket SOS**, then *Practise and adjust strength* to teach it your knock.
+4. Optional: **Me → Pocket SOS**, then *Test it* to check three presses of the power button arm it.
 5. Optional, on the watch: turn on **Voice SOS** from its home screen and try **Practise**.
 
 </details>
@@ -290,7 +288,7 @@ and [privacy notice](PRIVACY.md#beta-test-data).
 
 ## ⚠️ Known limitations
 
-- Android doesn't let apps dial **112** automatically: the countdown calls her chosen number and shows a one-tap *Call 112*.
+- Android doesn't let apps dial emergency numbers like **100** automatically: the countdown calls her chosen number and shows a one-tap *Call 100*.
 - **SMS needs the phone's SIM.** Without the phone, the watch can only reach the server over Wi-Fi.
 - **Installs from outside the Play Store** need SMS allowed once, and the watch needs Wireless debugging once for the first install.
 - After the watch restarts, Android only lets **Voice SOS** use the microphone again after one tap on its notification.

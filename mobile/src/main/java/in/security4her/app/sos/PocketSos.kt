@@ -165,6 +165,53 @@ class KnockDetector(
     }
 }
 
+/**
+ * Three presses of the power button, about one a second. Android tells apps nothing about the button itself, only
+ * that the screen turned on or off, and each press flips it: so 3 flips, each at most 2 s after the last, within 6 s.
+ * The calm rhythm matters: the phone's own Emergency SOS (and the double-press camera) only count presses that come
+ * within about half a second of each other (Android's GestureLauncherService), so a press a second never reaches it.
+ * It arms on the third press at once, and presses in the next 3 s are part of the same run. Slower flips (checking
+ * the time, a notification, the screen timing out) never add up.
+ */
+class PowerPressDetector(private val onTriple: () -> Unit) {
+    private val presses = ArrayList<Long>(4)
+    private var quietUntil = 0L
+
+    /** Presses counted so far in the current run. */
+    val count get() = presses.size
+
+    fun reset() = presses.clear()
+
+    /** [t] in milliseconds, when the screen turned on or off. */
+    fun press(t: Long) {
+        if (t < quietUntil) return // the rest of a run that already armed it
+        presses.lastOrNull()?.let { last ->
+            if (t - last < MIN_GAP) return // the very same event delivered twice
+            if (t - last > MAX_GAP) presses.clear()
+        }
+        presses += t
+        if (presses.size >= 3 && t - presses.first() <= WINDOW) {
+            presses.clear(); quietUntil = t + COOLDOWN
+            onTriple()
+        }
+    }
+
+    /** Forgets an unfinished run once it has gone quiet. */
+    fun tick(t: Long) {
+        val last = presses.lastOrNull() ?: return
+        if (t - last > MAX_GAP) presses.clear()
+    }
+
+    companion object {
+        // Android delivers screen on/off late and sometimes bunched (a real on/off pair can arrive 70 ms apart),
+        // so only exact duplicates are dropped
+        const val MIN_GAP = 20L
+        const val MAX_GAP = 2_000L
+        const val WINDOW = 6_000L
+        const val COOLDOWN = 3_000L
+    }
+}
+
 object PocketSos {
     private const val PREF = "pocket_sos"
     private const val COUNTDOWN_S = 5
@@ -179,6 +226,20 @@ object PocketSos {
     val countdown: StateFlow<Int?> = _countdown.asStateFlow()
 
     fun enabled(ctx: Context) = Store.prefs(ctx).getBoolean(PREF, false)
+
+    /** How Pocket SOS is set off: "power" (press the power button 3 times, the default) or "knock". */
+    fun mode(ctx: Context): String = Store.prefs(ctx).getString("pocket_mode", "power")!!
+    fun powerMode(ctx: Context) = mode(ctx) != "knock"
+
+    fun setMode(ctx: Context, m: String) {
+        Store.prefs(ctx).edit().putString("pocket_mode", m).apply()
+        AppLog.info("Pocket", if (m == "knock") "Pocket SOS now listens for 3 knocks" else "Pocket SOS now listens for 3 power-button presses")
+        val i = Intent(ctx, PocketSosService::class.java)
+        if (enabled(ctx)) { ctx.stopService(i); runCatching { ContextCompat.startForegroundService(ctx, i) } }
+    }
+
+    /** Ends of the screen flips we cause ourselves (waking the screen for the countdown) are not presses. */
+    @Volatile var ignoreScreenUntil = 0L
 
     // ---- screen-off test: the real thing (screen off, background service), except it never starts an SOS ----
 
@@ -292,7 +353,8 @@ object PocketSos {
     fun trigger(ctx: Context) {
         val app = ctx.applicationContext
         if (_countdown.value != null || SosEngine.current.value?.active == true) return
-        AppLog.warn("Pocket", "Three knocks detected; SOS in $COUNTDOWN_S seconds unless cancelled")
+        ignoreScreenUntil = android.os.SystemClock.elapsedRealtime() + (COUNTDOWN_S + 5) * 1_000L
+        AppLog.warn("Pocket", "Pocket SOS triggered (${if (powerMode(app)) "power button" else "knocks"}); SOS in $COUNTDOWN_S seconds unless cancelled")
         buzz(app, Buzz.Armed)
         wakeScreen(app)
         job = scope.launch {
@@ -313,6 +375,7 @@ object PocketSos {
         if (_countdown.value == null) return
         job?.cancel()
         _countdown.value = null
+        ignoreScreenUntil = android.os.SystemClock.elapsedRealtime() + 1_500 // ready again almost at once after a false alarm
         clear(ctx.applicationContext)
         buzz(ctx.applicationContext, Buzz.Cancelled)
         AppLog.info("Pocket", "Pocket SOS cancelled before it started")
@@ -368,7 +431,7 @@ object PocketSos {
         val n = NotificationCompat.Builder(ctx, ALERT_CH)
             .setSmallIcon(R.drawable.ic_notif_security4her)
             .setContentTitle("SOS in $s s")
-            .setContentText("Three knocks detected on your phone. Cancel if this was a mistake.")
+            .setContentText(if (powerMode(ctx)) "Power button pressed 3 times. Cancel if this was a mistake." else "Three knocks detected on your phone. Cancel if this was a mistake.")
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setOnlyAlertOnce(true)
@@ -397,6 +460,12 @@ class PocketSosService : Service(), SensorEventListener {
     private var wokeMidSequence = false
     private var offSamples = 0
     private var rateSent = false
+    private var powerMode = false
+    private var presses: PowerPressDetector? = null
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val screenReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) = onScreenFlip()
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -405,6 +474,8 @@ class PocketSosService : Service(), SensorEventListener {
         power = getSystemService(PowerManager::class.java)
         keyguard = getSystemService(android.app.KeyguardManager::class.java)
         wasInteractive = power.isInteractive
+        powerMode = PocketSos.powerMode(this)
+        if (powerMode) { startPowerButton(); return }
         detector = KnockDetector(
             threshold = PocketSos.loadThreshold(this),
             onKnock = { n, str ->
@@ -435,6 +506,36 @@ class PocketSosService : Service(), SensorEventListener {
         // Covered (pocket, bag) or not (on a table): tells the detector when a tap on a hard surface is likely
         proximity = sm.getDefaultSensor(Sensor.TYPE_PROXIMITY, true) ?: sm.getDefaultSensor(Sensor.TYPE_PROXIMITY)
         proximity?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
+    }
+
+    /**
+     * Power-button mode: no motion sensor and no always-on wake lock. Screen flips arrive as broadcasts; a short wake
+     * lock after each one makes sure the count is checked even if the phone wants to sleep straight away.
+     */
+    private fun startPowerButton() {
+        presses = PowerPressDetector {
+            if (PocketSos.testing()) {
+                PocketSos.updateTest { it.copy(passed = true, knocks = 3) }
+                PocketSos.buzz(this, PocketSos.Buzz.Armed)
+                AppLog.ok("Pocket", "Power-button test passed")
+            } else PocketSos.trigger(this)
+        }
+        val f = android.content.IntentFilter().apply { addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_SCREEN_OFF) }
+        ContextCompat.registerReceiver(this, screenReceiver, f, ContextCompat.RECEIVER_NOT_EXPORTED)
+    }
+
+    private fun onScreenFlip() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val d = presses ?: return
+        if (now < PocketSos.ignoreScreenUntil || PocketSos.countdown.value != null || SosEngine.current.value?.active == true) { d.reset(); return }
+        // During a call the screen goes dark against her ear and lights up again: that's the proximity sensor, not her
+        val mode = getSystemService(android.media.AudioManager::class.java).mode
+        if (mode == android.media.AudioManager.MODE_IN_CALL || mode == android.media.AudioManager.MODE_IN_COMMUNICATION || mode == android.media.AudioManager.MODE_RINGTONE) { d.reset(); return }
+        d.press(now)
+        PocketSos.updateTest { it.copy(screenWentOff = true, knocks = maxOf(it.knocks, d.count)) }
+        if (d.count in 1..2) PocketSos.buzz(this, PocketSos.Buzz.Knock)
+        handler.removeCallbacksAndMessages(null)
+        handler.postDelayed({ d.tick(android.os.SystemClock.elapsedRealtime()) }, PowerPressDetector.MAX_GAP + 50)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -489,6 +590,7 @@ class PocketSosService : Service(), SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     override fun onDestroy() {
+        if (powerMode) { runCatching { unregisterReceiver(screenReceiver) }; handler.removeCallbacksAndMessages(null) }
         getSystemService(SensorManager::class.java).unregisterListener(this)
         runCatching { awake?.release() }
         super.onDestroy()
@@ -506,7 +608,10 @@ class PocketSosService : Service(), SensorEventListener {
             return NotificationCompat.Builder(ctx, CH)
                 .setSmallIcon(R.drawable.ic_notif_security4her)
                 .setContentTitle(if (testing) "Testing knocks" else "Pocket SOS is on")
-                .setContentText(if (testing) "Turn the screen off and knock 3 times. Nothing is sent." else "Knock 3 times on your phone to start an SOS.")
+                .setContentText(
+                    if (PocketSos.powerMode(ctx)) { if (testing) "Press the power button 3 times. Nothing is sent." else "Press the power button 3 times to start an SOS." }
+                    else if (testing) "Turn the screen off and knock 3 times. Nothing is sent." else "Knock 3 times on your phone to start an SOS.",
+                )
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_MIN)
                 .setContentIntent(open)

@@ -132,7 +132,56 @@ footer a{text-decoration:none}footer a:hover{text-decoration:underline}
 
 <section id="whats-new" class="doc">
   <h2>What's new</h2>
-  <h3>1.1.0-beta.7 (2026-10-02)</h3>
+  <h3>1.1.0-beta.11 (2026-10-02)</h3>
+<p><strong>Fixed</strong></p>
+<ul>
+<li><strong>The phone's own Emergency SOS no longer starts with Pocket SOS.</strong> Android's built-in SOS (and the double-press
+  camera) only counts power presses that come within about half a second of each other. Pocket SOS now asks for a
+  calm rhythm, about one press a second, and accepts presses up to 2 s apart. Tested on Android 15: three presses a
+  second apart arm Pocket SOS every time and the system counts no fast taps at all; five fast presses still start
+  the system SOS, as before.</li>
+</ul>
+<h3>1.1.0-beta.10 (2026-10-02)</h3>
+<p><strong>Fixed</strong></p>
+<ul>
+<li><strong>Pressing power 3 times no longer runs into the phone's own Emergency SOS.</strong> Pocket SOS used to wait 0.8 s after
+  the third press to see if more were coming, so people kept pressing and reached the 5 presses that start Android's
+  built-in Emergency SOS. It now arms on the third press with a long buzz, and any extra presses count as the same
+  alarm. Me → Pocket SOS links straight to the phone's own Emergency SOS switch (tested on Android 15).</li>
+<li>Three presses were sometimes missed: Android can deliver the screen on/off events bunched together (70 ms apart
+  for presses half a second apart), and those were taken for duplicates.</li>
+<li>After cancelling a false alarm, Pocket SOS ignored the power button for 10 seconds. It's ready again at once.</li>
+</ul>
+<h3>1.1.0-beta.9 (2026-10-02)</h3>
+<p><strong>Changed</strong></p>
+<ul>
+<li><strong>Pocket SOS: press the power button 3 times</strong> (about half a second apart, screen on or off). It replaces knocking
+  as the default; knocking stays available as an option. It uses no motion sensor and no always-on wake lock, so it
+  works on phones that pause sensors with the screen off and uses less battery. Presses during a phone call are
+  ignored (the screen flips against her ear), and the test in Me → Pocket SOS reports how many presses were noticed.</li>
+</ul>
+<h3>1.1.0-beta.8 (2026-10-02)</h3>
+<h3>Security</h3>
+<ul>
+<li><strong>Evidence opens only in Security4Her.</strong> The copies in Downloads are now encrypted .s4he packages (AES-256-GCM,
+  a fresh key for every hour of every SOS, protected by a 256-bit recovery secret kept in the Android Keystore).
+  Galleries, file managers and other apps can't play them; the readable fingerprints.txt is gone. Copies saved by
+  beta.7 are encrypted and the plain ones deleted automatically.</li>
+<li><strong>Recovery code and restore.</strong> The evidence locker shows a recovery code (PIN-protected) and restores evidence
+  from Downloads after a reinstall, offline. Tested: record, uninstall, reinstall, restore, all pieces intact.</li>
+<li><strong>SOS texts can't trip Android's SMS limit.</strong> Android holds an app's texts behind an "allow?" prompt after about 30
+  in 30 minutes. First alerts always go; repeat location updates are one SMS long and pause before the limit, while
+  the live link keeps updating.</li>
+</ul>
+<p><strong>Changed</strong></p>
+<ul>
+<li>The police number is <strong>100</strong> (call buttons, the SOS screen and the default police text number).</li>
+</ul>
+<h3>Removed</h3>
+<ul>
+<li>The Siren.</li>
+</ul>
+<h3>1.1.0-beta.7 (2026-10-02)</h3>
 <h3>Security</h3>
 <ul>
 <li><strong>New private signing key.</strong> Earlier releases were signed with a key that is public in the source repo, so anyone

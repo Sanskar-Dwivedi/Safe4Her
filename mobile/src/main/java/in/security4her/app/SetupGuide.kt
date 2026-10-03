@@ -21,6 +21,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -170,7 +171,7 @@ private fun IntroPage() {
         "Let it work" to "Location, texts, calls and alerts",
         "Keep it running" to "So your phone doesn't pause it",
         "Safety PIN and a test text" to "Prove texts reach people",
-        "Pocket SOS" to "Knock 3 times, no unlocking",
+        "Pocket SOS" to "Press power 3 times, no unlocking",
         "Your watch" to "SOS from your wrist",
     ).forEachIndexed { i, (t, d) ->
         Row(Modifier.padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -328,33 +329,127 @@ private fun BackgroundPage() {
 
 @Composable
 private fun PocketPage(onPractice: () -> Unit) {
+    PageIntro("Pocket SOS", "Can't unlock your phone? Press its power button 3 times, even inside a pocket or bag. No unlocking, no looking.", pad = false)
+    Spacer(Modifier.height(8.dp))
+    PocketControls(onPractice, inGuide = true)
+}
+
+/**
+ * Everything Pocket SOS needs, shared by the setup guide and Settings: how it's set off (power button or knocks), the
+ * switch, lock-screen alerts, the real-conditions test and help for the phone's own shortcuts that get in the way.
+ */
+@Composable
+internal fun PocketControls(onPractice: () -> Unit, inGuide: Boolean = false) {
     val ctx = LocalContext.current
     var on by remember { mutableStateOf(PocketSos.enabled(ctx)) }
-    PageIntro("Pocket SOS", "Can't reach your phone's screen? Knock on it 3 times through your pocket or bag. No unlocking, no looking.", pad = false)
-    Spacer(Modifier.height(8.dp))
+    var power by remember { mutableStateOf(PocketSos.powerMode(ctx)) }
+    var lockOk by remember { mutableStateOf(PocketSos.canShowOverLockScreen(ctx)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { lockOk = PocketSos.canShowOverLockScreen(ctx) }
     GuideCard {
-        listOf(
-            "The screen must be off. With it on, knocks are ignored, so typing and tapping never set it off.",
-            "Knock firmly on the phone 3 times, about half a second apart. Use your knuckles, on the screen or the back, away from the side buttons.",
-            "You feel a tick per knock and a long buzz when it's armed. Then you have 5 seconds to cancel before the SOS starts.",
-        ).forEachIndexed { i, t -> StepLine(i + 1, t, active = true) }
-    }
-    GuideCard {
+        Text("How to set it off", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(true to "Power button \u00d73", false to "Knock \u00d73").forEach { (p, label) ->
+                val sel = power == p
+                Text(
+                    label, color = if (sel) OnLilac else Ink, style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(if (sel) Lilac else Surface2)
+                        .clickable { if (!sel) { power = p; PocketSos.setMode(ctx, if (p) "power" else "knock") } }
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        (if (power) listOf(
+            "Press the power button 3 times, slowly: about one press a second. Screen on or off, in a pocket or a bag.",
+            "You feel a tick for the first two presses and a long buzz on the third. Pressing fast would start your phone's own Emergency SOS too.",
+            "Then you have 5 seconds to cancel before the SOS starts.",
+        ) else listOf(
+            "With the screen off, knock firmly on the phone 3 times, about half a second apart.",
+            "You feel a tick per knock and a long buzz when it's armed.",
+            "Then you have 5 seconds to cancel before the SOS starts.",
+        )).forEachIndexed { i, t -> StepLine(i + 1, t, active = true) }
+        Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Pocket SOS", style = MaterialTheme.typography.titleMedium)
-                Text(if (on) "Listening whenever the screen is off" else "Off", color = if (on) Mint else Muted, style = MaterialTheme.typography.bodySmall)
+                Text(if (on) (if (power) "Listening for 3 presses" else "Listening whenever the screen is off") else "Off",
+                    color = if (on) Mint else Muted, style = MaterialTheme.typography.bodySmall)
             }
             Switch(
-                checked = on, onCheckedChange = { on = it; PocketSos.setEnabled(ctx, it) },
+                checked = on,
+                onCheckedChange = {
+                    on = it; PocketSos.setEnabled(ctx, it)
+                    if (it && !power && !PocketSos.calibrated(ctx) && !inGuide) onPractice() // knocks: tune them to her phone first
+                    if (it && !PocketSos.canShowOverLockScreen(ctx)) PocketSos.askForLockScreenAlerts(ctx)
+                },
                 colors = SwitchDefaults.colors(checkedTrackColor = Lilac, checkedThumbColor = OnLilac, uncheckedTrackColor = Surface2, uncheckedBorderColor = Line),
             )
         }
-        Spacer(Modifier.height(10.dp))
-        ChunkyButton(if (PocketSos.calibrated(ctx)) "Practise and adjust strength" else "Teach it your knock", tone = Tone.Plain, onClick = onPractice)
+        if (on && !lockOk) {
+            Spacer(Modifier.height(8.dp))
+            Text("Allow full-screen alerts so the countdown and Cancel appear over your lock screen.", color = Amber, style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = { PocketSos.askForLockScreenAlerts(ctx) }, contentPadding = PaddingValues(0.dp)) { Text("Allow full-screen alerts", color = Lilac) }
+        }
+        if (!power) {
+            Spacer(Modifier.height(8.dp))
+            ChunkyButton(if (PocketSos.calibrated(ctx)) "Practise and adjust strength" else "Teach it your knock", tone = Tone.Plain, onClick = onPractice)
+        }
     }
-    ScreenOffTestCard()
-    BackTapNote()
+    ScreenOffTestCard(power)
+    var help by remember { mutableStateOf(false) }
+    TextButton(onClick = { help = !help }, contentPadding = PaddingValues(0.dp)) {
+        Text(if (help) "Hide" else if (power) "The phone's own SOS or the camera opens?" else "Gemini or the Assistant opens when I knock?", color = Lilac)
+    }
+    if (help) { if (power) PowerButtonNote() else BackTapNote() }
+}
+
+/** The phone's own power-button features: its Emergency SOS, and the double-press camera that swallows a press. */
+@Composable
+internal fun PowerButtonNote() {
+    val ctx = LocalContext.current
+    GuideCard {
+        Text("Your phone's own Emergency SOS opened", style = MaterialTheme.typography.titleMedium, color = Amber)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Your phone starts its own Emergency SOS when the power button is pressed quickly (5 times on most phones, 3 or 4 on " +
+                "some Samsung phones), and it can call emergency services out loud. It only counts fast presses, so press slowly: about " +
+                "one press a second. If it still opens, turn the phone's own gesture off: Security4Her already texts your people, " +
+                "shares your live location and calls.",
+            color = Muted, style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.height(10.dp))
+        ChunkyButton("Turn off the phone's Emergency SOS", tone = Tone.Plain) { openEmergencySosSettings(ctx) }
+        Spacer(Modifier.height(16.dp))
+        Text("The camera opens, or it doesn't arm", style = MaterialTheme.typography.titleMedium, color = Amber)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Many phones open the camera on a quick double press, which uses up a press. Press about one press a second, " +
+                "or turn that shortcut off: in Settings, search for \"camera\" and \"power button\" (on Samsung: Advanced features, " +
+                "Side button, Double press).",
+            color = Muted, style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.height(10.dp))
+        ChunkyButton("Open Settings", tone = Tone.Plain) {
+            runCatching { ctx.startActivity(Intent(AndroidSettings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }
+    }
+}
+
+/**
+ * Straight to the switch for the phone's own Emergency SOS gesture. Android has no public setting for it, but the
+ * standard Settings action is answered by Google's Personal Safety app (Pixel and other Google phones) and by phones
+ * that follow Android's own settings; others get their Safety & emergency page, or Settings.
+ */
+internal fun openEmergencySosSettings(ctx: Context) {
+    val tries = buildList {
+        add(Intent("com.android.settings.action.emergency_gesture_settings"))
+        if (Build.VERSION.SDK_INT >= 33) add(Intent("android.settings.SAFETY_CENTER"))
+        add(Intent(AndroidSettings.ACTION_SETTINGS))
+    }
+    for (i in tries) {
+        if (runCatching { ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess) return
+    }
 }
 
 /** Phones' own tap gestures (Quick Tap, Back tap) can catch knocks and open Gemini or the Assistant. */
@@ -382,19 +477,20 @@ internal fun BackTapNote() {
  * the phone felt, so "it doesn't work" turns into a specific fix (battery limits, knock harder, too slow).
  */
 @Composable
-internal fun ScreenOffTestCard() {
+internal fun ScreenOffTestCard(power: Boolean = PocketSos.powerMode(LocalContext.current)) {
     val ctx = LocalContext.current
     val t by PocketSos.test.collectAsStateWithLifecycle()
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { now = SystemClock.elapsedRealtime() }
     LaunchedEffect(t) { now = SystemClock.elapsedRealtime() }
     GuideCard {
-        Text("Test it with the screen off", style = MaterialTheme.typography.titleMedium)
+        Text(if (power) "Test it" else "Test it with the screen off", style = MaterialTheme.typography.titleMedium)
         val x = t
         val expired = x != null && !x.passed && now > x.until
         when {
             x == null -> {
-                Text("Checks your phone keeps feeling knocks with the screen off, the way it will in your pocket. Nothing is sent.",
+                Text(if (power) "Checks your phone notices 3 presses of the power button, the way it will in an emergency. Nothing is sent."
+                    else "Checks your phone keeps feeling knocks with the screen off, the way it will in your pocket. Nothing is sent.",
                     color = Muted, style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(10.dp))
                 ChunkyButton("Start the test") { PocketSos.startTest(ctx) }
@@ -403,20 +499,28 @@ internal fun ScreenOffTestCard() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     StatusDot(true)
                     Spacer(Modifier.width(10.dp))
-                    Text("It works on this phone. All 3 knocks were felt with the screen off.", color = Mint, style = MaterialTheme.typography.bodyMedium)
+                    Text(if (power) "It works on this phone. Your 3 presses were noticed." else "It works on this phone. All 3 knocks were felt with the screen off.",
+                        color = Mint, style = MaterialTheme.typography.bodyMedium)
                 }
                 TextButton(onClick = { PocketSos.endTest(ctx) }, contentPadding = PaddingValues(0.dp)) { Text("Done", color = Lilac) }
             }
             !x.screenWentOff && !expired -> {
-                listOf(
+                (if (power) listOf(
+                    "Press the power button 3 times, slowly: about one press a second.",
+                    "Wait for the long buzz, then turn the screen on and come back here.",
+                ) else listOf(
                     "Press the power button to turn the screen off.",
                     "Knock 3 times on the phone, firmly, about half a second apart.",
                     "Wait for the long buzz, then turn the screen on and come back here.",
-                ).forEachIndexed { i, s -> StepLine(i + 1, s, active = true) }
+                )).forEachIndexed { i, s -> StepLine(i + 1, s, active = true) }
                 TextButton(onClick = { PocketSos.endTest(ctx) }, contentPadding = PaddingValues(0.dp)) { Text("Cancel", color = Muted) }
             }
             else -> {
-                val (msg, fixBattery) = when {
+                val (msg, fixBattery) = if (power) when {
+                    x.knocks in 1..2 -> "Only ${x.knocks} of 3 presses were noticed. Press steadily, about one press a second." to false
+                    x.knocks >= 3 -> "The presses were too far apart. Press about one press a second." to false
+                    else -> "No presses were noticed. Allow Security4Her to run in the background below, then test again." to true
+                } else when {
                     !x.screenWentOff -> "The screen never turned off. Press the power button first, then knock." to false
                     x.offMs > 0 && x.samples == 0 -> "Your phone paused the motion sensor with the screen off, so knocks can't be felt. Allow Security4Her to run in the background below, then test again." to true
                     x.knocks in 1..2 -> ("Felt ${x.knocks} of 3 knocks. " + when (x.reject) {
@@ -463,7 +567,6 @@ private fun ExtrasPage(settings: Settings, onSettings: (Settings) -> Unit) {
     listOf(
         "Safe Journey" to "Tell it where you're going. If you don't check in or arrive on time, your contacts are alerted with your location.",
         "Fake call" to "A realistic incoming call from Mom, Dad or any name, now or in 10 or 30 seconds. A polite way out.",
-        "Siren" to "A loud alarm that plays even on silent, with a flashing screen and torch.",
         "Live location" to "Share a live map link with anyone, for as long as you choose.",
     ).forEach { (t, d) -> GuideCard { Text(t, style = MaterialTheme.typography.titleMedium); Text(d, color = Muted, style = MaterialTheme.typography.bodySmall) } }
     GuideCard {

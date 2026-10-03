@@ -86,17 +86,14 @@ private val TOPICS = listOf(
     Topic(listOf("fake call", "fake", "excuse", "uncomfortable", "get away", "leave")) {
         "Fake call makes your phone ring with a real-looking call (from Mom, Dad or any name you type) so you can step away. Answer it and a voice talks to you. Home → Fake call; it can ring now, in 10 s or in 30 s. Nobody is actually called."
     },
-    Topic(listOf("siren", "alarm", "loud", "noise", "attention", "flash", "torch")) {
-        "Siren plays a loud alarm (even on silent), flashes the screen and strobes the torch to draw attention. Home → Siren; tap anywhere to stop. It doesn't contact anyone, so use SOS too if you need help."
-    },
     Topic(listOf("install watch", "watch app", "install on watch", "update watch", "watch update", "put on watch")) {
         "Your phone installs the watch app for you, no computer needed. On the watch turn on Developer options, then Wireless debugging, and tap Pair new device. Then open Me → Install or update the watch app here, type the 6-digit code and tap Pair and install. After that the watch updates itself."
     },
     Topic(listOf("watch", "wear", "wrist", "smartwatch")) {
         "With the Wear OS app, press and hold SOS on your watch even when your phone is in a bag. The watch also records audio from your wrist. It links to your phone on its own once both apps are open."
     },
-    Topic(listOf("pocket", "knock", "knocks", "tap", "taps", "gesture", "triple", "bag", "without watch")) {
-        "Pocket SOS: turn it on in Me → Pocket SOS. With the screen off, knock firmly on your phone three times through your pocket or bag, about half a second apart. It buzzes, counts down 5 seconds (tap Cancel if it was a mistake), then starts a normal SOS with texts, live location, recording and the call. You feel a small tick for each knock and a strong buzz when the countdown starts. If it misses your knocks or reacts to light taps, open Practise and adjust strength and tap Set to my knocks; nothing is sent while practising."
+    Topic(listOf("pocket", "power button", "power", "press", "knock", "knocks", "tap", "taps", "gesture", "triple", "bag", "without watch")) {
+        "Pocket SOS: turn it on in Me → Pocket SOS. Press the power button 3 times, slowly (about one press a second), screen on or off, even in a pocket or bag. It buzzes on the third press, then counts down 5 seconds so you can cancel. Pressing fast starts your phone's own Emergency SOS too, so keep it slow. Prefer knocking? Choose Knock ×3 there instead."
     },
     Topic(listOf("voice", "shout", "say", "speak", "talk", "hands free", "hands-free", "scream")) {
         "Voice SOS is on the Wear OS watch. Turn it on from the watch's Home screen (Voice SOS), then saying HELP HELP HELP clearly, three times in a row, starts the same 5-second countdown as the other triggers: the watch vibrates, you can cancel, and then the full SOS goes out. It listens only while switched on, entirely on the watch; no audio is saved or sent. Use Practise on the watch to check it hears you."
@@ -108,7 +105,7 @@ private val TOPICS = listOf(
         "Test Mode (in Me) sends the police text and the automatic call to a test number, like a friend's phone, instead of the police. Use it to try an SOS safely."
     },
     Topic(listOf("112", "181", "1091", "helpline", "number", "call", "numbers", "ambulance")) {
-        "Emergency numbers in India:\n• 112: all emergencies (police, fire, ambulance)\n• 181: Women Helpline\n• 1091: Women Police Helpline\n• 100: Police\nCall 112 is also on Home and on the SOS screen."
+        "Emergency numbers in India:\n• 112: all emergencies (police, fire, ambulance)\n• 181: Women Helpline\n• 1091: Women Police Helpline\n• 100: Police\nCall 100 (police) is on Home and on the SOS screen."
     },
     Topic(listOf("private", "privacy", "data", "store", "stored", "secure", "who can see")) {
         "Your location is shared only during an SOS, a Safe Journey or when you share it yourself. Recordings stay on your phone unless you export them. Contacts only get what you send them."
