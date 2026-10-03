@@ -3,12 +3,15 @@ import CoreLocation
 import Combine
 
 @MainActor
-final class LocationService: NSObject, ObservableObject, CLLocationManagerDelegate {
+final class LocationService: NSObject, ObservableObject, @preconcurrency CLLocationManagerDelegate {
     @Published var fix: Fix?
     @Published var authorization: CLAuthorizationStatus = .notDetermined
     @Published var preciseLocation = false
     @Published var error: String?
     var onFix: ((Fix) -> Void)?
+    // Core Location delivers delegate calls on the initializing thread's run loop.
+    // This manager is created on MainActor; the legacy delegate conformance keeps
+    // that isolation and checks it at runtime instead of sending the manager away.
     private let manager = CLLocationManager()
     private var reasons = Set<String>()
     func confirmArrival(_ needed: Bool) { manager.distanceFilter = needed ? kCLDistanceFilterNone : 10 }

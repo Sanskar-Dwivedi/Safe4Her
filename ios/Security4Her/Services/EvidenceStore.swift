@@ -33,9 +33,12 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
     @Published var error: String?
     let backup = EvidenceBackup()
     private var audio: AVAudioRecorder?
-    private let capture = AVCaptureSession()
-    private let video = AVCaptureMovieFileOutput()
-    private let captureQueue = DispatchQueue(label: "in.security4her.camera")
+    private lazy var camera = EvidenceCamera { [weak self] in
+        Task { @MainActor in
+            self?.problem("Camera recording was interrupted.")
+            self?.videoOn = false
+        }
+    }
     private var audioStart = Date()
     private var videoStart = Date()
     private var wantsAudio = false
@@ -44,6 +47,7 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
     private var foreground = true
     private var sequence = 0
     private var pendingVideoCase: String?
+    private var pendingVideoURL: URL?
     var location: (() -> Fix?)?
     private var root: URL { Disk.root.appendingPathComponent("evidence", isDirectory: true) }
     override init() {
@@ -68,9 +72,6 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
                 self?.problem("Audio services restarted. A recording gap may exist.")
                 self?.resumeAudioIfPossible()
             }
-        }
-        NotificationCenter.default.addObserver(forName: .AVCaptureSessionRuntimeError, object: capture, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.problem("Camera recording was interrupted."); self?.videoOn = false }
         }
     }
     func directory(_ id: String) -> URL { root.appendingPathComponent(id, isDirectory: true) }
@@ -108,7 +109,7 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
             if enabledVideo {
                 let granted = await AVCaptureDevice.requestAccess(for: .video)
                 guard recordingId == id else { return }
-                if granted && foreground { configureCamera(); nextVideo() }
+                if granted && foreground { nextVideo() }
                 else { problem(granted ? "Video requires the app to be visible." : "Camera permission denied.") }
             }
         } catch { problem(error.localizedDescription) }
@@ -130,27 +131,17 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
             if !audioOn { problem("Audio recording could not start.") }
         } catch { problem(error.localizedDescription) }
     }
-    private func configureCamera() {
-        guard capture.inputs.isEmpty else { return }
-        capture.beginConfiguration(); capture.sessionPreset = .medium
-        defer { capture.commitConfiguration() }
-        do {
-            guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else { throw AppFailure.message("No back camera available.") }
-            let input = try AVCaptureDeviceInput(device: device)
-            guard capture.canAddInput(input), capture.canAddOutput(video) else { throw AppFailure.message("Camera cannot be configured.") }
-            capture.addInput(input); capture.addOutput(video)
-            // Audio is captured separately, avoiding competing microphone capture inputs.
-            video.maxRecordedDuration = CMTime(seconds: 30, preferredTimescale: 600)
-        } catch { problem(error.localizedDescription) }
-    }
     private func nextVideo() {
         if reachedLimit() { stop(); return }
-        guard wantsVideo, foreground, pendingVideoCase == nil, !capture.inputs.isEmpty,
+        guard wantsVideo, foreground, pendingVideoCase == nil,
               let url = nextURL("video", extension: "mov") else { return }
-        videoStart = Date(); pendingVideoCase = recordingId
-        captureQueue.async { [capture, video] in
-            if !capture.isRunning { capture.startRunning() }
-            video.startRecording(to: url, recordingDelegate: self)
+        videoStart = Date(); pendingVideoCase = recordingId; pendingVideoURL = url
+        camera.start(to: url, delegate: self) { [weak self] message in
+            Task { @MainActor in
+                guard let self, self.pendingVideoURL == url else { return }
+                self.problem(message)
+                self.pendingVideoCase = nil; self.pendingVideoURL = nil; self.videoOn = false
+            }
         }
     }
     private func reachedLimit() -> Bool {
@@ -158,19 +149,19 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
         return Date().timeIntervalSince(item.startedAt) >= 3600
     }
     nonisolated func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
-        Task { @MainActor in self.videoOn = self.recordingId != nil && self.foreground }
+        Task { @MainActor in
+            guard self.pendingVideoURL == fileURL else { return }
+            self.videoStart = Date()
+            self.videoOn = self.recordingId == self.pendingVideoCase && self.foreground
+        }
     }
     func setForeground(_ value: Bool) {
         foreground = value
         if value { resumeAudioIfPossible() }
         if !value {
             videoOn = false
-            captureQueue.async { [capture, video] in
-                if video.isRecording { video.stopRecording() }
-                capture.stopRunning()
-            }
+            camera.stop()
         } else if recordingId != nil && wantsVideo && AVCaptureDevice.authorizationStatus(for: .video) == .authorized {
-            if capture.inputs.isEmpty { configureCamera() }
             nextVideo()
         }
     }
@@ -179,10 +170,7 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
         wantsAudio = false; wantsVideo = false
         finishAudioSegment(); audioInterrupted = false
         videoOn = false
-        captureQueue.async { [capture, video] in
-            if video.isRecording { video.stopRecording() }
-            capture.stopRunning()
-        }
+        camera.stop()
         if var item = cases.first(where: { $0.id == id }) { item.endedAt = Date(); save(item) }
         recordingId = nil
     }
@@ -260,10 +248,12 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
                                from connections: [AVCaptureConnection], error: Error?) {
         let completed = error == nil || (error as NSError?)?.userInfo[AVErrorRecordingSuccessfullyFinishedKey] as? Bool == true
         Task { @MainActor in
+            guard self.pendingVideoURL == outputFileURL else { return }
+            let isCurrentCase = self.pendingVideoCase == self.recordingId
             if let id = self.pendingVideoCase, completed { self.add(id: id, url: outputFileURL, kind: "video", start: self.videoStart) }
             else if let error { self.problem(error.localizedDescription) }
-            self.videoOn = false; self.pendingVideoCase = nil
-            if completed { self.nextVideo() } else { self.wantsVideo = false }
+            self.videoOn = false; self.pendingVideoCase = nil; self.pendingVideoURL = nil
+            if completed || !isCurrentCase { self.nextVideo() } else { self.wantsVideo = false }
         }
     }
     static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
@@ -299,6 +289,55 @@ final class EvidenceStore: NSObject, ObservableObject, AVAudioRecorderDelegate, 
             try StoredZIP.archive(entries, to: destination)
             return destination
         }.value
+    }
+}
+
+// AVFoundation capture objects are not Sendable. Their entire mutable state stays on
+// this serial queue: configuration must never overlap startRunning/stopRunning.
+// Only recording delegate callbacks and error strings cross back to the main actor.
+private final class EvidenceCamera: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "in.security4her.camera")
+    private let session = AVCaptureSession()
+    private let output = AVCaptureMovieFileOutput()
+    private var runtimeObserver: NSObjectProtocol?
+
+    init(onRuntimeError: @escaping @Sendable () -> Void) {
+        runtimeObserver = NotificationCenter.default.addObserver(forName: .AVCaptureSessionRuntimeError,
+            object: session, queue: nil) { _ in onRuntimeError() }
+    }
+    deinit {
+        if let runtimeObserver { NotificationCenter.default.removeObserver(runtimeObserver) }
+    }
+    func start(to url: URL, delegate: EvidenceStore, failure: @escaping @Sendable (String) -> Void) {
+        queue.async { [self] in
+            do {
+                try configure()
+                if !session.isRunning { session.startRunning() }
+                output.startRecording(to: url, recordingDelegate: delegate)
+            } catch { failure(error.localizedDescription) }
+        }
+    }
+    func stop() {
+        queue.async { [self] in
+            if output.isRecording { output.stopRecording() }
+            session.stopRunning()
+        }
+    }
+    private func configure() throws {
+        dispatchPrecondition(condition: .onQueue(queue))
+        guard session.inputs.isEmpty else { return }
+        session.beginConfiguration(); session.sessionPreset = .medium
+        defer { session.commitConfiguration() }
+        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+            throw AppFailure.message("No back camera available.")
+        }
+        let input = try AVCaptureDeviceInput(device: device)
+        guard session.canAddInput(input), session.canAddOutput(output) else {
+            throw AppFailure.message("Camera cannot be configured.")
+        }
+        session.addInput(input); session.addOutput(output)
+        // Separate audio recording avoids competing microphone capture inputs.
+        output.maxRecordedDuration = CMTime(seconds: 30, preferredTimescale: 600)
     }
 }
 
