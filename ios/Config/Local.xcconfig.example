@@ -1,9 +1,0 @@
-// Copy to Local.xcconfig; this file is ignored by Git.
-// The slash variable prevents // in a URL becoming an xcconfig comment.
-S4H_SLASH = /
-S4H_SUPABASE_URL = https:$(S4H_SLASH)$(S4H_SLASH)YOUR_PROJECT.supabase.co
-S4H_SUPABASE_ANON_KEY = YOUR_PUBLIC_ANON_OR_PUBLISHABLE_KEY
-S4H_TRACKING_URL = https:$(S4H_SLASH)$(S4H_SLASH)YOUR_TRACKING_HOST/index.html
-S4H_LIVE_URL = https:$(S4H_SLASH)$(S4H_SLASH)YOUR_TRACKING_HOST/live.html
-// Optional: your actual Apple development team, never a signing password.
-DEVELOPMENT_TEAM =

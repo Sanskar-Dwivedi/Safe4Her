@@ -1,0 +1,13 @@
+// Copy to Local.xcconfig; this file is ignored by Git.
+// The slash variable prevents // in a URL becoming an xcconfig comment.
+
+S4H_SLASH = /
+
+SUPABASE_URL=https://udjoctuzlbmtdhhujjqr.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_1G6X_hBx9qrw5TaBKK7LXA_8xpd1yMJ
+SUPABASE_SECRET_KEY=sb_secret_s7Se8NQ1-kbKa6IamNWkWw_PgRbsyNY
+SUPABASE_JWKS_URL=https://udjoctuzlbmtdhhujjqr.supabase.co/auth/v1/.well-known/jwks.json
+
+// Optional: your actual Apple development team, never a signing password.
+DEVELOPMENT_TEAM =
+
