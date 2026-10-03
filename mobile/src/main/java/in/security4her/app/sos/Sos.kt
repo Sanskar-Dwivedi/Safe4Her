@@ -145,7 +145,7 @@ object SosEngine {
         if (live != null && live.active) return // one SOS at a time; the watch and phone dedupe on id
         val s = Settings.load(ctx)
         val how = when (trigger) {
-            "knock" -> "Knock Knock on watch"; "voice" -> "HELP HELP HELP heard by the watch"; "pocket" -> "three knocks on the phone"; "shake" -> "shake on watch"; "journey" -> "Safe Journey: no answer to a check-in"; else -> "SOS button"
+            "knock" -> "Knock Knock on watch"; "voice" -> "HELP HELP HELP heard by the watch"; "pocket" -> if (PocketSos.powerMode(ctx)) "three presses of the phone's power button" else "three knocks on the phone"; "shake" -> "shake on watch"; "journey" -> "Safe Journey: no answer to a check-in"; else -> "SOS button"
         }
         _current.value = Incident(
             id = id, trigger = trigger, source = source, startedAt = System.currentTimeMillis(), test = s.testMode,
