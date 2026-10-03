@@ -3,10 +3,9 @@
 
 S4H_SLASH = /
 
-SUPABASE_URL=https://udjoctuzlbmtdhhujjqr.supabase.co
-SUPABASE_PUBLISHABLE_KEY=sb_publishable_1G6X_hBx9qrw5TaBKK7LXA_8xpd1yMJ
-SUPABASE_SECRET_KEY=sb_secret_s7Se8NQ1-kbKa6IamNWkWw_PgRbsyNY
-SUPABASE_JWKS_URL=https://udjoctuzlbmtdhhujjqr.supabase.co/auth/v1/.well-known/jwks.json
+S4H_SUPABASE_URL = https:$(S4H_SLASH)$(S4H_SLASH)udjoctuzlbmtdhhujjqr.supabase.co
+S4H_SUPABASE_ANON_KEY = sb_publishable_1G6X_hBx9qrw5TaBKK7LXA_8xpd1yMJ
+SUPABASE_JWKS_URL = https://udjoctuzlbmtdhhujjqr.supabase.co/auth/v1/.well-known/jwks.json
 
 // Optional: your actual Apple development team, never a signing password.
 // Preserve the team selected in Xcode instead of overriding it with an empty value.
