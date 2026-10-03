@@ -4,9 +4,11 @@ Native SwiftUI source port of the existing phone product, targeting **iOS 17+ / 
 It uses the existing Supabase accounts, contacts, DigiLocker flow and tracking pages. Android and Wear OS
 remain separate applications. There is no Apple Watch target and no Galaxy Watch bridge.
 
-**Status:** source implementation, not an installed or device-validated release. Swift syntax parsing and
-backend TypeScript compilation can run on Windows, but neither checks Apple SDK types. Xcode must build
-the project and real iPhones must exercise its safety flows before anyone relies on this version.
+**Status:** Apple SDK builds and automated tests pass in macOS CI; this is not an installed or
+device-validated release. Debug/Release simulator builds, the unsigned device app and widget, seven
+XCTest cases, 64 database assertions and 19 handler/viewer tests passed. See
+[the validation report](PARITY_AND_VALIDATION.md) for tested revisions and remaining diagnostics.
+Real iPhones must exercise the safety flows before anyone relies on this version.
 
 ## Open and build
 
@@ -139,6 +141,8 @@ can stop it. Audio interruption handling closes and retains the current segment,
 only when the interruption ends with permission to resume or the app returns to the foreground. Playable
 unindexed media is recovered after termination with file-metadata timestamps; damaged containers remain
 on disk and are not advertised as complete. Video still requires the foreground.
+Camera configuration, recording requests and session shutdown use the same serial queue so rapid
+foreground/background transitions cannot overlap session configuration with `startRunning`.
 
 The hourly-key recovery/Telegram **evidence file** plan is deliberately not implemented. Telegram in this
 port sends SOS **alerts**, not recordings. The current ZIP export is unencrypted, and the PIN is an in-app

@@ -1,7 +1,8 @@
 # Android/iPhone parity and release checks
 
 Implementation status: source changes complete except the deployment-specific standalone live-map URL.
-This is not an assertion that an iPhone build or real-device safety test has passed.
+Apple SDK builds and automated tests have passed in macOS CI. Physical-device safety flows, signing and
+production deployment remain outstanding; this is not a release-ready certification.
 
 | Feature | Android implementation | iPhone implementation and remaining boundary |
 |---|---|---|
@@ -20,7 +21,22 @@ This is not an assertion that an iPhone build or real-device safety test has pas
 The main iPhone-specific additions are Live Activities, AlarmKit reminders and native system controls.
 They improve access and reminders; none bypasses suspension, force quit, denied permissions or networking.
 
-## Validation recorded in this Windows checkout
+## Automated validation
+
+The [macOS and backend workflow for `cd7fcd0`](https://github.com/Sanskar-Dwivedi/Safe4Her/actions/runs/37144332715)
+passed on 2026-10-03 UTC using Xcode 26.6. This revision includes the final camera queue and location
+delegate isolation fixes; the subsequent documentation-only commit does not change the tested code.
+
+- Debug and Release iPhone simulator builds, including the embedded widget extension.
+- Unsigned Release iPhone device build. This checks Apple SDK compilation, not provisioning or installation.
+- Seven hosted XCTest cases: four safety-policy regressions and three persisted-data/server-date compatibility tests.
+- All migrations against a disposable PostgreSQL/PostGIS database, with **64 passing pgTAP assertions**.
+- All **19 Node tests** for handlers and the standalone live viewer.
+
+The seven simulator cases reported zero failures. Camera/location concurrency compiler warnings from the
+earlier build are resolved. Camera hardware and rapid recording transitions still require the device checks below.
+
+Additional local checks in the Windows checkout:
 
 - 19 Node tests pass: existing handlers plus iOS authentication/readiness/deadline/lease/lifecycle cases
   and Android/iPhone live-map parsing, stale fix timestamps and ended events.
@@ -32,8 +48,12 @@ They improve access and reminders; none bypasses suspension, force quit, denied 
 - Swift source syntax parsing passes. It does **not** type-check UIKit, WidgetKit, ActivityKit or AlarmKit.
 - All nine AppIcon slots have correctly sized opaque PNGs. The marketing image is a resampling of the
   existing brand artwork. Project generation includes app, embedded widget and hosted XCTest targets.
-- Database pgTAP regressions are written but not run here: no PostgreSQL/PostGIS runtime is installed.
-- macOS CI, device signing and physical iPhone behavior remain unverified. No backend was deployed.
+- No backend was deployed, and no signed IPA or physical-device result was produced.
+
+Xcode's App Intents training step emits `Could not archive SSU artifacts` while returning a successful
+build. Its effect on Siri phrase discovery cannot be confirmed from the current codebase. Treat Siri
+discovery and spoken activation as unverified until checked on a signed device build. Do not hide the
+diagnostic by disabling App Intents metadata generation.
 
 ## Deployment order
 
@@ -42,7 +62,7 @@ They improve access and reminders; none bypasses suspension, force quit, denied 
 2. Resume scheduled dispatch. Check heartbeat, bot configuration, HTTPS tracking URL and a consenting
    linked contact. Confirm retry after a temporary delivery failure and Test Mode suppression.
 3. Deploy `web-track`, including `live-message.js`. Set `S4H_LIVE_URL` to the actual hosted `live.html` URL.
-4. Run the macOS workflow: Debug/Release simulator compilation, unsigned device compilation and XCTest.
+4. Keep the macOS workflow green: Debug/Release simulator compilation, unsigned device compilation and XCTest.
    Use Xcode 26+ so the AlarmKit branch is compiled, not omitted by `canImport`.
 5. Complete the device checklist below before TestFlight/public distribution.
 
@@ -69,6 +89,8 @@ Use iOS 17 and a current iOS 26+ device, with and without an Action button. Use 
 - Change a deadline and cancel while alarm authorization is open. No stale alarm should remain scheduled.
 - Record across a real phone call, audio-route change, app backgrounding, camera contention and media
   services reset. Check segment playback, retained partial files, gap notes and the one-hour recording cap.
+  Repeatedly background/foreground and stop/restart recording while the camera is starting; configuration,
+  start and stop share one serial queue, and late segment callbacks must not update a different segment.
 - Select an external folder, revoke access, go offline, fill storage, change account and relaunch. Verify
   pending copies retry without deleting originals or copying another account's cases. Check hashes of
   completed copies and manifests, then independently verify provider/cloud upload on another device.
