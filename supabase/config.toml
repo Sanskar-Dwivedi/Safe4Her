@@ -14,3 +14,7 @@ verify_jwt = false
 
 [functions.digilocker-callback]
 verify_jwt = false
+
+# Resolves user JWTs itself; scheduled dispatch authenticates with a separate server-only secret.
+[functions.ios-safety]
+verify_jwt = false

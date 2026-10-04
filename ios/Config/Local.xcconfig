@@ -1,0 +1,13 @@
+// Copy to Local.xcconfig; this file is ignored by Git.
+// The slash variable prevents // in a URL becoming an xcconfig comment.
+
+S4H_SLASH = /
+
+S4H_SUPABASE_URL = https:$(S4H_SLASH)$(S4H_SLASH)udjoctuzlbmtdhhujjqr.supabase.co
+S4H_SUPABASE_ANON_KEY = sb_publishable_1G6X_hBx9qrw5TaBKK7LXA_8xpd1yMJ
+SUPABASE_JWKS_URL = https://udjoctuzlbmtdhhujjqr.supabase.co/auth/v1/.well-known/jwks.json
+
+// Optional: your actual Apple development team, never a signing password.
+// Preserve the team selected in Xcode instead of overriding it with an empty value.
+DEVELOPMENT_TEAM = $(inherited)
+

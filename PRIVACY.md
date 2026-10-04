@@ -54,5 +54,25 @@ asked for when the feature first needs it, and the app keeps working without the
 
 ## Deleting data
 
-Uninstalling removes everything the apps keep on the phone and watch. Messages on ntfy.sh expire on their own
+### iPhone source port
+
+The iPhone version uses the same account, contact, verification and tracking backend. Authentication tokens
+and PIN hashes use the iPhone Keychain. The app clears its prior login on a detected fresh installation.
+It caches account setup and contacts privately to support use during connection loss. Evidence history is
+filtered to the signed-in account; recordings remain in private app storage and are not uploaded automatically.
+
+An iPhone SOS queues Telegram alerts on the server for linked contacts. Live journeys store their deadline
+and last received location so the server can alert contacts even if iOS suspends the app. Pending alert jobs
+expire after 24 hours; finished delivery receipts and completed journeys are pruned after seven days. These
+retention periods concern the new iPhone job tables, not the existing incident/location tables or copies
+held by Telegram. Explicit live sharing and public community reports continue to use ntfy; recipients and
+the relay can retain data already received.
+
+SMS and phone calls require iPhone confirmation. Evidence ZIP exports are unencrypted and leave the app
+only through an explicit share/save action. iPhone app-private evidence is removed on uninstall; copies
+saved by the user to another destination are controlled by that destination. The iPhone port does not
+include the proposed encrypted recovery/file-delivery system or automatic beta telemetry collection.
+
+Uninstalling removes app-private storage. Evidence copies saved outside an app remain under the destination's
+controls; this includes Android's Downloads copies and files explicitly exported from iPhone. Messages on ntfy.sh expire on their own
 within a day. If a Supabase backend is connected, signing out and asking the operator removes the account.

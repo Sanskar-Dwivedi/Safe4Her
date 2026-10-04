@@ -38,7 +38,7 @@ export async function rpc<T>(env: Env, f: Fetch, name: string, args: Record<stri
   const headers: Record<string, string> = { apikey: key, "content-type": "application/json" };
   // Legacy service-role keys are JWTs and go in Authorization too; new sb_secret_ keys go in apikey only.
   if (!key.startsWith("sb_")) headers.authorization = `Bearer ${key}`;
-  const res = await f(url, { method: "POST", headers, body: JSON.stringify(args) });
+  const res = await f(url, { method: "POST", headers, body: JSON.stringify(args), signal: AbortSignal.timeout(10000) });
   const text = await res.text();
   if (!res.ok) {
     let msg = text;

@@ -97,6 +97,7 @@
   </div>
 
   <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="live-message.js"></script>
   <script>
   (function () {
     var topic = new URLSearchParams(location.search).get('t') || '';
@@ -129,23 +130,23 @@
       var tags = m.tags || [];
       if (!name) name = parseName(m.title || '');
       if (tags.indexOf('rotating_light') >= 0) mode = 'sos';
-      if (tags.indexOf('white_check_mark') >= 0) ended = true;
-      var q = /[?&]q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/.exec(m.click || '');
-      if (q) {
-        var p = [parseFloat(q[1]), parseFloat(q[2])];
-        points.push(p);
-        lastAt = m.time * 1000;
-        var a = /accurate to (\d+) m/.exec(m.message || '');
-        lastAcc = a ? parseInt(a[1], 10) : null;
+      var parsed = parseLiveMessage(m);
+      if (!parsed) return;
+      if (parsed.ended) ended = true;
+      if (!ended && parsed.point && parsed.at > lastAt) {
+        points.push(parsed.point);
+        points = points.slice(-2000);
+        lastAt = parsed.at;
+        lastAcc = parsed.accuracy;
       }
     }
 
     function render() {
       var who = name || 'Her';
-      $('title').textContent = ended ? who + ' is safe now' : (mode === 'sos' ? who + ' may be in danger' : who + "'s live location");
+      $('title').textContent = ended ? 'Location sharing ended' : (mode === 'sos' ? who + ' may be in danger' : who + "'s live location");
       var chip = $('chip');
       chip.className = 'chip ' + (ended ? 'safe' : mode);
-      $('chipText').textContent = ended ? 'Safe now · sharing stopped' : (mode === 'sos' ? 'SOS active' : 'Sharing live location');
+      $('chipText').textContent = ended ? 'Sharing stopped' : (mode === 'sos' ? 'SOS active' : 'Sharing live location');
       $('call').style.display = (mode === 'sos' && !ended) ? '' : 'none';
       if (!points.length) {
         $('meta').textContent = ended ? 'Sharing stopped before a location was found.' : 'Waiting for the first location from her phone.';

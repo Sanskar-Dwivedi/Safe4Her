@@ -133,6 +133,31 @@ cloud project. All RPCs are called via PostgREST `rpc/<name>` with named paramet
 - The manifest must declare `ACCESS_FINE_LOCATION`, `CALL_PHONE` and the Maps API key meta-data.
 
 ## Change requests
+
+- 2026-10-03: iPhone parity hardening adds optional `deadline`, `revision`, `incidentState`,
+  `eligibleRecipients` and `deliveryReady` to `ios-safety` responses. Journey mutations carry a
+  monotonically increasing `revision`; cancellation wins over delayed starts/extensions. Cancellation
+  tombstones are retained for the account lifetime. `journeyEnd.reason` is `arrived` only after an
+  explicit arrival or two qualifying GPS fixes; otherwise it is `ended`. Telegram lifecycle jobs are
+  durable, deduplicated per session/event/contact and never generated for Test Mode sessions. Worker
+  leases carry tokens so an expired worker cannot acknowledge a newer lease. Deploy the additive
+  migration and function before the iPhone update. Existing Android/Wear RPCs are unchanged.
+  ntfy live maps accept both Google `q` and Apple `ll` links. iPhone messages additionally carry
+  JSON `{version:1,state:"active"|"ended",fixAt,lat,lng,accuracyM}`; `fixAt` is the GPS measurement
+  time, not the relay publication time. An ended share does not claim that its owner is safe.
+  iPhone external evidence copies require explicit folder selection, remain outside the app PIN,
+  and report verified local copies separately from provider/cloud synchronization.
+
+- 2026-10-03: add the separate iPhone source target `in.security4her.ios` (iOS 17+, SwiftUI; no watch target).
+  Existing Android/Wear identity and data-layer contracts are unchanged. iPhone uses existing REST auth,
+  contacts, verification and map RPCs. New authenticated Edge Function `ios-safety` accepts `action` values
+  `capabilities`, `sos`, `end`, `journeyStart`, `journeyStatus`, `journeyExtend`, `journeyEnd` and delegates to
+  owner-checked `ios_safety(p_action text, p_data jsonb)`. SOS fields: `incidentId`, `trigger`, `test`, optional
+  `lat`, `lng`, `accuracyM`, ISO-8601 `fixAt`. Journey fields: `journeyId`, and for start `incidentId`, `name`,
+  ISO-8601 `deadline`; extension supplies `deadline`. Responses contain optional `state`, `shareUrl`,
+  `accepted`, `pending`, `schedulerReady`. Scheduled requests authenticate with `x-s4h-dispatch-secret`,
+  invoke service-only leased delivery/deadline RPCs and record scheduler health. No client receives the
+  dispatcher, Telegram or service-role secret. See `ios/README.md` for deployment and platform constraints.
 _(append: date, who, what, why)_
 - 2026-09-28: wrote the `mobile/` app. Offline mode when `SUPABASE_URL` is blank (local backend on the phone); the map uses OpenStreetMap without a Maps key.
 - 2026-09-28: `wear/build.gradle.kts` and the §1 snippet — `java.util.Properties()` doesn't resolve in module scripts (the `java` extension shadows the package). Fixed with `import java.util.Properties`. Build on JDK 17 (Gradle 8.14.3 can't run on JDK 25).

@@ -373,10 +373,14 @@ object Journey {
     }
 
     private suspend fun text(body: String) {
-        val contacts = runCatching { Backend.contacts() }.getOrDefault(emptyList()).filter { it.receivesSos }
-        val tagged = body + if (test()) " [TEST]" else ""
-        contacts.forEach { c -> Sms.send(app, c.phone, tagged, "journey")?.let { AppLog.warn("Journey", "Text to ${c.name} failed: $it") } }
-        if (contacts.isNotEmpty()) AppLog.ok("Journey", "Texted ${contacts.size}: ${body.take(60)}…")
+        val settings = Settings.load(app)
+        val contacts = if (settings.testMode) emptyList() else
+            runCatching { Backend.contacts() }.getOrDefault(emptyList()).filter { it.receivesSos }.map { it.phone }
+        val recipients = journeyRecipients(settings.testMode, settings.demoNumber, contacts)
+        val tagged = body + if (settings.testMode) " [TEST]" else ""
+        recipients.forEach { number -> Sms.send(app, number, tagged, "journey")?.let { AppLog.warn("Journey", "Journey text failed: $it") } }
+        if (recipients.isEmpty()) AppLog.warn("Journey", "No eligible journey text recipients. Check the test number or contacts.")
+        else AppLog.info("Journey", "Requested ${recipients.size} journey texts; delivery is not confirmed.")
     }
 
     private suspend fun userName() = runCatching { Backend.profile().displayName }.getOrNull() ?: "Your contact"
