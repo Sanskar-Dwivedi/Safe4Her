@@ -11,6 +11,12 @@
 - The encrypted recovery/Telegram evidence plan and Apple Watch app are excluded from this port.
 - iOS SDK compilation, signing and real-device behavior remain unverified on the Windows development host.
 
+## 1.1.0-beta.12 (2026-10-16)
+
+### Changed
+- **New look: the Security4Her cat.** The app icon, the in-app logo, the notification icon, the watch app icon, the
+  website and the iPhone port now use the cat from the install site instead of the old silhouette.
+
 ## 1.1.0-beta.11 (2026-10-02)
 
 ### Fixed

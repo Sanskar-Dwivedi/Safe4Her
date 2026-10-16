@@ -3,17 +3,17 @@
     "url": "https://udjoctuzlbmtdhhujjqr.supabase.co",
     "key": "sb_publishable_1G6X_hBx9qrw5TaBKK7LXA_8xpd1yMJ"
   },
-  "versionCode": 21,
-  "versionName": "1.1.0-beta.11",
+  "versionCode": 22,
+  "versionName": "1.1.0-beta.12",
   "apk": "Security4Her-phone.apk",
-  "sha256": "e03f9ebf10a092cd49acf65b4102af3fe66914e025320c81dcbbe66102c8ae69",
-  "bytes": 11029546,
-  "notes": "Pocket SOS: press the power button slowly, about once a second.",
+  "sha256": "1ef317bac54ce72a348d9d079ce45940dd073674b456b32a77439eeec854fa9c",
+  "bytes": 11009066,
+  "notes": "New look: the Security4Her cat is now the app icon and logo.",
   "watch": {
-    "versionCode": 13,
-    "versionName": "1.1.0-beta.7",
+    "versionCode": 14,
+    "versionName": "1.1.0-beta.8",
     "apk": "Security4Her-watch.apk",
-    "sha256": "2ac7a6bda5c850dec4485bf72b6d618d622219ec2b8e5932a216231429dc5be2",
-    "bytes": 53854126
+    "sha256": "9364b5fd7a50864936f4b1bd7f595b7a70d86f51d02e985e3d8aa6e4ffed5be2",
+    "bytes": 53833646
   }
 }

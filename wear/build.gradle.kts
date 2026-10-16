@@ -23,8 +23,8 @@ android {
         minSdk = 30
         targetSdk = 35
         // Bump both for every release; the watch compares versionCode with the "watch" entry in web-install/version.json.
-        versionCode = 13
-        versionName = "1.1.0-beta.7"
+        versionCode = 14
+        versionName = "1.1.0-beta.8"
         buildConfigField("String", "SUPABASE_URL", cfg("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", cfg("SUPABASE_ANON_KEY"))
         buildConfigField("String", "TRACK_BASE_URL", cfg("TRACK_BASE_URL"))
