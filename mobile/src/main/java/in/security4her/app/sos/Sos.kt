@@ -142,6 +142,8 @@ object SosEngine {
         app = ctx.applicationContext
         _current.value = Store.prefs(app).getString("incident", null)
             ?.let { runCatching { S4hJson.decodeFromString(Incident.serializer(), it) }.getOrNull() }
+            // An SOS saved by an older version keeps working: its live link is rebuilt with today's page address
+            ?.let { inc -> inc.liveTopic?.let { t -> inc.copy(liveUrl = Live.url(t)) } ?: inc }
     }
 
     @Synchronized
