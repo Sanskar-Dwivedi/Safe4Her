@@ -21,8 +21,8 @@ android {
         minSdk = 26
         targetSdk = 35
         // Bump both for every release; the in-app updater compares versionCode with web-install/version.json.
-        versionCode = 23
-        versionName = "1.1.0-beta.13"
+        versionCode = 25
+        versionName = "1.1.0-beta.15"
         buildConfigField("String", "SUPABASE_URL", cfg("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", cfg("SUPABASE_ANON_KEY"))
         buildConfigField("String", "TRACK_BASE_URL", cfg("TRACK_BASE_URL"))
@@ -96,6 +96,8 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.4.2")
     implementation("androidx.camera:camera-lifecycle:1.4.2")
     implementation("androidx.camera:camera-video:1.4.2")
+    implementation("androidx.camera:camera-view:1.4.2") // scanning a child's family QR code
+    implementation("androidx.work:work-runtime-ktx:2.10.1") // family SOS check when the app isn't open
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
     implementation(platform("io.github.jan-tennert.supabase:bom:3.6.0"))
@@ -106,6 +108,7 @@ dependencies {
     implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
     implementation("org.conscrypt:conscrypt-android:2.5.3") // TLS 1.3 for adb pairing on every phone
     implementation("org.bouncycastle:bcpkix-jdk15to18:1.81") // the phone's adb certificate
+    implementation("com.google.zxing:core:3.5.3") // the family-link QR code, drawn on the phone
     constraints {
         implementation("androidx.fragment:fragment:1.8.9") {
             because("old transitive Fragment breaks Activity Result lint checks")

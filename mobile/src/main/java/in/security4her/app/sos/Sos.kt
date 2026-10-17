@@ -117,6 +117,8 @@ data class Incident(
     val liveFailing: Boolean = false,
     val reason: String? = null, // set when the SOS was raised automatically (Safe Journey)
     val events: List<SosEvent> = emptyList(),
+    val chain: List<CallStep> = emptyList(), // a child's SOS: grown-ups called one after another, then 112 or 1098
+    val chainNextAt: Long? = null, // pause before the next call, so she can say someone answered
 ) {
     val active get() = state == "active"
     val smsSent get() = recipients.count { it.state == "sent" || it.state == "delivered" }
@@ -124,6 +126,9 @@ data class Incident(
 }
 
 data class Fix(val lat: Double, val lng: Double, val acc: Float?, val at: Long)
+
+@Serializable
+data class CallStep(val name: String, val number: String, val state: String = "waiting") // waiting | calling | answered | no_answer | ended | failed
 
 /** The single SOS pipeline used by the Home button and by the watch. */
 object SosEngine {
@@ -178,6 +183,7 @@ object SosEngine {
                 if (_current.value?.active != true) break
                 Locator.fresh(app, waitMs = 8_000)?.let { setFix(it, null); pushLocation(it) }
                 publishLive()
+                if (`in`.security4her.app.Age.isChild(app)) famPost("loc", "")
                 if (Settings.load(app).smsUpdates && System.currentTimeMillis() - lastText > 5 * 60_000) {
                     lastText = System.currentTimeMillis()
                     textUpdate()
@@ -193,10 +199,14 @@ object SosEngine {
         if (!`in`.security4her.app.Age.isChild(app)) _current.value?.let { inc ->
             if (inc.lat != null && inc.lng != null) `in`.security4her.app.core.Community.recordSos(inc.lat, inc.lng, inc.test)
         }
+        if (`in`.security4her.app.Age.isChild(app)) {
+            famPost("sos", "${userName()} pressed SOS")
+            jobs += scope.launch { listenForStop() }
+        }
         // 3. SMS
         sendSos(s)
-        // 4. Countdown call
-        jobs += scope.launch { countdownCall(s) }
+        // 4. Countdown call; a child's SOS calls each grown-up in turn instead
+        jobs += scope.launch { if (`in`.security4her.app.Age.isChild(app)) callChain(s) else countdownCall(s) }
     }
 
     private suspend fun publishLive(first: Boolean = false) {
@@ -248,7 +258,9 @@ object SosEngine {
         val contacts = runCatching { runBlocking { Backend.contacts() } }.getOrDefault(emptyList())
         val list = contacts.filter { it.receivesSos }.map { Recipient(it.name, it.phone) }.toMutableList()
         val police = if (s.testMode) s.demoNumber else s.policeNumber
-        if (police.isNotBlank()) list += Recipient(if (s.testMode) "Test number" else "Police $police", police, police = true)
+        val child = `in`.security4her.app.Age.isChild(app)
+        if (child && !`in`.security4her.app.KidsSettings.load(app).textPolice) Unit // a child's SOS texts their grown-ups only, unless a parent chose otherwise
+        else if (police.isNotBlank()) list += Recipient(if (s.testMode) "Test number" else "Police $police", police, police = true)
         else if (s.testMode) log("Test Mode: no test number set, police SMS skipped", "fail")
         if (list.isEmpty()) {
             log("No one to text. Add trusted contacts.", "fail")
@@ -294,7 +306,27 @@ object SosEngine {
                 val time = SimpleDateFormat("HH:mm", Locale.US).format(Date(inc.fixAt ?: System.currentTimeMillis()))
                 append(" (accuracy ${inc.acc?.toInt() ?: "?"}m, $time)")
             } else append(" Location not available yet.")
+            if (`in`.security4her.app.Age.isChild(app)) append(" Follow, or stop a false alarm: ${`in`.security4her.app.Family.link(app)}")
             if (s.testMode) append(" [TEST]")
+        }
+    }
+
+    private fun famPost(kind: String, text: String) {
+        val c = _current.value
+        scope.launch { `in`.security4her.app.Family.post(app, kind, text, c?.lat, c?.lng) }
+    }
+
+    /** A grown-up's signed "stop" from the family page ends a child's false alarm. */
+    private suspend fun listenForStop() {
+        val since = _current.value?.startedAt ?: return
+        while (true) {
+            delay(4_000)
+            val inc = _current.value ?: return
+            if (!inc.active) return
+            val stop = `in`.security4her.app.Family.commands(app, since).firstOrNull { it.cmd == "stop" } ?: continue
+            log("${stop.by} stopped the SOS from the family page", "ok")
+            end("cancelled", stoppedBy = stop.by)
+            return
         }
     }
 
@@ -398,6 +430,128 @@ object SosEngine {
         placeCall(number)
     }
 
+    /**
+     * A child's SOS: call each grown-up in their order, then 112 or 1098 (a parent's choice). After each call the
+     * phone's call log says whether it was answered; without that permission, a short pause lets the child tap "They
+     * answered" before the next call. Grown-ups are family, so Test Mode never replaces them; it only swaps the last,
+     * emergency call for the test number.
+     */
+    private suspend fun callChain(s: Settings) {
+        val k = `in`.security4her.app.KidsSettings.load(app)
+        val people = runCatching { Backend.contacts() }.getOrDefault(emptyList()).filter { it.receivesSos }.sortedBy { it.priority }
+        val steps = people.map { CallStep(it.name, it.phone) }.toMutableList()
+        if (k.finalCall != "none") {
+            val label = if (k.finalCall == "1098") "Childline 1098" else "Emergency 112"
+            when {
+                !s.testMode -> steps += CallStep(label, k.finalCall)
+                s.demoNumber.isNotBlank() -> steps += CallStep("Test number (for $label)", s.demoNumber)
+                else -> log("Test Mode: $label won't be called; set a test number to practise it", "fail")
+            }
+        }
+        if (steps.isEmpty()) {
+            update { it.copy(call = "skipped") }
+            log("No grown-up to call. Add one in My grown-ups.", "fail")
+            return
+        }
+        val at = System.currentTimeMillis() + s.countdownSec * 1000L
+        update { it.copy(chain = steps, callNumber = steps[0].number, callAt = at) }
+        log("Will call in order: " + steps.joinToString(" → ") { it.name })
+        SosService.refresh(app)
+        while (System.currentTimeMillis() < at) {
+            delay(250)
+            if (_current.value?.call != "waiting" || _current.value?.active != true) return
+        }
+        for (i in steps.indices) {
+            val cur = _current.value ?: return
+            if (!cur.active || cur.call == "cancelled" || cur.call == "answered") return
+            val step = cur.chain[i]
+            setStep(i, "calling")
+            update { it.copy(call = "placed", callNumber = step.number) }
+            val started = System.currentTimeMillis()
+            if (!dial(step.number)) { setStep(i, "failed"); log("Couldn't call ${step.name}", "fail"); continue }
+            log("Calling ${step.name}", "ok")
+            famPost("call", "Calling ${step.name}")
+            SosService.refresh(app)
+            awaitCallEnd()
+            delay(1_500) // let the call log catch up
+            if (_current.value?.call == "answered") return
+            when (answeredFromLog(step.number, started)) {
+                true -> { setStep(i, "answered"); update { it.copy(call = "answered") }; log("${step.name} answered", "ok"); famPost("call", "${step.name} answered"); return }
+                false -> { setStep(i, "no_answer"); log("${step.name} didn't answer", "fail"); famPost("call", "${step.name} didn't answer") }
+                null -> setStep(i, "ended")
+            }
+            if (i == steps.lastIndex) break
+            val next = System.currentTimeMillis() + k.pauseSec * 1000L
+            update { it.copy(chainNextAt = next) }
+            while (System.currentTimeMillis() < next) {
+                delay(250)
+                val c = _current.value ?: return
+                if (!c.active || c.call == "answered" || c.call == "cancelled") { update { it.copy(chainNextAt = null) }; return }
+            }
+            update { it.copy(chainNextAt = null) }
+        }
+        log("Called everyone on the list", if (_current.value?.chain?.any { it.state == "answered" } == true) "ok" else "fail")
+    }
+
+    /** "They answered": stops the calls that would follow. */
+    fun someoneAnswered() {
+        val inc = _current.value ?: return
+        val i = inc.chain.indexOfLast { it.state in setOf("calling", "ended", "no_answer") }
+        if (i >= 0) setStep(i, "answered")
+        update { it.copy(call = "answered", chainNextAt = null) }
+        log("${inc.chain.getOrNull(i)?.name ?: "A grown-up"} answered; no more calls", "ok")
+        famPost("call", "${inc.chain.getOrNull(i)?.name ?: "A grown-up"} answered")
+        SosService.refresh(app)
+    }
+
+    private fun setStep(i: Int, state: String) = update { inc ->
+        inc.copy(chain = inc.chain.mapIndexed { n, st -> if (n == i) st.copy(state = state) else st })
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun dial(number: String): Boolean = try {
+        if (ContextCompat.checkSelfPermission(app, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) error("no CALL_PHONE")
+        app.getSystemService(TelecomManager::class.java).placeCall(Uri.fromParts("tel", number, null), Bundle())
+        true
+    } catch (e: Exception) {
+        Log.w(TAG, "call to $number failed", e)
+        false
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun inCall(): Boolean = runCatching {
+        if (ContextCompat.checkSelfPermission(app, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            app.getSystemService(TelecomManager::class.java).isInCall
+        } else app.getSystemService(android.media.AudioManager::class.java).mode == android.media.AudioManager.MODE_IN_CALL
+    }.getOrDefault(false)
+
+    /** Waits for the call to start (up to 20 s), then for it to end (up to 15 min). */
+    private suspend fun awaitCallEnd() {
+        withTimeoutOrNull(20_000) { while (!inCall()) delay(300) } ?: return
+        withTimeoutOrNull(15 * 60_000L) { while (inCall()) delay(500) }
+    }
+
+    /** true / false from the call log's duration (0 = never connected), or null when the log can't be read. */
+    private fun answeredFromLog(number: String, since: Long): Boolean? {
+        if (ContextCompat.checkSelfPermission(app, Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) return null
+        val digits = number.filter(Char::isDigit).takeLast(10)
+        return runCatching {
+            app.contentResolver.query(
+                android.provider.CallLog.Calls.CONTENT_URI,
+                arrayOf(android.provider.CallLog.Calls.NUMBER, android.provider.CallLog.Calls.DURATION),
+                "${android.provider.CallLog.Calls.TYPE} = ? AND ${android.provider.CallLog.Calls.DATE} >= ?",
+                arrayOf(android.provider.CallLog.Calls.OUTGOING_TYPE.toString(), (since - 5_000).toString()),
+                "${android.provider.CallLog.Calls.DATE} DESC",
+            )?.use { c ->
+                var found: Boolean? = null
+                while (found == null && c.moveToNext()) {
+                    if (c.getString(0).orEmpty().filter(Char::isDigit).takeLast(10) == digits) found = c.getLong(1) > 0
+                }
+                found
+            }
+        }.getOrNull()
+    }
+
     fun cancelCall() {
         if (_current.value?.call != "waiting") return
         update { it.copy(call = "cancelled") }
@@ -429,26 +583,34 @@ object SosEngine {
         scope.launch { pushLocation(f) }
     }
 
-    fun end(status: String) {
+    /** [stoppedBy]: a grown-up who stopped a child's false alarm from the family page. */
+    fun end(status: String, stoppedBy: String? = null) {
         val inc = _current.value ?: return
         if (!inc.active) return
         jobs.forEach { it.cancel() }
         jobs.clear()
-        update { it.copy(state = status, call = if (it.call == "waiting") "cancelled" else it.call) }
+        update {
+            it.copy(
+                state = status, call = if (it.call == "waiting") "cancelled" else it.call, chainNextAt = null,
+                chain = it.chain.map { st -> if (st.state == "calling") st.copy(state = "ended") else st },
+            )
+        }
         log(if (status == "resolved") "Marked safe" else "SOS cancelled", "ok")
+        if (`in`.security4her.app.Age.isChild(app)) famPost("safe", stoppedBy?.let { "$it stopped the SOS (false alarm)" } ?: if (status == "resolved") "Marked safe" else "SOS stopped")
         scope.launch {
             inc.liveTopic?.let { Live.publish(it, "${userName()} is safe now", "Live location sharing has stopped.", null, listOf("white_check_mark"), 4) }
             runCatching { Backend.endIncident(inc.id, status) }.onFailure { AppLog.warn("SOS", "Server didn't record the end of the SOS", it) }
             val told = inc.recipients.filter { it.state == "sent" || it.state == "delivered" }
             val name = runCatching { Backend.profile().displayName }.getOrNull() ?: "She"
+            val safeText = stoppedBy?.let { "$it stopped $name's SOS: it was a false alarm. (Security4Her)" } ?: "$name is safe now. Thank you. (Security4Her)"
             if (told.isNotEmpty()) {
-                told.forEach { sendSms(it.phone, "$name is safe now. Thank you. (Security4Her)", inc.id) }
+                told.forEach { sendSms(it.phone, safeText, inc.id) }
                 log("\"I'm safe\" text sent to ${told.size}", "ok")
             }
             // SOS went out through Messages: offer the "I'm safe" text the same way
             val viaMessages = inc.recipients.filter { it.state == "compose" }
             if (viaMessages.isNotEmpty()) withContext(Dispatchers.Main) {
-                Sms.compose(app, viaMessages.map { it.phone }, "$name is safe now. Thank you. (Security4Her)")
+                Sms.compose(app, viaMessages.map { it.phone }, safeText)
             }
         }
         app.stopService(Intent(app, SosService::class.java))
@@ -704,16 +866,19 @@ class SosService : androidx.lifecycle.LifecycleService() {
             val open = PendingIntent.getActivity(
                 ctx, 0, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE,
             )
+            val child = `in`.security4her.app.Age.isChild(ctx)
+            val emergency = if (child) "112" else "100" // a child calls the all-in-one emergency number
             val dial112 = PendingIntent.getActivity(
-                ctx, 1, Intent(Intent.ACTION_DIAL, Uri.parse("tel:100")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE,
+                ctx, 1, Intent(Intent.ACTION_DIAL, Uri.parse("tel:$emergency")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE,
             )
             val b = NotificationCompat.Builder(ctx, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notif_security4her)
                 .setContentTitle("SOS active — tap to open")
                 .setContentText(
                     when (inc?.call) {
-                        "waiting" -> inc.callAt?.let { "Calling ${inc.callNumber} soon" } ?: "Sending your location"
-                        "placed" -> "Call placed · ${inc.smsSent} texts sent"
+                        "waiting" -> inc.callAt?.let { "Calling ${inc.chain.firstOrNull()?.name ?: inc.callNumber} soon" } ?: "Sending your location"
+                        "placed" -> inc.chain.firstOrNull { it.state == "calling" }?.let { "Calling ${it.name} · ${inc.smsSent} texts sent" } ?: "Call placed · ${inc.smsSent} texts sent"
+                        "answered" -> "${inc.chain.firstOrNull { it.state == "answered" }?.name ?: "A grown-up"} answered"
                         else -> "${inc?.smsSent ?: 0} texts sent"
                     },
                 )
@@ -721,7 +886,7 @@ class SosService : androidx.lifecycle.LifecycleService() {
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
                 .setContentIntent(open)
-                .addAction(0, "Call 100", dial112)
+                .addAction(0, "Call $emergency", dial112)
             if (inc?.call == "waiting" && inc.callAt != null) {
                 val cancel = PendingIntent.getBroadcast(
                     ctx, 2, Intent(ctx, SosReceiver::class.java).setAction(SosReceiver.CANCEL_CALL), PendingIntent.FLAG_IMMUTABLE,

@@ -205,12 +205,20 @@ class MainActivity : ComponentActivity() {
             S4hTheme { Root() }
         }
         handleEvidence(intent)
+        handleFamily(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         handleEvidence(intent)
+        handleFamily(intent)
+    }
+
+    /** A family link tapped in a text, or a family SOS notification: open My family. */
+    private fun handleFamily(intent: Intent?) {
+        intent?.data?.takeIf { it.host == "security4her.vercel.app" && it.path == "/family.html" }?.let { Family.pendingLink.value = it.toString() }
+        intent?.getStringExtra(FamilyAlerts.EXTRA_CHILD)?.let { FamilyAlerts.openChild.value = it }
     }
 
     override fun onResume() {
@@ -751,6 +759,16 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
     var showBetaReport by rememberSaveable { mutableStateOf(false) }
     var showFakeCall by rememberSaveable { mutableStateOf(false) }
     var showGuide by rememberSaveable { mutableStateOf(!Guide.seen(ctx)) } // opens by itself once, after sign-up
+    var showFamily by rememberSaveable { mutableStateOf(false) }
+    val pendingFamily by Family.pendingLink.collectAsStateWithLifecycle()
+    val openChild by FamilyAlerts.openChild.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingFamily, openChild) { if (pendingFamily != null || openChild != null) showFamily = true }
+    // Followed children: SOS alerts live while the app runs (a background check covers the rest)
+    val followed = remember(showFamily) { Children.list(ctx) }
+    LaunchedEffect(followed) {
+        FamilyAlerts.schedule(ctx)
+        followed.forEach { c -> launch { Family.live(Family.keyFrom(c.key)).collect { FamilyAlerts.handle(ctx, c, it) } } }
+    }
     // Back after reinstalling to unlock texting: bring the SMS card straight up
     LaunchedEffect(Unit) { if (SmsUnlock.pending(ctx)) sheet = "sms" }
 
@@ -774,6 +792,10 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
         showBetaConsent -> { `in`.security4her.app.beta.BetaConsentScreen(onDone = { showBetaConsent = false }, editing = true); return }
         showBetaReport -> { `in`.security4her.app.beta.BetaReportScreen(onClose = { showBetaReport = false }); return }
         showFakeCall -> { FakeCallScreen(onClose = { showFakeCall = false }); return }
+        showFamily -> {
+            MyFamilyScreen(profile.displayName ?: "", onClose = { showFamily = false; FamilyAlerts.openChild.value = null }, openChild = openChild)
+            return
+        }
         showGuide -> {
             SetupGuideScreen(
                 contacts, contactsError, onContactsChanged = { reload++ },
@@ -805,7 +827,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
                         Tab.Map -> SafeMapScreen()
                         Tab.People -> ContactsScreen(contacts, contactsError) { reload++ }
                         Tab.Me -> SettingsScreen(
-                            profile, settings,
+                            profile, settings, onFamily = { showFamily = true },
                             onChange = { settings = it }, onSignedOut = onSignedOut, onOpenLog = { showLog = true }, onOpenLocker = { showLocker = true },
                             onOpenChat = { showChat = true }, onPractice = { showPractice = true }, onWatchInstall = { showWatchInstall = true },
                             onBetaConsent = { showBetaConsent = true }, onBetaReport = { showBetaReport = true },
@@ -1456,7 +1478,7 @@ private fun ContactDialog(c: Contact, onDismiss: () -> Unit, onSave: (Contact) -
 // ---------------------------------------------------------------- Settings
 
 @Composable
-private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit, onOpenLocker: () -> Unit, onOpenChat: () -> Unit, onPractice: () -> Unit, onWatchInstall: () -> Unit,
+private fun SettingsScreen(profile: Profile, settings: Settings, onFamily: () -> Unit, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit, onOpenLocker: () -> Unit, onOpenChat: () -> Unit, onPractice: () -> Unit, onWatchInstall: () -> Unit,
     onBetaConsent: () -> Unit = {}, onBetaReport: () -> Unit = {}, onGuide: () -> Unit = {}) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1490,6 +1512,8 @@ private fun SettingsScreen(profile: Profile, settings: Settings, onChange: (Sett
             Tile("Setup guide", Icons.Filled.Check, onGuide, Modifier.weight(1f))
         }
         CompositionLocalProvider(LocalOpenSection provides openSection) {
+        GroupLabel("Family")
+        LinkRow("My family", Children.list(ctx).let { l -> if (l.isEmpty()) "Follow your children live: scan their QR code" else l.joinToString(", ") { it.name } + " · live" }, onFamily)
         GroupLabel("Safety")
         Section(
             "Pocket SOS",
@@ -1832,8 +1856,8 @@ private fun ActiveSosScreen(inc: Incident) {
             }
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Call
-            Card {
+            // Call: a child's SOS calls each grown-up in turn
+            if (inc.chain.isNotEmpty() || Age.isChild(ctx)) ChildCallCard(inc, now) else Card {
                 val left = inc.callAt?.let { kotlin.math.ceil((it - now) / 1000.0).toInt().coerceAtLeast(0) }
                 Text(
                     when (inc.call) {

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
@@ -75,7 +76,7 @@ object Age {
 }
 
 private enum class KidTab(val label: String, val icon: ImageVector) {
-    Home("Home", Icons.Filled.Home), Learn("Is it OK?", Icons.Filled.Star),
+    Home("Home", Icons.Filled.Home), Learn("Is it OK?", Icons.Filled.Star), Family("Family", Icons.Filled.Favorite),
     Grownups("My grown-ups", Icons.Filled.Person), Me("Me", Icons.Filled.AccountCircle),
 }
 
@@ -90,6 +91,8 @@ internal fun KidsMain(profile: Profile, onSignedOut: () -> Unit) {
     var contactsError by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableIntStateOf(0) }
     var overlay by rememberSaveable { mutableStateOf<String?>(null) }
+    var grownupsOpen by rememberSaveable { mutableStateOf(false) } // unlocked with the PIN this visit
+    LaunchedEffect(profile.displayName) { Store.prefs(ctx).edit().putString("family_name", profile.displayName?.substringBefore(' ') ?: "Your child").apply() }
     LaunchedEffect(reload) {
         try { contacts = Backend.contacts(); contactsError = null } catch (e: Exception) {
             contactsError = e.message; if (contacts == null) contacts = emptyList()
@@ -99,15 +102,25 @@ internal fun KidsMain(profile: Profile, onSignedOut: () -> Unit) {
         "fake" -> { FakeCallScreen(onClose = { overlay = null }); return }
         "walk" -> { BackHandler { overlay = null }; JourneySetupScreen(onClose = { overlay = null }); return }
         "chat" -> { ChatScreen(onClose = { overlay = null }); return }
+        "unlockGrownups" -> { PinGate("Change grown-ups", "Ask a grown-up to enter the PIN.", onUnlocked = { grownupsOpen = true; overlay = null }, onCancel = { overlay = null }); return }
+        "parent" -> { PinGate("Grown-up settings", "Ask a grown-up to enter the PIN.", onUnlocked = { overlay = "controls" }, onCancel = { overlay = null }); return }
+        "controls" -> { ParentControlsScreen(profile.displayName?.substringBefore(' ') ?: "your child", contacts, onClose = { overlay = null }); return }
     }
+    val pending by Family.pendingLink.collectAsState()
+    LaunchedEffect(pending) { if (pending != null) { Family.pendingLink.value = null; tab = KidTab.Family } } // a child's own link
     BackHandler(tab != KidTab.Home) { tab = KidTab.Home }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
             when (tab) {
                 KidTab.Home -> KidsHome(profile, contacts, onGrownups = { tab = KidTab.Grownups }, onLearn = { tab = KidTab.Learn }, onOverlay = { overlay = it })
                 KidTab.Learn -> KidsLearn(contacts)
-                KidTab.Grownups -> ContactsScreen(contacts, contactsError) { reload++ }
-                KidTab.Me -> KidsMe(profile, onSignedOut)
+                KidTab.Family -> KidsFamily(profile.displayName?.substringBefore(' ') ?: "your child", contacts)
+                KidTab.Grownups ->
+                    if (KidsSettings.load(ctx).lockGrownups && `in`.security4her.app.core.Pin.isSet(ctx) && !grownupsOpen) GrownupsLocked(contacts) {
+                        overlay = null; grownupsOpen = false
+                        tab = KidTab.Grownups; overlay = "unlockGrownups"
+                    } else ContactsScreen(contacts, contactsError) { reload++ }
+                KidTab.Me -> KidsMe(profile, onSignedOut, onParent = { overlay = "parent" })
             }
         }
         KidsTabBar(tab) { tab = it }
@@ -138,20 +151,21 @@ private fun KidsTabBar(tab: KidTab, onTab: (KidTab) -> Unit) {
 
 private fun guardians(contacts: List<Contact>?) = contacts.orEmpty().filter { it.receivesSos }.sortedBy { it.priority }
 
-/** Texts every grown-up that she or he got somewhere safely, with a map pin. Test Mode sends it to the test number. */
+/** Texts every grown-up that she or he got somewhere safely, with a map pin, and tells the family page. */
 private suspend fun checkIn(ctx: Context, who: String, place: String, to: List<Contact>): String {
     val s = Settings.load(ctx)
-    val numbers = if (s.testMode && s.demoNumber.isNotBlank()) listOf(s.demoNumber) else to.map { it.phone }
+    val numbers = to.map { it.phone } // grown-ups are family: Test Mode never replaces them
     if (numbers.isEmpty()) return "Add a grown-up first."
     val at = SimpleDateFormat("h:mm a", Locale.ENGLISH).format(Date())
-    val pin = runCatching { Locator.last(ctx) }.getOrNull()?.let { " https://maps.google.com/?q=%.5f,%.5f".format(Locale.US, it.lat, it.lng) }.orEmpty()
+    val fix = if (!KidsSettings.load(ctx).shareLocation) null else runCatching { Locator.last(ctx) }.getOrNull()
+    val pin = fix?.let { " https://maps.google.com/?q=%.5f,%.5f".format(Locale.US, it.lat, it.lng) }.orEmpty()
     val body = "$who reached $place safely at $at.$pin (Security4Her)"
     val id = UUID.randomUUID().toString()
     val errors = numbers.mapNotNull { Sms.send(ctx, it, body, id) }
     val failed = errors.size
+    Family.post(ctx, "checkin", "Reached $place", fix?.lat, fix?.lng)
     AppLog.info("Kids", "Check-in \"$place\" sent to ${numbers.size - failed} of ${numbers.size}" + errors.firstOrNull()?.let { " ($it)" }.orEmpty())
     return when {
-        failed == 0 && s.testMode && s.demoNumber.isNotBlank() -> "Sent to your test number (Test Mode)."
         failed == 0 -> "Sent to " + to.joinToString(", ") { it.name } + "."
         failed < numbers.size -> "Sent to some of your grown-ups."
         else -> "Couldn't send. Check SMS is allowed."
@@ -217,7 +231,7 @@ private fun KidsHome(profile: Profile, contacts: List<Contact>?, onGrownups: () 
         Spacer(Modifier.height(10.dp))
         @OptIn(ExperimentalLayoutApi::class)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("School", "Home", "Tuition", "A friend's house", "The bus stop").forEach { place ->
+            KidsSettings.load(ctx).places.forEach { place ->
                 val busy = sending == place
                 Row(
                     Modifier.clip(RoundedCornerShape(20.dp)).background(if (busy) Mint else Surface1).border(1.dp, Mint.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
@@ -393,7 +407,7 @@ private fun KidChip(label: String, color: Color, onClick: () -> Unit) = Text(
 // ---------------------------------------------------------------- Me
 
 @Composable
-private fun KidsMe(profile: Profile, onSignedOut: () -> Unit) {
+private fun KidsMe(profile: Profile, onSignedOut: () -> Unit, onParent: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val years = Age.years(ctx)
@@ -421,6 +435,8 @@ private fun KidsMe(profile: Profile, onSignedOut: () -> Unit) {
                 Text(t, color = Ink, style = MaterialTheme.typography.bodyMedium)
             }
         }
+        Spacer(Modifier.height(16.dp))
+        ChunkyButton("Grown-up settings", tone = Tone.Plain, icon = Icons.Filled.Lock, onClick = onParent)
         Spacer(Modifier.height(14.dp))
         Text(
             "On your 18th birthday this becomes the full Security4Her app.",
@@ -428,5 +444,32 @@ private fun KidsMe(profile: Profile, onSignedOut: () -> Unit) {
         )
         Spacer(Modifier.height(20.dp))
         TextButton(onClick = { scope.launch { runCatching { Backend.signOut() }; Age.clear(ctx); onSignedOut() } }) { Text("Sign out", color = SosRed) }
+    }
+}
+
+/** My grown-ups, read-only until a grown-up enters the PIN. */
+@Composable
+private fun GrownupsLocked(contacts: List<Contact>?, onUnlock: () -> Unit) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 10.dp)) {
+        Text("My grown-ups", fontFamily = Baloo, fontWeight = FontWeight.ExtraBold, fontSize = 34.sp, color = Ink)
+        Text("They get your SOS and are called in this order.", color = Muted, style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.height(16.dp))
+        guardians(contacts).forEachIndexed { i, c ->
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 10.dp).clip(RoundedCornerShape(20.dp)).background(Surface1).padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("${i + 1}", color = Sky, fontFamily = Baloo, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+                Spacer(Modifier.width(14.dp))
+                Avatar(c.name, 44.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(c.name, style = MaterialTheme.typography.titleMedium, color = Ink)
+                    Text(listOfNotNull(c.relation, c.phone).joinToString(" · "), color = Muted, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        ChunkyButton("A grown-up can change these", tone = Tone.Plain, icon = Icons.Filled.Lock, onClick = onUnlock)
     }
 }

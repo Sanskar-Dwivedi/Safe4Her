@@ -3,17 +3,17 @@
     "url": "https://udjoctuzlbmtdhhujjqr.supabase.co",
     "key": "sb_publishable_1G6X_hBx9qrw5TaBKK7LXA_8xpd1yMJ"
   },
-  "versionCode": 23,
-  "versionName": "1.1.0-beta.13",
+  "versionCode": 25,
+  "versionName": "1.1.0-beta.15",
   "apk": "Security4Her-phone.apk",
-  "sha256": "0a4d317b00db4d47de90cd852ea25665425bfe6748845f7ccaa9eeba944737c3",
-  "bytes": 11041834,
-  "notes": "Help tab with verified helplines and Quick exit, a private complaint builder, and Kids mode for under-18s.",
+  "sha256": "5d6805479dcbdbaf9671da0d2fe25912a7efd4445af57c68f8faa294561710b8",
+  "bytes": 11090986,
+  "notes": "Kids mode: a Family tab to connect grown-ups' phones, with a QR code and who's connected.",
   "watch": {
     "versionCode": 14,
     "versionName": "1.1.0-beta.8",
     "apk": "Security4Her-watch.apk",
-    "sha256": "b7b8eb70ba3c88d273989fb0abf393168f7cad4df0ae5762ef0891e93cd3f634",
+    "sha256": "e6ab7412f05a36519e35710b5f0d59ef012f4b60af740cde98376e659b9d98b4",
     "bytes": 53833646
   }
 }

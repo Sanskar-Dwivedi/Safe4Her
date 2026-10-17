@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "in.security4her.app",
+      "sha256_cert_fingerprints": [
+        "A7:A7:0E:11:74:BA:03:38:DE:16:F7:DE:D6:17:0A:16:AB:CF:15:C8:AB:A0:1C:21:C7:67:67:61:DA:5C:71:DA",
+        "B4:B7:A8:B2:F3:18:1A:7F:D7:9B:E7:B4:FE:B8:7B:84:50:36:1B:F4:72:50:FA:95:98:36:B6:3A:A1:96:FC:9F"
+      ]
+    }
+  }
+]

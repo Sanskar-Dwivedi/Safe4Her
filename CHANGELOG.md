@@ -11,6 +11,34 @@
 - The encrypted recovery/Telegram evidence plan and Apple Watch app are excluded from this port.
 - iOS SDK compilation, signing and real-device behavior remain unverified on the Windows development host.
 
+## 1.1.0-beta.15 (2026-10-17)
+
+### Added
+- **Family tab in Kids mode.** One place to connect grown-ups' phones: how many are connected, each grown-up's
+  status (not connected, link sent, connected and when the page was last open), a Send button that texts them the
+  private family link, a QR code to scan in person, and Share. Showing the QR code or making a new link needs the
+  grown-up PIN, because anyone holding the link can follow the child.
+- **The family page says who's connected.** A grown-up enters their name once and taps Connect; the child's Family tab
+  shows them within seconds. The hello is signed with the link's key, so it can't be faked.
+
+## 1.1.0-beta.14 (2026-10-17)
+
+### Added
+- **A child's SOS calls every grown-up in turn.** Mum, then Dad, then 112 or Childline 1098 (a parent's choice),
+  stopping as soon as someone answers. The call log tells whether a call was answered; without it, the child gets a few
+  seconds to tap "They answered". The SOS screen and notification show the calls live. Grown-ups are family, so Test
+  Mode never replaces them; it only swaps the last emergency call for the test number.
+- **Grown-up settings (parental controls), locked with the PIN.** Call order and who to call last, time to cancel,
+  wait between calls, texting the police, locks on changing grown-ups and on stopping an SOS, Pocket SOS, check-in
+  places and map pins, and Test Mode.
+- **Family link: parent and child connected.** Grown-ups open a private link (no app needed) to follow their child's
+  SOS, calls, check-ins and location live, and can stop a false alarm. Updates are end-to-end encrypted (AES-256-GCM)
+  and a stop only counts if it's signed with the link's key. The link is in every SOS text a child sends.
+
+### Fixed
+- A child's SOS made no call when Test Mode was on without a test number.
+- Check-ins always go to the real grown-ups, even in Test Mode.
+
 ## 1.1.0-beta.13 (2026-10-17)
 
 ### Added

@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Family · Security4Her</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#050505">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preload" href="fonts/baloo2.woff2" as="font" type="font/woff2" crossorigin>
+<!--
+  The family page: a grown-up follows a child's Security4Her (SOS, calls, check-ins, location) and can stop a false
+  alarm. The key is the #fragment of this page's address, which the browser never sends anywhere. Updates arrive
+  through ntfy.sh as AES-256-GCM ciphertext and are decrypted here; a "stop" is signed with HMAC-SHA256, and the
+  child's phone ignores anything that isn't.
+-->
+<style>
+@font-face{font-family:"Baloo 2";src:url(fonts/baloo2.woff2) format("woff2");font-weight:400 800;font-display:swap}
+@font-face{font-family:"Instrument Sans";src:url(fonts/instrument-sans.woff2) format("woff2");font-weight:400 700;font-display:swap}
+:root{
+  --night:#050505; --plum:#141414; --plum2:#1F1F1F; --line:#2C2C2C;
+  --ink:#F5F5F5; --muted:#9A9A9A; --sos:#FF4D5E; --sos-deep:#B0213A; --green:#5EE0A0; --amber:#FFB547; --sky:#7CC8FF;
+  --display:"Baloo 2", "Instrument Sans", system-ui, sans-serif;
+  --body:"Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--night);color:var(--ink);font:16px/1.5 var(--body)}
+main{max-width:560px;margin:0 auto;padding:20px 16px 48px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+header img{width:44px;height:44px;border-radius:50%}
+header h1{font:800 24px/1 var(--display);margin:0}
+header small{display:block;color:var(--muted);font-size:13px;margin-top:4px}
+.card{background:var(--plum);border:1px solid var(--line);border-radius:22px;padding:18px;margin-bottom:14px}
+.status{position:relative;overflow:hidden}
+.status .who{color:var(--muted);font-size:14px}
+.status .state{font:800 34px/1.1 var(--display);margin:6px 0 4px}
+.status .when{color:var(--muted);font-size:14px}
+.status.ok{border-color:rgba(94,224,160,.4)} .status.ok .state{color:var(--green)}
+.status.sos{background:linear-gradient(180deg,#FF5A69,#CF2744);border-color:transparent}
+.status.sos .who,.status.sos .when{color:rgba(255,255,255,.9)} .status.sos .state{color:#fff}
+.status.sos::after{content:"";position:absolute;right:18px;top:20px;width:12px;height:12px;border-radius:50%;background:#fff;animation:beat 1s infinite}
+@keyframes beat{50%{opacity:.25}}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.btn{appearance:none;border:0;cursor:pointer;font:800 17px/1 var(--display);padding:15px 18px;border-radius:16px;
+  background:var(--plum2);color:var(--ink);box-shadow:0 5px 0 #000;transition:transform .06s,box-shadow .06s;text-decoration:none;display:inline-flex;align-items:center;gap:8px}
+.btn:active{transform:translateY(5px);box-shadow:0 0 0 #000}
+.btn.stop{background:#fff;color:var(--sos-deep);box-shadow:0 5px 0 #9c9c9c;width:100%;justify-content:center;font-size:19px}
+.btn.map{background:rgba(255,255,255,.16);color:#fff;box-shadow:none}
+.status.ok .btn.map{background:var(--plum2);color:var(--ink)}
+.name{width:100%;margin-top:12px;padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.5);background:rgba(0,0,0,.18);color:#fff;font:16px var(--body)}
+.name::placeholder{color:rgba(255,255,255,.75)}
+.note{font-size:13px;color:rgba(255,255,255,.9);margin-top:8px}
+h2{font:700 15px var(--body);color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin:22px 4px 10px}
+.ev{display:flex;gap:12px;align-items:flex-start;padding:12px 4px;border-bottom:1px solid var(--line)}
+.ev:last-child{border-bottom:0}
+.dot{flex:0 0 34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:16px;background:var(--plum2)}
+.ev b{display:block;font-weight:600}
+.ev span{color:var(--muted);font-size:13px}
+.ev a{color:var(--sky);font-size:13px}
+.k-sos .dot{background:rgba(255,77,94,.18)} .k-safe .dot{background:rgba(94,224,160,.16)} .k-checkin .dot{background:rgba(124,200,255,.16)} .k-call .dot{background:rgba(255,181,71,.16)}
+.empty{color:var(--muted);text-align:center;padding:24px 8px}
+footer{color:var(--muted);font-size:13px;text-align:center;margin-top:24px}
+.me{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.me .who2{flex:1;min-width:180px}
+.me b{font-weight:600}
+.me input{flex:1;min-width:160px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--plum2);color:var(--ink);font:16px var(--body)}
+.me .btn{padding:12px 16px;font-size:16px;background:#fff;color:#0A0A0A;box-shadow:0 4px 0 #9c9c9c}
+.link{background:none;border:0;color:var(--sky);font:inherit;cursor:pointer;padding:0}
+.lock{display:inline-flex;gap:6px;align-items:center;color:var(--green);font-size:13px;background:rgba(94,224,160,.1);padding:5px 10px;border-radius:14px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="logo.png" alt="">
+    <div><h1>Security4Her Family</h1><small id="sub">Connecting…</small></div>
+  </header>
+
+  <section id="me" class="card me" hidden></section>
+
+  <section id="status" class="card status"><div class="who" id="who">Waiting for news</div><div class="state" id="state">…</div><div class="when" id="when"></div><div class="row" id="actions"></div></section>
+
+  <h2>What's happened</h2>
+  <section class="card" id="feed"><div class="empty">Nothing in the last 12 hours yet. New events appear here as they happen.</div></section>
+
+  <footer>
+    <span class="lock">🔒 End-to-end encrypted</span>
+    <p>This link is the key. Anyone who has it can follow your child and stop an SOS, so keep it private.
+    To cut it off, make a new link in the child's Grown-up settings.</p>
+  </footer>
+</main>
+
+<script>
+"use strict";
+const RELAY = "https://ntfy.sh";
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder(), dec = new TextDecoder();
+const b64e = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const b64d = s => { s = s.replace(/-/g, "+").replace(/_/g, "/"); s += "=".repeat((4 - s.length % 4) % 4); return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
+const cat = (...parts) => { const n = parts.reduce((a, p) => a + p.length, 0), out = new Uint8Array(n); let i = 0; for (const p of parts) { out.set(p, i); i += p.length; } return out; };
+const sha = async (...parts) => new Uint8Array(await crypto.subtle.digest("SHA-256", cat(...parts)));
+const hex = b => [...b].map(x => x.toString(16).padStart(2, "0")).join("");
+const ago = t => { const s = Math.round((Date.now() - t) / 1000); if (s < 60) return "just now"; if (s < 3600) return Math.round(s / 60) + " min ago"; return Math.round(s / 3600) + " h ago"; };
+const clock = t => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const mapUrl = e => `https://maps.google.com/?q=${e.lat.toFixed(5)},${e.lng.toFixed(5)}`;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ICON = { sos: "🚨", call: "📞", loc: "📍", checkin: "✅", safe: "💚" };
+
+let secret, statusTopic, commandTopic, aesKey, macKey;
+const events = new Map();
+let stopSentAt = 0;
+
+function fail(msg) { $("sub").textContent = msg; $("state").textContent = "Can't open"; $("who").textContent = ""; }
+
+async function setup() {
+  const frag = location.hash.slice(1);
+  if (!frag) return fail("This link is missing its key. Open the full link from the text message.");
+  try { secret = b64d(frag); } catch { return fail("This link looks broken. Ask for a new one."); }
+  if (secret.length !== 32) return fail("This link looks broken. Ask for a new one.");
+  statusTopic = "s4hf-" + hex(await sha(secret, enc.encode("status"))).slice(0, 24);
+  commandTopic = "s4hc-" + hex(await sha(secret, enc.encode("command"))).slice(0, 24);
+  aesKey = await crypto.subtle.importKey("raw", await sha(secret, enc.encode("key")), "AES-GCM", false, ["decrypt"]);
+  macKey = await crypto.subtle.importKey("raw", secret, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  history.replaceState(null, "", location.pathname + location.hash); // keep the key out of any referrer
+  renderMe();
+  if (myName()) { hello(myName()); setInterval(() => hello(myName()), 5 * 60 * 1000); }
+  await loadHistory();
+  listen();
+  setInterval(render, 15000);
+}
+
+async function open(message) {
+  if (!message || !message.startsWith("v1.")) return null;
+  try {
+    const b = b64d(message.slice(3));
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b.slice(0, 12) }, aesKey, b.slice(12));
+    return JSON.parse(dec.decode(plain));
+  } catch { return null; } // not ours, or tampered with
+}
+
+async function add(ntfyEvent) {
+  if (ntfyEvent.event !== "message") return;
+  const e = await open(ntfyEvent.message);
+  if (!e || events.has(ntfyEvent.id)) return;
+  events.set(ntfyEvent.id, e);
+}
+
+async function loadHistory() {
+  try {
+    const r = await fetch(`${RELAY}/${statusTopic}/json?poll=1&since=12h`);
+    for (const line of (await r.text()).split("\n")) if (line.trim()) await add(JSON.parse(line));
+    $("sub").textContent = "Live · updates appear by themselves";
+  } catch { $("sub").textContent = "Can't reach the relay. Retrying…"; }
+  render();
+}
+
+function listen() {
+  const es = new EventSource(`${RELAY}/${statusTopic}/sse`);
+  es.onmessage = async m => { await add(JSON.parse(m.data)); render(); };
+  es.onopen = () => { $("sub").textContent = "Live · updates appear by themselves"; };
+  es.onerror = () => { $("sub").textContent = "Reconnecting…"; };
+}
+
+function myName() { try { return localStorage.getItem("s4h-family-name") || ""; } catch { return ""; } }
+
+async function signed(cmd, by) {
+  const at = Date.now();
+  const mac = b64e(await crypto.subtle.sign("HMAC", macKey, enc.encode(`${cmd}|${at}|${by}`)));
+  const r = await fetch(`${RELAY}/${commandTopic}`, { method: "POST", body: JSON.stringify({ cmd, by, at, mac }) });
+  if (!r.ok) throw new Error(r.status);
+  return at;
+}
+
+/** Tells the child's phone this grown-up is connected (shown in its Family tab). */
+async function hello(by) { try { await signed("hello", by); } catch {} }
+
+function renderMe(editing) {
+  const box = $("me"); box.hidden = false;
+  const name = myName();
+  if (name && !editing) {
+    box.innerHTML = `<div class="who2">✅ Connected as <b>${esc(name)}</b><br><span style="color:var(--muted);font-size:13px">The child's phone shows you as connected.</span></div><button class="link" id="chg">Change</button>`;
+    $("chg").onclick = () => renderMe(true);
+  } else {
+    box.innerHTML = `<div class="who2"><b>Who are you?</b><br><span style="color:var(--muted);font-size:13px">So the child sees who's connected.</span></div>
+      <input id="me-name" placeholder="e.g. Mum" maxlength="40" value="${esc(name)}"><button class="btn" id="connect">Connect</button>`;
+    $("connect").onclick = async () => {
+      const n = $("me-name").value.trim().slice(0, 40); if (!n) return;
+      try { localStorage.setItem("s4h-family-name", n); } catch {}
+      await hello(n); renderMe(); render();
+    };
+  }
+}
+
+async function stopSos() {
+  const by = ($("by").value || "A grown-up").trim().slice(0, 40);
+  try { localStorage.setItem("s4h-family-name", by); } catch {}
+  if (!confirm(`Stop the SOS? Only do this if you're sure it's a false alarm.`)) return;
+  try { stopSentAt = await signed("stop", by); render(); }
+  catch { alert("Couldn't send. Check your internet and try again."); }
+}
+
+function render() {
+  const list = [...events.values()].sort((a, b) => a.at - b.at);
+  const name = list.length ? list[list.length - 1].n : "Your child";
+  let sosOn = false, sosAt = 0, last = null, loc = null;
+  for (const e of list) {
+    if (e.k === "sos") { sosOn = true; sosAt = e.at; }
+    if (e.k === "safe") sosOn = false;
+    if (e.lat != null) loc = e;
+    last = e;
+  }
+  const st = $("status"), actions = $("actions");
+  st.className = "card status " + (sosOn ? "sos" : list.length ? "ok" : "");
+  $("who").textContent = name;
+  if (sosOn) {
+    $("state").textContent = "SOS active";
+    $("when").textContent = `Started ${clock(sosAt)} · ${ago(sosAt)}`;
+  } else if (last) {
+    $("state").textContent = last.k === "safe" ? "Safe now" : "All OK";
+    $("when").textContent = `Last update ${ago(last.at)}: ${last.t || "location"}`;
+  } else {
+    $("state").textContent = "No news yet";
+    $("when").textContent = "You'll see SOS alerts and check-ins here.";
+  }
+  let saved = ""; try { saved = localStorage.getItem("s4h-family-name") || ""; } catch {}
+  const typed = $("by") ? $("by").value : saved;
+  actions.innerHTML = "";
+  if (loc) {
+    const a = document.createElement("a");
+    a.className = "btn map"; a.href = mapUrl(loc); a.target = "_blank"; a.rel = "noopener";
+    a.textContent = "📍 Where " + name + " is (" + ago(loc.at) + ")";
+    actions.append(a);
+  }
+  if (sosOn) {
+    const box = document.createElement("div"); box.style.width = "100%";
+    if (stopSentAt > sosAt) {
+      box.innerHTML = `<div class="note"><b>Stop sent.</b> ${esc(name)}'s phone ends the SOS within a few seconds and texts everyone that it was stopped.</div>`;
+    } else {
+      box.innerHTML = `<input id="by" class="name" placeholder="Your name (e.g. Mum)" maxlength="40">
+        <button class="btn stop" id="stop">Stop the SOS · it's a false alarm</button>
+        <div class="note">Only if you're sure ${esc(name)} is safe. Calls to the other grown-ups stop too.</div>`;
+    }
+    actions.append(box);
+    if ($("by")) { $("by").value = typed; $("stop").onclick = stopSos; }
+  }
+  const feed = $("feed");
+  const shown = list.filter(e => e.k !== "loc").reverse();
+  if (!shown.length) { feed.innerHTML = `<div class="empty">Nothing in the last 12 hours yet. New events appear here as they happen.</div>`; return; }
+  feed.innerHTML = "";
+  for (const e of shown.slice(0, 40)) {
+    const d = document.createElement("div");
+    d.className = "ev k-" + e.k;
+    const where = e.lat != null ? ` · <a href="${mapUrl(e)}" target="_blank" rel="noopener">map</a>` : "";
+    d.innerHTML = `<div class="dot">${ICON[e.k] || "•"}</div><div><b></b><span>${clock(e.at)} · ${ago(e.at)}${where}</span></div>`;
+    d.querySelector("b").textContent = e.t || e.k;
+    feed.append(d);
+  }
+}
+
+setup();
+</script>
+</body>
+</html>
