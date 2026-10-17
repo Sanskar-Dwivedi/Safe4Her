@@ -93,6 +93,7 @@ internal fun KidsMain(profile: Profile, onSignedOut: () -> Unit) {
     var reload by remember { mutableIntStateOf(0) }
     var overlay by rememberSaveable { mutableStateOf<String?>(null) }
     var grownupsOpen by rememberSaveable { mutableStateOf(false) } // unlocked with the PIN this visit
+    var meOpen by rememberSaveable { mutableStateOf(false) } // the whole settings menu, unlocked with the PIN this visit
     LaunchedEffect(profile.displayName) { Store.prefs(ctx).edit().putString("family_name", profile.displayName?.substringBefore(' ') ?: "Your child").apply() }
     LaunchedEffect(reload) {
         try { contacts = Backend.contacts(); contactsError = null } catch (e: Exception) {
@@ -108,8 +109,11 @@ internal fun KidsMain(profile: Profile, onSignedOut: () -> Unit) {
         "map" -> { KidsBack("Safe places", onBack = { overlay = null }) { SafeMapScreen(readOnly = true) }; return }
         "help" -> { BackHandler { overlay = null }; HelpScreen(onMap = { overlay = "map" }, onFakeCall = { overlay = "fake" }, onExit = { overlay = null }); return }
         "watch" -> { WatchInstallScreen(onClose = { overlay = null }); return }
-        "locker" -> { EvidenceLockerScreen(onClose = { overlay = "controls" }); return }
-        "log" -> { LogScreen(onBack = { overlay = "controls" }); return }
+        "locker" -> { EvidenceLockerScreen(onClose = { overlay = null }); return }
+        "log" -> { LogScreen(onBack = { overlay = null }); return }
+        "betaConsent" -> { `in`.security4her.app.beta.BetaConsentScreen(onDone = { overlay = null }, editing = true); return }
+        "betaReport" -> { `in`.security4her.app.beta.BetaReportScreen(onClose = { overlay = null }); return }
+        "unlockMe" -> { PinGate("Settings", "Ask a grown-up to enter the PIN.", onUnlocked = { meOpen = true; overlay = null; tab = KidTab.Me }, onCancel = { overlay = null }); return }
         "unlockGrownups" -> { PinGate("Change grown-ups", "Ask a grown-up to enter the PIN.", onUnlocked = { grownupsOpen = true; overlay = null }, onCancel = { overlay = null }); return }
         "parent" -> { PinGate("Grown-up settings", "Ask a grown-up to enter the PIN.", onUnlocked = { overlay = "controls" }, onCancel = { overlay = null }); return }
         "controls" -> {
@@ -121,6 +125,7 @@ internal fun KidsMain(profile: Profile, onSignedOut: () -> Unit) {
     }
     val pending by Family.pendingLink.collectAsState()
     LaunchedEffect(pending) { if (pending != null) { Family.pendingLink.value = null; tab = KidTab.Family } } // a child's own link
+    LaunchedEffect(tab) { if (tab != KidTab.Me) meOpen = false } // the menu locks again when you leave it
     BackHandler(tab != KidTab.Home) { tab = KidTab.Home }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
@@ -133,7 +138,12 @@ internal fun KidsMain(profile: Profile, onSignedOut: () -> Unit) {
                         overlay = null; grownupsOpen = false
                         tab = KidTab.Grownups; overlay = "unlockGrownups"
                     } else ContactsScreen(contacts, contactsError) { reload++ }
-                KidTab.Me -> KidsMe(profile, onSignedOut, onParent = { overlay = "parent" })
+                KidTab.Me ->
+                    if (!meOpen) KidsMe(profile, onSignedOut, onParent = { overlay = "unlockMe" })
+                    else KidsSettings(
+                        profile, onLock = { meOpen = false }, onControls = { overlay = "controls" }, onSignedOut = onSignedOut,
+                        onOverlay = { overlay = it }, onFamilyTab = { tab = KidTab.Family },
+                    )
             }
         }
         KidsTabBar(tab) { tab = it }
@@ -472,7 +482,7 @@ private fun KidsMe(profile: Profile, onSignedOut: () -> Unit, onParent: () -> Un
             }
         }
         Spacer(Modifier.height(16.dp))
-        ChunkyButton("Grown-up settings", tone = Tone.Plain, icon = Icons.Filled.Lock, onClick = onParent)
+        ChunkyButton("Settings (grown-up PIN)", tone = Tone.Plain, icon = Icons.Filled.Lock, onClick = onParent)
         Spacer(Modifier.height(14.dp))
         Text(
             "On your 18th birthday this becomes the full Security4Her app.",
@@ -540,5 +550,45 @@ private fun KidsBack(title: String, onBack: () -> Unit, content: @Composable () 
             Text(title, style = MaterialTheme.typography.titleMedium, color = Ink)
         }
         Box(Modifier.weight(1f)) { content() }
+    }
+}
+
+/**
+ * The full app's settings, unlocked with the grown-up PIN: Pocket SOS, Test Mode, evidence, location updates, during-SOS
+ * options, the watch, colours, app updates, beta testing, the activity log and the account, plus the Kids mode controls.
+ */
+@Composable
+private fun KidsSettings(
+    profile: Profile, onLock: () -> Unit, onControls: () -> Unit, onSignedOut: () -> Unit,
+    onOverlay: (String) -> Unit, onFamilyTab: () -> Unit,
+) {
+    val ctx = LocalContext.current
+    var settings by remember { mutableStateOf(Settings.load(ctx)) }
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.clip(RoundedCornerShape(16.dp)).background(Mint.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Lock, null, tint = Mint, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Unlocked with the grown-up PIN", color = Mint, style = MaterialTheme.typography.labelMedium)
+            }
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onLock) { Text("Lock", color = Lilac) }
+        }
+        Box(Modifier.padding(horizontal = 18.dp)) {
+            ChunkyButton("Kids mode controls: calls, locks, check-ins", tone = Tone.Accent, icon = Icons.Filled.Lock, onClick = onControls)
+        }
+        Spacer(Modifier.height(8.dp))
+        Box(Modifier.weight(1f)) {
+            SettingsScreen(
+                profile, settings, onFamily = onFamilyTab, onChange = { settings = it },
+                onSignedOut = { Age.clear(ctx); onSignedOut() },
+                onOpenLog = { onOverlay("log") }, onOpenLocker = { onOverlay("locker") }, onOpenChat = { onOverlay("chat") },
+                onPractice = { onOverlay("practice") }, onWatchInstall = { onOverlay("watch") },
+                onBetaConsent = { onOverlay("betaConsent") }, onBetaReport = { onOverlay("betaReport") }, onGuide = { onOverlay("pocket") },
+            )
+        }
     }
 }

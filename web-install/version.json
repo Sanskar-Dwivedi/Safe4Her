@@ -3,17 +3,17 @@
     "url": "https://udjoctuzlbmtdhhujjqr.supabase.co",
     "key": "sb_publishable_1G6X_hBx9qrw5TaBKK7LXA_8xpd1yMJ"
   },
-  "versionCode": 27,
-  "versionName": "1.1.0-beta.17",
+  "versionCode": 28,
+  "versionName": "1.1.0-beta.18",
   "apk": "Security4Her-phone.apk",
-  "sha256": "5379920e29d5468aadacf106b923a7bdcc059f322ab15261f66f3e1e387559eb",
-  "bytes": 11645003,
-  "notes": "Kids mode: Secret SOS (tap x3 or power x3), live location sharing, safe places, all helplines and the watch.",
+  "sha256": "92d198cd711a13835d5df54cc5ad0281a1e587a372972bec0e309787d50e8944",
+  "bytes": 11649099,
+  "notes": "Kids mode: every setting behind the grown-up PIN, app updates, evidence, and every SOS trigger including the watch.",
   "watch": {
     "versionCode": 14,
     "versionName": "1.1.0-beta.8",
     "apk": "Security4Her-watch.apk",
-    "sha256": "81b7a740b283b4ebf71bdb2d1a7ffe0469785e8cae357a0e0e29595dc030fbe0",
+    "sha256": "f97823f99c306f9e60d1586dadb5004d6a4d933d4b92f150fbc40a78f52864aa",
     "bytes": 53833646
   }
 }

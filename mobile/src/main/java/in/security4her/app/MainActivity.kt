@@ -1478,7 +1478,7 @@ private fun ContactDialog(c: Contact, onDismiss: () -> Unit, onSave: (Contact) -
 // ---------------------------------------------------------------- Settings
 
 @Composable
-private fun SettingsScreen(profile: Profile, settings: Settings, onFamily: () -> Unit, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit, onOpenLocker: () -> Unit, onOpenChat: () -> Unit, onPractice: () -> Unit, onWatchInstall: () -> Unit,
+internal fun SettingsScreen(profile: Profile, settings: Settings, onFamily: () -> Unit, onChange: (Settings) -> Unit, onSignedOut: () -> Unit, onOpenLog: () -> Unit, onOpenLocker: () -> Unit, onOpenChat: () -> Unit, onPractice: () -> Unit, onWatchInstall: () -> Unit,
     onBetaConsent: () -> Unit = {}, onBetaReport: () -> Unit = {}, onGuide: () -> Unit = {}) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()

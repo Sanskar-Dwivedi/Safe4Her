@@ -11,6 +11,15 @@
 - The encrypted recovery/Telegram evidence plan and Apple Watch app are excluded from this port.
 - iOS SDK compilation, signing and real-device behavior remain unverified on the Windows development host.
 
+## 1.1.0-beta.18 (2026-10-17)
+
+### Added
+- **Kids mode has every setting, locked with the grown-up PIN.** The Me tab opens the full app's settings (Pocket SOS,
+  Test Mode, evidence recording, location updates, during-SOS options, the watch, colours, app updates, beta testing,
+  the activity log, the evidence locker and the account) plus the Kids mode controls. It locks again when you leave it.
+- **Every trigger for children:** hold SOS, Secret SOS (tap or power button ×3), Walk with me, and the watch (button,
+  shake, voice), which now links for children too.
+
 ## 1.1.0-beta.17 (2026-10-17)
 
 ### Added

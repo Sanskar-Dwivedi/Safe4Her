@@ -676,7 +676,7 @@ object WearBridge {
     /** register_watch() → /s4h/device. Call after login/verify, on Test Mode change, and on /s4h/link/request. */
     suspend fun linkWatch(ctx: Context) = runCatching {
         val p = Backend.profile()
-        if (!p.verifiedFemale) return@runCatching
+        if (!p.verifiedFemale && !`in`.security4her.app.Age.isChild(ctx)) return@runCatching
         val token = Backend.registerWatch()
         val (pinHash, pinSalt, pinIter) = `in`.security4her.app.core.Pin.forWatch(ctx)
         val link = DeviceLink(p.id, p.displayName.orEmpty(), token, Settings.load(ctx).testMode, pinHash, pinSalt, pinIter)
