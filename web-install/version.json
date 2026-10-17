@@ -3,17 +3,17 @@
     "url": "https://udjoctuzlbmtdhhujjqr.supabase.co",
     "key": "sb_publishable_1G6X_hBx9qrw5TaBKK7LXA_8xpd1yMJ"
   },
-  "versionCode": 28,
-  "versionName": "1.1.0-beta.18",
+  "versionCode": 29,
+  "versionName": "1.1.0-beta.19",
   "apk": "Security4Her-phone.apk",
-  "sha256": "92d198cd711a13835d5df54cc5ad0281a1e587a372972bec0e309787d50e8944",
+  "sha256": "1341c99503172cab4d2ac0a2d53f18668273129e08f63cb1097c52274536056a",
   "bytes": 11649099,
-  "notes": "Kids mode: every setting behind the grown-up PIN, app updates, evidence, and every SOS trigger including the watch.",
+  "notes": "Fixed: the live-location link in SOS texts opens the live map again.",
   "watch": {
     "versionCode": 14,
     "versionName": "1.1.0-beta.8",
     "apk": "Security4Her-watch.apk",
-    "sha256": "f97823f99c306f9e60d1586dadb5004d6a4d933d4b92f150fbc40a78f52864aa",
+    "sha256": "9c5a15e038e032caf0064d74641dd8f09270ece8dbba01d17e5f54629957f132",
     "bytes": 53833646
   }
 }

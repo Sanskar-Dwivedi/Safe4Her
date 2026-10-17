@@ -21,15 +21,15 @@ android {
         minSdk = 26
         targetSdk = 35
         // Bump both for every release; the in-app updater compares versionCode with web-install/version.json.
-        versionCode = 28
-        versionName = "1.1.0-beta.18"
+        versionCode = 29
+        versionName = "1.1.0-beta.19"
         buildConfigField("String", "SUPABASE_URL", cfg("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", cfg("SUPABASE_ANON_KEY"))
         buildConfigField("String", "TRACK_BASE_URL", cfg("TRACK_BASE_URL"))
         // Where the app looks for new versions (published with web-install/publish.sh).
         buildConfigField("String", "UPDATE_URL", "\"${localProps.getProperty("UPDATE_URL", "https://security4her.vercel.app/version.json")}\"")
-        // Live map page (github.com/AtharvaLakhe/s4h-live); blank in local.properties falls back to ntfy.sh's own page.
-        buildConfigField("String", "LIVE_PAGE_URL", "\"${localProps.getProperty("LIVE_PAGE_URL", "https://atharvalakhe.github.io/s4h-live/")}\"")
+        // Live map page, hosted with the install site (web-install/live.html); blank in local.properties falls back to ntfy.sh's own page.
+        buildConfigField("String", "LIVE_PAGE_URL", "\"${localProps.getProperty("LIVE_PAGE_URL", "https://security4her.vercel.app/live.html")}\"")
         manifestPlaceholders["MAPS_API_KEY"] = localProps.getProperty("MAPS_API_KEY", "")
         buildConfigField("boolean", "HAS_MAPS_KEY", localProps.getProperty("MAPS_API_KEY", "").isNotBlank().toString())
     }

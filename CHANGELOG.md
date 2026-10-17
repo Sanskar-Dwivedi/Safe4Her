@@ -11,6 +11,12 @@
 - The encrypted recovery/Telegram evidence plan and Apple Watch app are excluded from this port.
 - iOS SDK compilation, signing and real-device behavior remain unverified on the Windows development host.
 
+## 1.1.0-beta.19 (2026-10-17)
+
+### Fixed
+- **The live-location link in SOS texts works again.** It pointed to a GitHub Pages site that had stopped serving
+  (404). The live map now lives on security4her.vercel.app/live.html, next to the install page.
+
 ## 1.1.0-beta.18 (2026-10-17)
 
 ### Added
