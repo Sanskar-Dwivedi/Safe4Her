@@ -3,17 +3,17 @@
     "url": "https://udjoctuzlbmtdhhujjqr.supabase.co",
     "key": "sb_publishable_1G6X_hBx9qrw5TaBKK7LXA_8xpd1yMJ"
   },
-  "versionCode": 25,
-  "versionName": "1.1.0-beta.15",
+  "versionCode": 26,
+  "versionName": "1.1.0-beta.16",
   "apk": "Security4Her-phone.apk",
-  "sha256": "5d6805479dcbdbaf9671da0d2fe25912a7efd4445af57c68f8faa294561710b8",
-  "bytes": 11090986,
-  "notes": "Kids mode: a Family tab to connect grown-ups' phones, with a QR code and who's connected.",
+  "sha256": "2cf76885c170a45148408745e5c19f8f45e429a27f431fcb189b7607c1740f5c",
+  "bytes": 11640907,
+  "notes": "My family: follow your child live from your own app, with a map, live feed and SOS alerts.",
   "watch": {
     "versionCode": 14,
     "versionName": "1.1.0-beta.8",
     "apk": "Security4Her-watch.apk",
-    "sha256": "e6ab7412f05a36519e35710b5f0d59ef012f4b60af740cde98376e659b9d98b4",
+    "sha256": "657b454a43b118a418f8616ba439b2ffae2a8d51d9e7041e47666f0aa50f42b1",
     "bytes": 53833646
   }
 }
