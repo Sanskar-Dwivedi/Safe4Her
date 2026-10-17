@@ -138,7 +138,7 @@ private fun PinField(value: String, onChange: (String) -> Unit, label: String) =
 private fun granted(ctx: Context, p: String) = ContextCompat.checkSelfPermission(ctx, p) == PackageManager.PERMISSION_GRANTED
 
 @Composable
-internal fun ParentControlsScreen(childName: String, contacts: List<Contact>?, onClose: () -> Unit) {
+internal fun ParentControlsScreen(childName: String, contacts: List<Contact>?, onClose: () -> Unit, onLocker: () -> Unit = {}, onLog: () -> Unit = {}) {
     BackHandler(onBack = onClose)
     val ctx = LocalContext.current
     var k by remember { mutableStateOf(KidsSettings.load(ctx)) }
@@ -298,6 +298,18 @@ internal fun ParentControlsScreen(childName: String, contacts: List<Contact>?, o
             }
         }
         Spacer(Modifier.height(10.dp))
+        Section("Records")
+        Panel {
+            Text("Evidence locker", style = MaterialTheme.typography.titleSmall, color = Ink)
+            Text("Audio and video recorded during $childName's SOS alerts, encrypted, with export for the police.", color = Muted, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+            ChunkyButton("Open the evidence locker", tone = Tone.Plain, icon = Icons.Filled.Lock, onClick = onLocker)
+            Spacer(Modifier.height(14.dp))
+            Text("Activity log", style = MaterialTheme.typography.titleSmall, color = Ink)
+            Text("Every SOS, text, call and check-in, step by step.", color = Muted, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+            ChunkyButton("Open the activity log", tone = Tone.Plain, onClick = onLog)
+        }
         TextButton(onClick = { changePin = true }) { Text("Change the grown-up PIN", color = Lilac) }
         Spacer(Modifier.height(24.dp))
     }

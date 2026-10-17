@@ -347,7 +347,8 @@ private fun navigateTo(ctx: Context, lat: Double, lng: Double) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SafeMapScreen() {
+/** [readOnly]: Kids mode. Children see safe places and warnings but never post where they are. */
+fun SafeMapScreen(readOnly: Boolean = false) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     fun granted() = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -590,7 +591,7 @@ fun SafeMapScreen() {
                 MapButton("−") { map.controller.zoomOut() }
                 MapButton("◎") { (me ?: NAGPUR).let { map.controller.animateTo(it, 16.0, 500L) } }
             }
-            if (adding == null) Box(
+            if (adding == null && !readOnly) Box(
                 Modifier.align(Alignment.BottomStart).padding(12.dp).clip(RoundedCornerShape(24.dp)).background(MapLilac)
                     .clickable { selected = null; adding = "danger"; addRadius = 250 }.padding(horizontal = 18.dp, vertical = 12.dp),
             ) { Text("+  Add to map", color = OnLilac, fontWeight = FontWeight.SemiBold) }
@@ -618,7 +619,8 @@ fun SafeMapScreen() {
                 modifier = panel,
             )
             sel is MapSel.Report -> ReportPanel(sel.report, cd, here, onClose = { selected = null }, modifier = panel) {
-                scope.launch { Community.confirm(ctx, sel.report) }
+                if (readOnly) android.widget.Toast.makeText(ctx, "Only grown-ups can confirm reports.", android.widget.Toast.LENGTH_SHORT).show()
+                else scope.launch { Community.confirm(ctx, sel.report) }
             }
             sel is MapSel.Spot -> HotspotPanel(sel.hotspot, onClose = { selected = null }, modifier = panel)
             else -> Column(panel.heightIn(max = 330.dp).padding(top = 14.dp)) {

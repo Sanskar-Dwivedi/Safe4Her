@@ -2030,7 +2030,7 @@ internal fun Card(content: @Composable ColumnScope.() -> Unit) {
 // ---------------------------------------------------------------- Activity log
 
 @Composable
-private fun LogScreen(onBack: () -> Unit) {
+internal fun LogScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
     val all by AppLog.entries.collectAsStateWithLifecycle()
     var filter by rememberSaveable { mutableStateOf("All") }

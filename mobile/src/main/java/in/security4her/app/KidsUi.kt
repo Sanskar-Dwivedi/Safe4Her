@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
@@ -102,9 +103,21 @@ internal fun KidsMain(profile: Profile, onSignedOut: () -> Unit) {
         "fake" -> { FakeCallScreen(onClose = { overlay = null }); return }
         "walk" -> { BackHandler { overlay = null }; JourneySetupScreen(onClose = { overlay = null }); return }
         "chat" -> { ChatScreen(onClose = { overlay = null }); return }
+        "pocket" -> { KidsPocketScreen(onPractice = { overlay = "practice" }, onClose = { overlay = null }); return }
+        "practice" -> { PocketPracticeScreen(onClose = { overlay = "pocket" }); return }
+        "map" -> { KidsBack("Safe places", onBack = { overlay = null }) { SafeMapScreen(readOnly = true) }; return }
+        "help" -> { BackHandler { overlay = null }; HelpScreen(onMap = { overlay = "map" }, onFakeCall = { overlay = "fake" }, onExit = { overlay = null }); return }
+        "watch" -> { WatchInstallScreen(onClose = { overlay = null }); return }
+        "locker" -> { EvidenceLockerScreen(onClose = { overlay = "controls" }); return }
+        "log" -> { LogScreen(onBack = { overlay = "controls" }); return }
         "unlockGrownups" -> { PinGate("Change grown-ups", "Ask a grown-up to enter the PIN.", onUnlocked = { grownupsOpen = true; overlay = null }, onCancel = { overlay = null }); return }
         "parent" -> { PinGate("Grown-up settings", "Ask a grown-up to enter the PIN.", onUnlocked = { overlay = "controls" }, onCancel = { overlay = null }); return }
-        "controls" -> { ParentControlsScreen(profile.displayName?.substringBefore(' ') ?: "your child", contacts, onClose = { overlay = null }); return }
+        "controls" -> {
+            ParentControlsScreen(
+                profile.displayName?.substringBefore(' ') ?: "your child", contacts, onClose = { overlay = null },
+                onLocker = { overlay = "locker" }, onLog = { overlay = "log" },
+            ); return
+        }
     }
     val pending by Family.pendingLink.collectAsState()
     LaunchedEffect(pending) { if (pending != null) { Family.pendingLink.value = null; tab = KidTab.Family } } // a child's own link
@@ -181,6 +194,16 @@ private fun KidsHome(profile: Profile, contacts: List<Contact>?, onGrownups: () 
     val first = grown.firstOrNull()
     var sending by remember { mutableStateOf<String?>(null) }
     var smsOn by remember { mutableStateOf(Sms.allowed(ctx)) }
+    /** Live location to every grown-up, by text: the same live map page an SOS uses. */
+    fun shareLive() {
+        if (grown.isEmpty()) { onGrownups(); return }
+        val s = `in`.security4her.app.sos.LiveShare.session.value ?: `in`.security4her.app.sos.LiveShare.start(ctx)
+        val id = UUID.randomUUID().toString()
+        val ok = grown.count { Sms.send(ctx, it.phone, "$name is sharing where they are, live: ${s.url} (Security4Her)", id) == null }
+        scope.launch { Family.post(ctx, "checkin", "Shared live location") }
+        Toast.makeText(ctx, if (ok == grown.size) "Sent to " + grown.joinToString(", ") { it.name } + "." else "Sent to $ok of ${grown.size}.", Toast.LENGTH_LONG).show()
+        AppLog.info("Kids", "Live location shared with $ok grown-ups")
+    }
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { smsOn = Sms.allowed(ctx) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 10.dp)) {
@@ -253,14 +276,27 @@ private fun KidsHome(profile: Profile, contacts: List<Contact>?, onGrownups: () 
         }
 
         Spacer(Modifier.height(22.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            KidTile(Modifier.weight(1f), Icons.Filled.Phone, "Pretend call", "A call from home, to get away", Mint) { onOverlay("fake") }
-            KidTile(Modifier.weight(1f), Icons.Filled.Place, "Walk with me", "Your grown-ups check you arrive", Sky) { onOverlay("walk") }
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            KidTile(Modifier.weight(1f), Icons.Filled.Star, "Is it OK?", "Touch, secrets, online, lost", Sun, onLearn)
-            KidTile(Modifier.weight(1f), Icons.Filled.Lock, "Ask a question", "Answers right on your phone", Lilac) { onOverlay("chat") }
+        Text("More ways to stay safe", style = MaterialTheme.typography.titleMedium, color = Ink)
+        Spacer(Modifier.height(10.dp))
+        val pocketOn = `in`.security4her.app.sos.PocketSos.enabled(ctx)
+        val pocketHow = if (`in`.security4her.app.sos.PocketSos.powerMode(ctx)) "power button ×3" else "tap ×3"
+        val tiles = listOf(
+            KidAction(Icons.Filled.Lock, SosRed, "Secret SOS", if (pocketOn) "On: $pocketHow, even in a bag" else "Tap ×3 or power ×3") { onOverlay("pocket") },
+            KidAction(Icons.Filled.Share, Mint, "Share where I am", "Send your grown-ups a live map") { shareLive() },
+            KidAction(Icons.Filled.Phone, Mint, "Pretend call", "A call from home, to get away") { onOverlay("fake") },
+            KidAction(Icons.Filled.Place, Sky, "Walk with me", "Your grown-ups check you arrive") { onOverlay("walk") },
+            KidAction(Icons.Filled.Place, Lilac, "Safe places", "Police, hospitals, open shops") { onOverlay("map") },
+            KidAction(Icons.Filled.Call, Sun, "All helplines", "Who to call for what") { onOverlay("help") },
+            KidAction(Icons.Filled.Star, Sun, "Is it OK?", "Touch, secrets, online, lost", onLearn),
+            KidAction(Icons.Filled.Lock, Lilac, "Ask a question", "Answers right on your phone") { onOverlay("chat") },
+            KidAction(Icons.Filled.Favorite, Sky, "My watch", "SOS from your wrist") { onOverlay("watch") },
+        )
+        tiles.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                row.forEach { a -> KidTile(Modifier.weight(1f), a.icon, a.title, a.sub, a.tint, a.go) }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(12.dp))
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -471,5 +507,38 @@ private fun GrownupsLocked(contacts: List<Contact>?, onUnlock: () -> Unit) {
         }
         Spacer(Modifier.height(10.dp))
         ChunkyButton("A grown-up can change these", tone = Tone.Plain, icon = Icons.Filled.Lock, onClick = onUnlock)
+    }
+}
+
+private class KidAction(val icon: ImageVector, val tint: Color, val title: String, val sub: String, val go: () -> Unit)
+
+/** Secret SOS: three taps on the phone, or three presses of the power button, set up and tested. */
+@Composable
+private fun KidsPocketScreen(onPractice: () -> Unit, onClose: () -> Unit) {
+    BackHandler(onBack = onClose)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 10.dp)) {
+        TextButton(onClick = onClose) { Text("‹  Back", color = Ink) }
+        Text("Secret SOS", fontFamily = Baloo, fontWeight = FontWeight.ExtraBold, fontSize = 32.sp, color = Ink)
+        Text(
+            "Start an SOS without taking the phone out: tap it three times, or press the power button three times. " +
+                "It works in a pocket or a bag, with the screen off.",
+            color = Muted, style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.height(14.dp))
+        PocketControls(onPractice = onPractice)
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+/** A screen from the full app, with a way back to Kids mode. */
+@Composable
+private fun KidsBack(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {
+    BackHandler(onBack = onBack)
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Text("‹  Back", color = Ink) }
+            Text(title, style = MaterialTheme.typography.titleMedium, color = Ink)
+        }
+        Box(Modifier.weight(1f)) { content() }
     }
 }
