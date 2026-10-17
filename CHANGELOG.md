@@ -11,6 +11,17 @@
 - The encrypted recovery/Telegram evidence plan and Apple Watch app are excluded from this port.
 - iOS SDK compilation, signing and real-device behavior remain unverified on the Windows development host.
 
+## 1.1.0-beta.17 (2026-10-17)
+
+### Added
+- **Every safety feature in Kids mode.** Secret SOS (tap the phone 3 times, or press the power button 3 times, with
+  test and practice), share live location with grown-ups, safe places on the map, all helplines with Quick exit, and
+  the watch, on the Kids home screen.
+- **Grown-up settings:** the evidence locker and the activity log, behind the PIN.
+
+### Changed
+- In Kids mode the safety map is read-only: children see safe places and warnings but can't post or confirm reports.
+
 ## 1.1.0-beta.16 (2026-10-17)
 
 ### Added

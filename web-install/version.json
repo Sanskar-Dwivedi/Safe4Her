@@ -3,17 +3,17 @@
     "url": "https://udjoctuzlbmtdhhujjqr.supabase.co",
     "key": "sb_publishable_1G6X_hBx9qrw5TaBKK7LXA_8xpd1yMJ"
   },
-  "versionCode": 26,
-  "versionName": "1.1.0-beta.16",
+  "versionCode": 27,
+  "versionName": "1.1.0-beta.17",
   "apk": "Security4Her-phone.apk",
-  "sha256": "2cf76885c170a45148408745e5c19f8f45e429a27f431fcb189b7607c1740f5c",
-  "bytes": 11640907,
-  "notes": "My family: follow your child live from your own app, with a map, live feed and SOS alerts.",
+  "sha256": "5379920e29d5468aadacf106b923a7bdcc059f322ab15261f66f3e1e387559eb",
+  "bytes": 11645003,
+  "notes": "Kids mode: Secret SOS (tap x3 or power x3), live location sharing, safe places, all helplines and the watch.",
   "watch": {
     "versionCode": 14,
     "versionName": "1.1.0-beta.8",
     "apk": "Security4Her-watch.apk",
-    "sha256": "657b454a43b118a418f8616ba439b2ffae2a8d51d9e7041e47666f0aa50f42b1",
+    "sha256": "81b7a740b283b4ebf71bdb2d1a7ffe0469785e8cae357a0e0e29595dc030fbe0",
     "bytes": 53833646
   }
 }
