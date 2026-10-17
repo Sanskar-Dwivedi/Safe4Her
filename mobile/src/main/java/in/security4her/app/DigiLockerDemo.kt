@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -32,6 +33,8 @@ data class DemoAccount(val aadhaar: String, val name: String, val gender: String
 val DEMO_ACCOUNTS = listOf(
     DemoAccount("234567894821", "Priya Sharma", "Female", "14-03-2001"),
     DemoAccount("345678901357", "Rohan Mehta", "Male", "02-11-1998"),
+    DemoAccount("456789012468", "Ananya Kulkarni", "Female", "21-06-2012"),
+    DemoAccount("567890123579", "Aarav Joshi", "Male", "09-01-2014"),
 )
 private const val DEMO_OTP = "123456"
 
@@ -41,11 +44,11 @@ private fun spaced(a: String) = a.chunked(4).joinToString(" ")
 private enum class Step { Aadhaar, Otp, Consent, Checking, Result }
 
 /**
- * DigiLocker sign-in: Aadhaar number → OTP → consent to share name and gender → result.
- * Only a female account passes; a male account is turned away.
+ * DigiLocker sign-in: Aadhaar number → OTP → consent to share name, gender and date of birth → result.
+ * A woman gets the full app and anyone under 18 gets the children's section; an adult man is turned away.
  */
 @Composable
-fun DigiLockerDemoScreen(onCancel: () -> Unit, onVerifiedFemale: (DemoAccount) -> Unit) {
+fun DigiLockerDemoScreen(onCancel: () -> Unit, onVerifiedChild: (DemoAccount) -> Unit = {}, onVerifiedFemale: (DemoAccount) -> Unit) {
     val scope = rememberCoroutineScope()
     var step by remember { mutableStateOf(Step.Aadhaar) }
     var aadhaar by remember { mutableStateOf("") }
@@ -70,7 +73,7 @@ fun DigiLockerDemoScreen(onCancel: () -> Unit, onVerifiedFemale: (DemoAccount) -
             when (step) {
                 Step.Aadhaar -> {
                     Text("Sign in with Aadhaar", style = MaterialTheme.typography.headlineSmall)
-                    Text("Security4Her asks DigiLocker to confirm your name and gender.", color = Muted, style = MaterialTheme.typography.bodyMedium)
+                    Text("Security4Her asks DigiLocker to confirm your name, gender and age.", color = Muted, style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(20.dp))
                     Field(spaced(aadhaar), { v -> aadhaar = v.filter(Char::isDigit).take(12); error = null }, "Aadhaar number (12 digits)", KeyboardType.Number)
                     error?.let { Text(it, color = SosRed, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
@@ -114,10 +117,11 @@ fun DigiLockerDemoScreen(onCancel: () -> Unit, onVerifiedFemale: (DemoAccount) -
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Surface1).padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         ConsentRow("Name", "From your Aadhaar")
                         ConsentRow("Gender", "From your Aadhaar")
+                        ConsentRow("Date of birth", "Under 18? You get the children's section")
                     }
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "Your Aadhaar number, address, photo and documents are not shared. Security4Her keeps only whether you're verified.",
+                        "Your Aadhaar number, address, photo and documents are not shared. Security4Her keeps only whether you're verified, and for under-18s the date of birth, on this phone only.",
                         color = Muted, style = MaterialTheme.typography.bodySmall,
                     )
                     Spacer(Modifier.height(20.dp))
@@ -126,7 +130,12 @@ fun DigiLockerDemoScreen(onCancel: () -> Unit, onVerifiedFemale: (DemoAccount) -
                         scope.launch {
                             delay(1_200)
                             AppLog.info("Account", "DigiLocker returned ${a.gender.lowercase()} for ${masked(a.aadhaar)}")
-                            if (a.gender == "Female") onVerifiedFemale(a) else step = Step.Result
+                            val child = (Age.yearsOf(a.dob) ?: 99) < 18
+                            when {
+                                child -> onVerifiedChild(a)
+                                a.gender == "Female" -> onVerifiedFemale(a)
+                                else -> step = Step.Result
+                            }
                         }
                     }
                     TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Deny", color = Muted) }
@@ -209,9 +218,16 @@ private fun DemoAccounts(onPick: (DemoAccount) -> Unit) {
                 }
                 val female = a.gender == "Female"
                 Box(
-                    Modifier.clip(RoundedCornerShape(10.dp)).border(BorderStroke(1.dp, if (female) Lilac else SosRed), RoundedCornerShape(10.dp))
+                    Modifier.clip(RoundedCornerShape(10.dp)).border(BorderStroke(1.dp, if ((Age.yearsOf(a.dob) ?: 99) < 18) Color(0xFF7CC8FF) else if (female) Lilac else SosRed), RoundedCornerShape(10.dp))
                         .padding(horizontal = 8.dp, vertical = 3.dp),
-                ) { Text(a.gender, color = if (female) Lilac else SosRed, fontSize = 11.sp) }
+                ) {
+                    val years = Age.yearsOf(a.dob)
+                    val child = (years ?: 99) < 18
+                    Text(
+                        if (child) "${a.gender} · $years" else a.gender,
+                        color = if (child) Color(0xFF7CC8FF) else if (female) Lilac else SosRed, fontSize = 11.sp,
+                    )
+                }
             }
         }
     }

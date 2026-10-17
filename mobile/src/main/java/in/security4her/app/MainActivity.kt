@@ -215,6 +215,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        showInRecents(this) // back in the recent-apps list after a Quick exit
         // The app is on screen now, so Android allows the microphone and camera: start anything the SOS is missing.
         if (SosEngine.current.value?.active != true) return
         val c = `in`.security4her.app.sos.Evidence.active.value
@@ -236,7 +237,7 @@ class MainActivity : ComponentActivity() {
 
 private enum class Stage { Loading, Auth, Verify, Onboard, Main }
 private enum class Tab(val label: String, val icon: ImageVector? = null, val res: Int = 0) {
-    Home("Home", Icons.Filled.Home), Map("Map", Icons.Filled.Place),
+    Home("Home", Icons.Filled.Home), Help("Help", Icons.Filled.Favorite), Map("Map", Icons.Filled.Place),
     People("People", Icons.Filled.Person), Me("Me", Icons.Filled.AccountCircle),
 }
 
@@ -254,7 +255,7 @@ private fun Root() {
         profile = p
         stage = when {
             p == null -> Stage.Auth
-            !p.verifiedFemale -> Stage.Verify
+            !p.verifiedFemale && !Age.isChild(ctx) -> Stage.Verify
             !Store.prefs(ctx).getBoolean("onboarded", false) -> Stage.Onboard
             else -> Stage.Main
         }
@@ -278,6 +279,7 @@ private fun Root() {
                 Store.prefs(ctx).edit().putBoolean("onboarded", true).apply()
                 route(profile)
             })
+            Age.isChild(ctx) -> KidsMain(profile!!, onSignedOut = { route(null) }) // under 18, from the DigiLocker date of birth
             else -> MainScreen(profile!!, onSignedOut = { route(null) }, onProfile = { profile = it })
         }
     }
@@ -395,7 +397,24 @@ private fun VerifyScreen(profile: Profile, onDone: (Profile) -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var digilocker by remember { mutableStateOf(false) }
     if (digilocker) {
-        DigiLockerDemoScreen(onCancel = { digilocker = false }) { acct ->
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        DigiLockerDemoScreen(onCancel = { digilocker = false }, onVerifiedChild = { acct ->
+            busy = true
+            scope.launch {
+                try {
+                    // MOCK: demo DigiLocker gave a date of birth under 18: keep only the date, on this phone
+                    Age.save(ctx, acct.dob)
+                    if (acct.gender == "Female") Backend.mockVerifyFemale("digilocker")
+                    AppLog.ok("Account", "Verified as under 18 through DigiLocker; opening the children's section")
+                    onDone(Backend.profile())
+                } catch (e: Exception) {
+                    error = e.friendly()
+                } finally {
+                    busy = false
+                    digilocker = false
+                }
+            }
+        }) { acct ->
             busy = true
             scope.launch {
                 try {
@@ -419,7 +438,7 @@ private fun VerifyScreen(profile: Profile, onDone: (Profile) -> Unit) {
         Text("One quick check", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(16.dp))
         Tip(
-            "Security4Her is only for women, which keeps the map and alerts trustworthy. " +
+            "Security4Her is for women, and for children under 18, who get their own Kids mode. " +
                 "DigiLocker confirms it once. We keep the result, never your documents.",
         )
         Spacer(Modifier.height(28.dp))
@@ -440,7 +459,7 @@ private fun VerifyScreen(profile: Profile, onDone: (Profile) -> Unit) {
         Spacer(Modifier.weight(1f))
         PrimaryButton("Verify with DigiLocker", busy = busy) { error = null; digilocker = true }
         Spacer(Modifier.height(10.dp))
-        Text("Only your name and gender are shared. No documents.", color = Muted, style = MaterialTheme.typography.bodySmall,
+        Text("Only your name, gender and age are shared. No documents.", color = Muted, style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
 }
@@ -782,6 +801,7 @@ private fun MainScreen(profile: Profile, onSignedOut: () -> Unit, onProfile: (Pr
                             onStep = ::open, onChat = { showChat = true }, onFixSms = { sheet = "sms" },
                             onFakeCall = { showFakeCall = true }, onGuide = { showGuide = true },
                         )
+                        Tab.Help -> HelpScreen(onMap = { tab = Tab.Map }, onFakeCall = { showFakeCall = true }, onExit = { tab = Tab.Home })
                         Tab.Map -> SafeMapScreen()
                         Tab.People -> ContactsScreen(contacts, contactsError) { reload++ }
                         Tab.Me -> SettingsScreen(
@@ -1117,6 +1137,7 @@ private fun HomeScreen(
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             QuickTile(Modifier.weight(1f), Icons.Filled.Phone, "Fake call", "A call to step away", Mint, onClick = onFakeCall)
+            QuickTile(Modifier.weight(1f), Icons.Filled.Favorite, "Get help", "Helplines, what to do", Amber) { onTab(Tab.Help) }
         }
         Spacer(Modifier.height(16.dp))
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Surface1).padding(18.dp)) {

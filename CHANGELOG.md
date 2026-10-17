@@ -11,6 +11,22 @@
 - The encrypted recovery/Telegram evidence plan and Apple Watch app are excluded from this port.
 - iOS SDK compilation, signing and real-device behavior remain unverified on the Windows development host.
 
+## 1.1.0-beta.13 (2026-10-17)
+
+### Added
+- **Help tab: trusted support in one place.** Pick what's happening (followed, harassed in public, online abuse,
+  violence at home, a child in trouble, medical, legal, someone to talk to) and get numbered steps with one-tap
+  actions, plus ten verified government helplines (112, 181, 1098, 1930, NCW WhatsApp, 100, 1091, 108, 15100, 14416)
+  with what happens when you call. Nothing is stored or sent.
+- **Quick exit.** One tap hides Security4Her on the home screen and removes it from recent apps; it comes back when
+  reopened.
+- **Write it down.** A private complaint (what, when, where, who, witnesses, evidence) to share with the police or the
+  NCW, or file online. Kept in memory only.
+- **Kids mode for under-18s.** DigiLocker now shares the date of birth; anyone under 18 gets a children's section:
+  SOS to their grown-ups, "I got there safely" check-ins, Childline 1098, "Is it OK?" safety lessons, a pretend call
+  and Walk with me. Children can't post on the public map and their SOS never appears in map hotspots. The full app
+  unlocks on their 18th birthday. The date of birth stays on the phone.
+
 ## 1.1.0-beta.12 (2026-10-16)
 
 ### Changed

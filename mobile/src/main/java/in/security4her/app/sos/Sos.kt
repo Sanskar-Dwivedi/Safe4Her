@@ -189,8 +189,10 @@ object SosEngine {
         // Give GPS up to 8 s so the first text carries a location; a follow-up text goes out otherwise.
         withTimeoutOrNull(8_000) { while (!hasFreshFix()) delay(200) }
         if (!Backend.mock) withTimeoutOrNull(2_000) { while (_current.value?.shareUrl == null && _current.value?.server != "failed") delay(200) }
-        // Anonymous, rounded location for the community SOS-hotspot map.
-        _current.value?.let { inc -> if (inc.lat != null && inc.lng != null) `in`.security4her.app.core.Community.recordSos(inc.lat, inc.lng, inc.test) }
+        // Anonymous, rounded location for the community SOS-hotspot map. Never for a child: where children go stays private.
+        if (!`in`.security4her.app.Age.isChild(app)) _current.value?.let { inc ->
+            if (inc.lat != null && inc.lng != null) `in`.security4her.app.core.Community.recordSos(inc.lat, inc.lng, inc.test)
+        }
         // 3. SMS
         sendSos(s)
         // 4. Countdown call

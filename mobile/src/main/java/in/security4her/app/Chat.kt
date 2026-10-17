@@ -104,14 +104,17 @@ private val TOPICS = listOf(
     Topic(listOf("test", "practice", "practise", "try")) {
         "Test Mode (in Me) sends the police text and the automatic call to a test number, like a friend's phone, instead of the police. Use it to try an SOS safely."
     },
-    Topic(listOf("112", "181", "1091", "helpline", "number", "call", "numbers", "ambulance")) {
-        "Emergency numbers in India:\n• 112: all emergencies (police, fire, ambulance)\n• 181: Women Helpline\n• 1091: Women Police Helpline\n• 100: Police\nCall 100 (police) is on Home and on the SOS screen."
+    Topic(listOf("112", "181", "1091", "1098", "1930", "helpline", "number", "call", "numbers", "ambulance", "child", "cyber", "lawyer", "legal")) {
+        "Emergency numbers in India:\n• 112: all emergencies (police, fire, ambulance)\n• 100: Police\n• 181: Women Helpline, and One Stop Centres\n" +
+            "• 1098: Childline, for any child in trouble\n• 1930: Cyber crime (or cybercrime.gov.in)\n• 1091: Women Police Helpline\n" +
+            "• 15100: free legal aid\n• 14416: Tele-MANAS, someone to talk to\n• NCW WhatsApp: 7827170170\n" +
+            "The Help tab tells you which one fits what's happening, with a button for each."
     },
     Topic(listOf("private", "privacy", "data", "store", "stored", "secure", "who can see")) {
         "Your location is shared only during an SOS, a Safe Journey or when you share it yourself. Recordings stay on your phone unless you export them. Contacts only get what you send them."
     },
     Topic(listOf("digilocker", "verify", "verified", "women only", "why women", "aadhaar")) {
-        "Security4Her is only for women, which keeps the safety map and alerts trustworthy. DigiLocker confirms it once when you sign up."
+        "Security4Her is for women, which keeps the safety map and alerts trustworthy. Children under 18 get Kids mode: DigiLocker checks the date of birth once when you sign up."
     },
     Topic(listOf("battery", "background", "killed", "sleep")) {
         "Allow Run in the background during setup (or in Android settings) so the phone doesn't pause an SOS or a Safe Journey to save battery."
