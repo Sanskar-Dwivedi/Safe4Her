@@ -11,6 +11,15 @@
 - The encrypted recovery/Telegram evidence plan and Apple Watch app are excluded from this port.
 - iOS SDK compilation, signing and real-device behavior remain unverified on the Windows development host.
 
+## 1.1.0-beta.16 (2026-10-17)
+
+### Added
+- **My family: follow your child from your own app.** Me → My family → scan the QR code on your child's Family tab, or
+  tap the family link in their text: it opens Security4Her straight to them. A live screen shows their status, their
+  position on a map (with directions), and a live feed of SOS, calls and check-ins as they happen, with the button
+  that stops a false alarm. SOS alerts arrive as notifications: instantly while the app is open, and from a
+  background check every 15 minutes otherwise (the SOS text is still the fastest alert).
+
 ## 1.1.0-beta.15 (2026-10-17)
 
 ### Added

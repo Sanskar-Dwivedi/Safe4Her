@@ -21,8 +21,8 @@ android {
         minSdk = 26
         targetSdk = 35
         // Bump both for every release; the in-app updater compares versionCode with web-install/version.json.
-        versionCode = 25
-        versionName = "1.1.0-beta.15"
+        versionCode = 26
+        versionName = "1.1.0-beta.16"
         buildConfigField("String", "SUPABASE_URL", cfg("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", cfg("SUPABASE_ANON_KEY"))
         buildConfigField("String", "TRACK_BASE_URL", cfg("TRACK_BASE_URL"))
